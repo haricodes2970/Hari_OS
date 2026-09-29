@@ -22,11 +22,11 @@ Next micro-phase: **0.3 — Development tooling.**
 | Micro-phase | Commit | Status | Verified |
 | --- | --- | --- | --- |
 | 0.1 — Inspect repository and establish baseline | `845b83f` | Complete | Yes |
-| 0.2 — Initialize/normalize Next.js foundation | see below | Complete | Yes |
+| 0.2 — Initialize/normalize Next.js foundation | `964bc29` | Complete | Yes |
 
 ## Active Work
 
-None. Working tree is clean at the time of writing apart from the 0.2 commit being created.
+None. Working tree is clean.
 
 ## Blockers
 
@@ -53,10 +53,7 @@ None.
 
 ## Latest Commit
 
-`845b83f` — `chore(0.1): establish repository baseline`
-
-Micro-phase 0.2 is committed immediately after this file is written; see
-`docs/sessions/2026-09-29-session-01.md` for its hash.
+`964bc29` — `feat(0.2): initialize Next.js foundation`
 
 ## Next Action
 
