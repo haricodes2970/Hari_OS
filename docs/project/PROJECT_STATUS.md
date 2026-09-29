@@ -24,7 +24,7 @@ Next micro-phase: **0.5 — Local SQLite foundation.**
 | 0.1 — Inspect repository and establish baseline | `845b83f` | Complete | Yes |
 | 0.2 — Initialize/normalize Next.js foundation | `964bc29` | Complete | Yes |
 | 0.3 — Development tooling | `5db3686` | Complete | Yes |
-| 0.4 — Application architecture | pending commit | Complete | Yes |
+| 0.4 — Application architecture | `19206ce` | Complete | Yes |
 
 ## Active Work
 
@@ -83,10 +83,7 @@ this micro-phase.
 
 ## Latest Commit
 
-`5bba7a9` — `docs(0.3): record 0.3 commit hash in status and session report`
-
-Micro-phase 0.4 is committed immediately after this file is written. Its hash is applied in
-a follow-up documentation commit, because a commit cannot contain its own hash.
+`19206ce` — `feat(0.4): establish application architecture`
 
 ## Next Action
 
