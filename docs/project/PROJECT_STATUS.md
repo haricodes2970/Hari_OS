@@ -23,7 +23,7 @@ Next micro-phase: **0.4 — Application architecture.**
 | --- | --- | --- | --- |
 | 0.1 — Inspect repository and establish baseline | `845b83f` | Complete | Yes |
 | 0.2 — Initialize/normalize Next.js foundation | `964bc29` | Complete | Yes |
-| 0.3 — Development tooling | see session report | Complete | Yes |
+| 0.3 — Development tooling | `5db3686` | Complete | Yes |
 
 ## Active Work
 
@@ -70,11 +70,7 @@ All checks run from a clean state after `rm -rf node_modules .next && npm instal
 
 ## Latest Commit
 
-Micro-phase 0.3 is committed after this file is written. The hash is recorded in
-`docs/sessions/2026-09-29-session-01.md`.
-
-Last known pushed commit: `7800d50` — `docs(0.2): record 0.2 commit hash in status and
-session report`.
+`5db3686` — `feat(0.3): establish development tooling`
 
 ## Next Action
 
