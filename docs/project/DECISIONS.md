@@ -137,3 +137,55 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
 - **Consequences:** The PRD and past session reports stay byte-stable. Markdown tables in
   application-adjacent files such as `README.md` are still formatted.
 - **Origin:** Micro-phase 0.3.
+
+## ADR-011 — Architecture boundaries enforced by ESLint, not a package
+
+- **Status:** Accepted
+- **Date:** 2026-09-29
+- **Context:** Micro-phase 0.4 required boundaries that stop UI from coupling directly to
+  SQLite or the LLM. The usual tools are dependency-cruiser or eslint-plugin-boundaries,
+  both of which add dependencies and configuration.
+- **Decision:** Enforce the two load-bearing rules with the built-in ESLint
+  `no-restricted-imports` rule, configured in `eslint.config.mjs` as `hari-os/boundaries`.
+  Files under `src/domain/` and `src/components/` may not import `@/lib/db`,
+  `@/lib/storage`, or `@/commands`. No new dependency.
+- **Evidence:** Verified with probe files, since an untested boundary rule is a comment
+  wearing a disguise. Probes importing infrastructure from `domain/` and `components/`
+  were both reported as errors; probes importing `lib/db` from `app/` and `features/`
+  exited clean. All probes were deleted.
+- **Consequences:** Violations fail `npm run lint` with no new dependency. The rule is
+  intentionally narrow: it constrains only the two layers where purity is unambiguous.
+  Service and repository layers are not introduced preemptively. If cross-layer rules grow,
+  this decision should be revisited rather than expanded indefinitely.
+- **Origin:** Micro-phase 0.4.
+
+## ADR-012 — No shared `src/types/` directory
+
+- **Status:** Accepted
+- **Date:** 2026-09-29
+- **Context:** Micro-phase 0.4 listed a `types/` directory in the suggested structure, while
+  also instructing that a giant global types file be avoided and that types be owned by
+  their area where possible.
+- **Decision:** Do not create `src/types/`. Types live in `src/domain/` when they describe
+  a business concept, and in the feature that owns them otherwise. They move to a shared
+  location only when two boundaries genuinely require the same shape.
+- **Consequences:** Types are harder to leak across module boundaries than a shared barrel,
+  which is the point. A shared type module can be introduced later if a real duplication
+  justifies it.
+- **Origin:** Micro-phase 0.4.
+
+## ADR-013 — Directories created without implementation
+
+- **Status:** Accepted
+- **Date:** 2026-09-29
+- **Context:** Micro-phase 0.4 asked for clean boundaries but also warned against dozens of
+  empty placeholder files and speculative abstractions.
+- **Decision:** Create the seven boundary directories that later phases will build on, each
+  containing a short README stating what belongs there and what must not. Create no
+  subdirectories inside `src/features/`, and no code, until the phase that needs them.
+  No barrel `index.ts` files.
+- **Consequences:** The structure is visible in the repository today without implying that
+  anything is implemented. The cost is seven short files, each of which prevents a
+  future agent from guessing where code belongs. A visitor must read `ARCHITECTURE.md` to
+  know that only `app/` currently works.
+- **Origin:** Micro-phase 0.4.

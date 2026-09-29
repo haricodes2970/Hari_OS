@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-29 (micro-phase 0.3)
+- **Last updated:** 2026-09-29 (micro-phase 0.4)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -13,9 +13,9 @@ enough that future agents can work without damaging the architecture.
 
 ## Current Micro-Phase
 
-**0.3 — Development tooling: COMPLETE AND VERIFIED**
+**0.4 — Application architecture: COMPLETE AND VERIFIED**
 
-Next micro-phase: **0.4 — Application architecture.**
+Next micro-phase: **0.5 — Local SQLite foundation.**
 
 ## Completed Micro-Phases
 
@@ -24,6 +24,7 @@ Next micro-phase: **0.4 — Application architecture.**
 | 0.1 — Inspect repository and establish baseline | `845b83f` | Complete | Yes |
 | 0.2 — Initialize/normalize Next.js foundation | `964bc29` | Complete | Yes |
 | 0.3 — Development tooling | `5db3686` | Complete | Yes |
+| 0.4 — Application architecture | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -36,11 +37,19 @@ None.
 ## Current State
 
 - Next.js 16.3.7 (App Router, Turbopack) + React 19.2.8 + TypeScript 5, npm 10.9.8.
-- ESLint 9 flat config from `eslint-config-next`. Prettier 3.9.9 for formatting. No
-  `eslint-config-prettier` — verified unnecessary (ADR-009).
-- One minimal root page at `/`. No Hari OS modules exist.
-- No database, no environment variables, no `data/` directory yet. Those arrive in 0.5 and 0.6.
+- ESLint 9 flat config from `eslint-config-next`, plus a `hari-os/boundaries` rule that
+  keeps `src/domain/` and `src/components/` free of database, storage, and command
+  imports. Prettier 3.9.9.
+- Architecture established and documented in `docs/project/ARCHITECTURE.md`:
+  `app/`, `components/`, `features/`, `domain/`, `commands/`, `lib/db/`, `lib/storage/`,
+  `lib/validation/`.
+- **Only `src/app/` contains code.** Every other directory holds a README describing its
+  boundary and nothing else. This is intentional and recorded in ADR-013.
+- No database, no SQLite package, no environment variables, no `data/` directory. SQLite
+  arrives in 0.5, environment handling in 0.6.
+- No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication.
 - Localhost only, no deployment.
+
 
 ## Tooling
 
@@ -54,29 +63,37 @@ None.
 | `npm run format` | `prettier --write .` |
 | `npm run format:check` | `prettier --check .` |
 
-## Verification Status for 0.3
-
-All checks run from a clean state after `rm -rf node_modules .next && npm install`.
+## Verification Status for 0.4
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Install | `npm install` | Pass — 352 packages, 0 vulnerabilities |
-| Formatting | `npm run format:check` | Pass — all 9 files match Prettier style |
-| Typecheck | `npm run typecheck` | Pass — 0 errors |
+| Formatting | `npm run format:check` | Pass |
+| TypeScript | `npm run typecheck` | Pass — 0 errors |
 | Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
-| Production build | `npm run build` | Pass — no warnings |
-| Dev server | `npm run dev` | Pass — ready in 451ms, `GET /` returned 200 |
-| Prettier/ESLint conflict | probe file | Pass — Prettier flagged it, ESLint stayed silent |
+| Production build | `npm run build` | Pass |
+| Boundary rule fires | probe files importing infrastructure from `domain/` and `components/` | Pass — both reported as errors |
+| Boundary rule not over-broad | probe files importing `lib/db` from `app/` and `features/` | Pass — both clean |
+| No database created | `ls data` | Pass — directory does not exist |
+| No LLM or database dependency | `package.json` diff | Pass — no dependency added or changed |
+| No feature pages | `src/app/` listing | Pass — still only the 0.2 files |
+
+All probe files used for boundary verification were deleted. No dependency was added in
+this micro-phase.
+
 
 ## Latest Commit
 
-`5db3686` — `feat(0.3): establish development tooling`
+`5bba7a9` — `docs(0.3): record 0.3 commit hash in status and session report`
+
+Micro-phase 0.4 is committed immediately after this file is written. Its hash is applied in
+a follow-up documentation commit, because a commit cannot contain its own hash.
 
 ## Next Action
 
-Micro-phase **0.4 — Application architecture.** Establish the directory structure supporting
-UI, domain logic, database access, validation, future command parsing, and local file storage.
-Do not implement the command parser.
+Micro-phase **0.5 — Local SQLite foundation.** Set up SQLite for local development inside
+`src/lib/db/`: a reproducible setup, no external database dependency, the database file
+located outside `public/` and excluded from Git, and a clear access boundary. Do not build
+the full Hari OS schema and do not mix business logic into database setup.
 
 ## Known Issues
 

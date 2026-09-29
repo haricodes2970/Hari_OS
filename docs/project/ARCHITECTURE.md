@@ -1,0 +1,147 @@
+# Architecture
+
+An implementation guide for Hari OS V1. It records where code goes and which direction
+dependencies may point. It is not an essay and it is not aspirational — it describes the
+boundaries that exist now.
+
+## 1. Principles this structure enforces
+
+- The app is an assistant. It surfaces options; the user decides.
+- Deterministic code performs arithmetic and state mutations. The LLM only interprets
+  language and proposes a structured intent.
+- Log reality, not intentions. Every mutation is traceable.
+- Function over visual polish for V1.
+- Local-first and single-user. SQLite on disk, photos on disk, no deployment.
+
+## 2. Directory structure
+
+```
+src/
+  app/                  Next.js routes and layouts. Routing concerns only.
+  components/           Reusable presentation. No business rules, no I/O.
+  features/             Vertical slices: dashboard, routine, kitchen, expenses,
+                        skills, habits. One directory per product area.
+  domain/               Pure business rules, calculations, and types. No I/O.
+  commands/             Natural language command engine (Phase 2). LLM boundary.
+  lib/
+    db/                 SQLite access. All queries live here.
+    storage/            Local filesystem access. All disk I/O for uploads.
+    validation/         Input and domain validation.
+```
+
+`data/` sits at the repository root, outside `src/` and outside `public/`, and is
+excluded from Git.
+
+### Deliberately absent
+
+- **`src/types/`** — not created. A shared global types file attracts unrelated types and
+  lets features couple through it. Types are owned by `domain/` or by the feature that
+  uses them, and are shared only when two boundaries genuinely need the same shape.
+- **Empty feature directories** — not created. `src/features/` exists as the boundary;
+  `kitchen/`, `expenses/`, and the rest are created by the phase that implements them.
+- **Service or repository layers** — not created. They are introduced when a second caller
+  needs them, not beforehand.
+- **Barrel `index.ts` files** — not created. They obscure which module a symbol came from.
+
+## 3. What each directory owns
+
+| Directory | Owns | Must not |
+| --- | --- | --- |
+| `app/` | Routes, layouts, page composition, server entry points | Business rules, SQL, business types |
+| `components/` | Rendering, props, event dispatch | Database, filesystem, command engine, business rules |
+| `features/` | One product area end to end | Reaching into another feature's internals |
+| `domain/` | Business rules, calculations, domain types | React, SQL, filesystem, LLM, any import at all |
+| `commands/` | Turning a sentence into a validated structured intent | Performing persistence or arithmetic itself |
+| `lib/db/` | Connection, schema, migrations, queries | Business meaning |
+| `lib/storage/` | Reading and writing uploaded files | Business meaning |
+| `lib/validation/` | Validating input and domain invariants | UI concerns, persistence |
+
+## 4. Dependency direction
+
+Dependencies point inward and downward. A layer never imports the layer above it.
+
+```
+  app/  ──────────────┐
+    │                 │
+    v                 v
+features/            commands/  (LLM proposes; never mutates)
+    │                 │
+    v                 v
+  domain/ ◄───────────┘     (pure rules and calculations)
+    ▲
+    │
+lib/db/   lib/storage/   lib/validation/
+```
+
+Concretely:
+
+- `domain/` imports nothing. It is the innermost layer.
+- `components/` may import types from `domain/`, and nothing else from the application.
+- `features/` and `app/` may use `lib/db`, `lib/storage`, and `lib/validation`.
+- `commands/` may use `domain/` and `lib/validation`. It hands a validated intent to a
+  feature rather than writing to the database itself.
+- `lib/*` never import from `app/`, `features/`, `components/`, or `domain/`.
+
+### What is enforced today
+
+`eslint.config.mjs` defines a `hari-os/boundaries` rule using the built-in
+`no-restricted-imports`. Files under `src/domain/` and `src/components/` may not import
+`@/lib/db`, `@/lib/storage`, or `@/commands`. This costs no extra dependency and turns the
+two most important rules into a build failure rather than a code review comment.
+
+This was verified with probe files that were then deleted: violations were reported, and
+legitimate imports from `app/` and `features/` were not flagged.
+
+## 5. SQLite access
+
+`src/lib/db/`. Introduced in micro-phase 0.5. It will hold the connection to
+`data/hari-os.db`, the schema, migrations, and query functions.
+
+The database file lives in `data/`, which is git-ignored and outside `public/`. No
+database, schema, migration, or query exists yet. No SQLite package is installed yet.
+
+## 6. Filesystem storage
+
+`src/lib/storage/`. Used for laundry photos from Phase 8. `public/` is never used for
+private user data. No upload code exists yet.
+
+## 7. Validation
+
+`src/lib/validation/`. Shared so that a form, a route handler, and the command engine
+enforce the same rules. No validation library is installed, because nothing needs
+validating yet.
+
+## 8. Future command parser
+
+`src/commands/`. Phase 2. It will call OpenRouter and produce a typed intent such as
+`{ module: "expenses", item: "banana", amount: 10, account: "cash" }`.
+
+The boundary that matters: the model interprets and proposes, deterministic code decides
+and persists. Balances and inventory quantities are computed in `src/domain` and written
+by ordinary code. A wrong parse must be correctable, so intents are validated against
+`lib/validation` and shown to the user before or after being applied.
+
+No parser, no LLM dependency, and no OpenRouter integration exists yet.
+
+## 9. Feature code
+
+`src/features/<area>/`, one directory per product area: `dashboard`, `routine`,
+`kitchen`, `expenses`, `skills`, `habits`. A feature owns its rules, its UI, and its data
+access, and shares only through its own public surface.
+
+## 10. Not implemented yet
+
+This is Phase 0. None of the following exist, and their absence is intentional:
+
+- Any feature module, page, or UI beyond the minimal root page
+- Database connection, schema, migrations, or queries
+- Filesystem upload handling
+- The natural language command parser
+- OpenRouter or any LLM integration
+- Authentication
+- Deployment configuration
+- PWA manifest, service worker, or offline support
+- Test infrastructure
+
+Do not assume a directory is functional because it exists. Every directory here except
+`app/` currently contains a README and no code.
