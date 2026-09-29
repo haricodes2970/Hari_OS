@@ -105,3 +105,35 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
 - **Consequences:** Server Components are the default. Future SQLite access (0.5) can run
   server-side without a separate backend service. No Pages Router code.
 - **Origin:** Micro-phase 0.2.
+
+## ADR-009 — Prettier without an ESLint integration package
+
+- **Status:** Accepted
+- **Date:** 2026-09-29
+- **Context:** Micro-phase 0.3 required Prettier and required that Prettier and ESLint not
+  fight. `eslint-config-prettier` is the conventional way to guarantee this, but the guidance
+  was to add an integration package only if genuinely necessary.
+- **Decision:** Do **not** add `eslint-config-prettier`. Prettier is configured with explicit
+  defaults and `eslint-config-next` is left untouched.
+- **Evidence:** `eslint-config-next@16.3.7` ships no core ESLint formatting rules
+  (`quotes`, `semi`, `indent`, `comma-dangle`, `max-len`, `arrow-parens`,
+  `object-curly-spacing`) and no `@stylistic` integration, so there is nothing to disable.
+  This was then verified empirically: a deliberately misformatted `.tsx` probe file was
+  reported by `prettier --check` while `eslint` exited 0 with no diagnostics. The probe file
+  was deleted.
+- **Consequences:** One fewer dependency. If a future ESLint plugin introduces stylistic
+  rules, this decision must be revisited and `eslint-config-prettier` added at that point.
+- **Origin:** Micro-phase 0.3.
+
+## ADR-010 — Prettier ignores documentation and lockfiles
+
+- **Status:** Accepted
+- **Date:** 2026-09-29
+- **Context:** `npm run format` runs `prettier --write .` over the whole repository. Left
+  alone, it would rewrite `package-lock.json` and reformat every Markdown document.
+- **Decision:** `.prettierignore` excludes `package-lock.json` (not ours to format),
+  `docs/` and `Hari_OS_V1_PRD.docx` (historical project record, not application code), plus
+  `public/`, build output, `data/`, and dependencies.
+- **Consequences:** The PRD and past session reports stay byte-stable. Markdown tables in
+  application-adjacent files such as `README.md` are still formatted.
+- **Origin:** Micro-phase 0.3.

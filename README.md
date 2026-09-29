@@ -34,13 +34,15 @@ The app is served at http://localhost:3000.
 
 ## Scripts
 
-| Script | Purpose |
-| --- | --- |
-| `npm run dev` | Start the development server |
-| `npm run build` | Production build |
-| `npm run start` | Serve the production build |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript check, no emit |
+| Script                 | Purpose                      |
+| ---------------------- | ---------------------------- |
+| `npm run dev`          | Start the development server |
+| `npm run build`        | Production build             |
+| `npm run start`        | Serve the production build   |
+| `npm run lint`         | ESLint                       |
+| `npm run typecheck`    | TypeScript check, no emit    |
+| `npm run format`       | Format files with Prettier   |
+| `npm run format:check` | Verify formatting, no writes |
 
 ## Documentation
 

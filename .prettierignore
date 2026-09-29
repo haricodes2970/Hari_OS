@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# local data
+data/
+
+# build output
+build/
+coverage/
+
+# lockfiles are formatted by their own tooling
+package-lock.json
+
+# binary and vendored assets
+*.ico
+public/
+
+# documentation outside the application baseline
+docs/
+Hari_OS_V1_PRD.docx
