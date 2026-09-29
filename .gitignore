@@ -1,0 +1,29 @@
+# Editor / agent tool state
+.kilo/
+.vscode/
+.idea/
+
+# Dependencies
+node_modules/
+
+# Local secrets
+.env
+.env.local
+.env.*.local
+
+# Local data (database + uploads) — never commit
+data/
+
+# Build output
+.next/
+out/
+build/
+next-env.d.ts
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
