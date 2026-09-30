@@ -27,7 +27,7 @@ Next micro-phase: **0.8 — Project documentation system.**
 | 0.4 — Application architecture | `19206ce` | Complete | Yes |
 | 0.5 — Local SQLite foundation | `caa5ca3` | Complete | Yes |
 | 0.6 — Environment and local data safety | `6cbf337` | Complete | Yes |
-| 0.7 — Persistent agent/project context | pending commit | Complete | Yes |
+| 0.7 — Persistent agent/project context | `25db46f` | Complete | Yes |
 
 ## Active Work
 
@@ -105,10 +105,7 @@ does not exist yet.
 
 ## Latest Commit
 
-`56945de` — `docs(0.6): record 0.6 commit hash in status and session report`
-
-Micro-phase 0.7 is committed after this file is written and its real hash is applied
-immediately afterwards. No hash is invented.
+`25db46f` — `chore(0.7): establish persistent agent context`
 
 ## Next Action
 
