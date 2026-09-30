@@ -41,7 +41,7 @@ Phase 1's overall scope is in `docs/phases/PHASE_01_FOUNDATION.md`.
 | 1.1 — Data schema foundation | `87e9dad` | Complete | Yes |
 | 1.2 — Domain model and deterministic operations | `6782446` | Complete | Yes |
 | 1.3 — Validation and structured command contract | `5578457` | Complete | Yes |
-| 1.4 — Command execution foundation | pending commit | Complete | Yes |
+| 1.4 — Command execution foundation | `0d94aad` | Complete | Yes |
 
 ## Active Work
 
