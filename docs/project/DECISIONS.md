@@ -189,3 +189,78 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
   future agent from guessing where code belongs. A visitor must read `ARCHITECTURE.md` to
   know that only `app/` currently works.
 - **Origin:** Micro-phase 0.4.
+
+## ADR-014 — better-sqlite3 instead of the built-in `node:sqlite`
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Micro-phase 0.5 required a local SQLite implementation with a minimal
+  dependency surface and no ORM. Node v22.23.1 ships a built-in `node:sqlite` module, so
+  using it would have required zero dependencies at all. It was tested before being
+  rejected, not assumed to be unsuitable.
+- **Decision:** Use `better-sqlite3`. Also added `@types/better-sqlite3` and `server-only`.
+- **Evidence:**
+  - `node:sqlite` works on this Node version (SQLite 3.51.2) but prints
+    `ExperimentalWarning: SQLite is an experimental feature and might change at any time`
+    on every run. Its API can change under us.
+  - `better-sqlite3@13` installed from a prebuilt binary in 2 seconds with no compiler,
+    no `node-gyp`, and no build tooling, verified working on Node v22.23.1 with SQLite
+    3.53.4. It adds 2 packages total and `npm audit` reports 0 vulnerabilities.
+  - The database will hold financial balances and inventory quantities, which V1 requires
+    to be deterministic and correctable. A stable API is worth two packages here.
+- **Consequences:** One native dependency and one types package. Because it is a native
+  module, `next.config.ts` sets `serverExternalPackages: ["better-sqlite3"]` so Next does
+  not try to bundle it. A Node upgrade that lacks a matching prebuilt binary would require
+  a compiler toolchain; the `engines` field pins Node >= 20.9.0 to limit that exposure.
+  Revisit if prebuilds stop covering the local Node version.
+- **Origin:** Micro-phase 0.5.
+
+## ADR-015 — `server-only` as the server-side guard
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** The database code must never reach the browser. The 0.4 ESLint boundary rule
+  already blocks `src/domain/` and `src/components/` from importing `src/lib/db`, but it
+  does not cover a Client Component placed inside `src/app/`.
+- **Decision:** `src/lib/db/connection.ts` imports `server-only`, the framework's own
+  marker package, which throws when resolved outside a Server Component.
+- **Evidence:** Verified rather than assumed. A temporary route with `"use client"`
+  importing `@/lib/db/connection` was created and `npm run build` failed with
+    `You're importing a module that depends on "server-only"`. The probe route was then
+    deleted. An earlier probe using an `_`-prefixed directory was silently skipped by the
+    App Router as a private folder, which is why the first attempt produced no result;
+    the route was renamed before the guard was confirmed.
+- **Consequences:** Accidental client usage fails the build instead of shipping SQLite to
+  the browser. Because `server-only` throws by default outside a Server Component, the
+  standalone `db:check` script runs Node with `--conditions=react-server`.
+- **Origin:** Micro-phase 0.5.
+
+## ADR-016 — Optional `HARI_OS_DB_PATH` override
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** The V1 database path should be deterministic, but tests and future tooling
+  need to point at a throwaway database without touching the real one.
+- **Decision:** The path defaults to `path.join(process.cwd(), "data", "hari-os.db")` and
+  may be overridden by the optional `HARI_OS_DB_PATH` environment variable. No other
+  configuration was introduced, and no absolute machine-specific path is hard-coded.
+- **Consequences:** Normal development needs no configuration at all. `npm run db:check`
+  treats an override as legitimate and only asserts that the *default* path stays inside
+  the project root. `.env.example` and `.gitignore` handling land in micro-phase 0.6.
+- **Origin:** Micro-phase 0.5.
+
+## ADR-017 — `"type": "module"` declared in package.json
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** `src/lib/db/connection.ts` uses ES module syntax, and running it through the
+  standalone `db:check` script made Node print
+  `MODULE_TYPELESS_PACKAGE_JSON ... Reparsing as ES module`. Suppressing the warning was
+  rejected as concealing a real signal.
+- **Decision:** Declare `"type": "module"` in `package.json`.
+- **Evidence:** Verified that this does not break the project: `npm run build`,
+  `npm run typecheck`, `npm run lint`, and `npm run db:check` all pass, and the warning no
+  longer appears. Next.js 16 handles ESM projects natively.
+- **Consequences:** The warning is removed at its source rather than hidden. If a future
+  tool requires CommonJS, this field is the single place to revert.
+- **Origin:** Micro-phase 0.5.

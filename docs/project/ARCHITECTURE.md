@@ -94,11 +94,29 @@ legitimate imports from `app/` and `features/` were not flagged.
 
 ## 5. SQLite access
 
-`src/lib/db/`. Introduced in micro-phase 0.5. It will hold the connection to
-`data/hari-os.db`, the schema, migrations, and query functions.
+`src/lib/db/`. Established in micro-phase 0.5. Implemented by `connection.ts`.
 
-The database file lives in `data/`, which is git-ignored and outside `public/`. No
-database, schema, migration, or query exists yet. No SQLite package is installed yet.
+The database file lives at `data/hari-os.db`, which is git-ignored and outside `src/` and
+`public/`. The path is derived from the project root and may be overridden by the optional
+`HARI_OS_DB_PATH` environment variable for tests and tooling.
+
+`connection.ts` does infrastructure only:
+
+- resolves the path and creates the directory and file on demand, so no manual setup step
+  and no committed database file;
+- opens the database with WAL journaling and `foreign_keys = ON`;
+- returns a single shared handle, cached on `globalThis` so Next.js module reloads in
+  development do not leak connections;
+- throws a clear error naming the path if opening fails;
+- exports `checkDb()` for verification, which reads pragmas and writes nothing.
+
+`connection.ts` starts with `import "server-only"`, so importing it from a Client
+Component fails the build. This was verified with a probe route, not assumed.
+
+**No schema exists.** The PRD entities are deliberately absent; see section 10.
+
+`better-sqlite3` is a native module, so `next.config.ts` sets
+`serverExternalPackages: ["better-sqlite3"]` to stop Next from bundling it.
 
 ## 6. Filesystem storage
 
@@ -134,7 +152,8 @@ access, and shares only through its own public surface.
 This is Phase 0. None of the following exist, and their absence is intentional:
 
 - Any feature module, page, or UI beyond the minimal root page
-- Database connection, schema, migrations, or queries
+- **Any database schema, migration, table, or seed data.** The database opens and reports
+  its configuration, and is deliberately empty
 - Filesystem upload handling
 - The natural language command parser
 - OpenRouter or any LLM integration
@@ -143,5 +162,7 @@ This is Phase 0. None of the following exist, and their absence is intentional:
 - PWA manifest, service worker, or offline support
 - Test infrastructure
 
-Do not assume a directory is functional because it exists. Every directory here except
-`app/` currently contains a README and no code.
+`src/lib/db/` and `src/commands/` contain a README and, for `lib/db`, one infrastructure
+module. `app/` contains only the minimal root page from micro-phase 0.2.
+
+Do not assume a directory is functional because it exists.

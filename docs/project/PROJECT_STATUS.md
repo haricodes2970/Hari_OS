@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-29 (micro-phase 0.4)
+- **Last updated:** 2026-09-30 (micro-phase 0.5)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -13,9 +13,9 @@ enough that future agents can work without damaging the architecture.
 
 ## Current Micro-Phase
 
-**0.4 — Application architecture: COMPLETE AND VERIFIED**
+**0.5 — Local SQLite foundation: COMPLETE AND VERIFIED**
 
-Next micro-phase: **0.5 — Local SQLite foundation.**
+Next micro-phase: **0.6 — Environment and local data safety.**
 
 ## Completed Micro-Phases
 
@@ -25,6 +25,7 @@ Next micro-phase: **0.5 — Local SQLite foundation.**
 | 0.2 — Initialize/normalize Next.js foundation | `964bc29` | Complete | Yes |
 | 0.3 — Development tooling | `5db3686` | Complete | Yes |
 | 0.4 — Application architecture | `19206ce` | Complete | Yes |
+| 0.5 — Local SQLite foundation | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -43,11 +44,18 @@ None.
 - Architecture established and documented in `docs/project/ARCHITECTURE.md`:
   `app/`, `components/`, `features/`, `domain/`, `commands/`, `lib/db/`, `lib/storage/`,
   `lib/validation/`.
-- **Only `src/app/` contains code.** Every other directory holds a README describing its
-  boundary and nothing else. This is intentional and recorded in ADR-013.
-- No database, no SQLite package, no environment variables, no `data/` directory. SQLite
-  arrives in 0.5, environment handling in 0.6.
-- No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication.
+- SQLite foundation in place via `src/lib/db/connection.ts`, using `better-sqlite3@13`.
+  The database creates itself at `data/hari-os.db` on first access, with WAL journaling
+  and foreign keys enabled. Verified by `npm run db:check`.
+- **The database schema is empty by design.** Zero application tables. All PRD entities
+  are deferred to later schema work, and `db:check` fails if any of them appears.
+- `connection.ts` imports `server-only`, so a Client Component importing it fails the
+  build. Verified with a probe route.
+- Only `src/app/` and `src/lib/db/` contain code. `components/`, `features/`, `domain/`,
+  `commands/`, `lib/storage/`, and `lib/validation/` still hold boundary READMEs only.
+- No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication, no
+  uploads.
+- No `.env` handling yet; that arrives in 0.6.
 - Localhost only, no deployment.
 
 
@@ -62,35 +70,43 @@ None.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run format` | `prettier --write .` |
 | `npm run format:check` | `prettier --check .` |
+| `npm run db:check` | Verify the SQLite foundation |
 
-## Verification Status for 0.4
+## Verification Status for 0.5
 
 | Check | Command | Result |
 | --- | --- | --- |
+| Install | `npm install` | Pass — 0 vulnerabilities |
 | Formatting | `npm run format:check` | Pass |
 | TypeScript | `npm run typecheck` | Pass — 0 errors |
 | Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
-| Production build | `npm run build` | Pass |
-| Boundary rule fires | probe files importing infrastructure from `domain/` and `components/` | Pass — both reported as errors |
-| Boundary rule not over-broad | probe files importing `lib/db` from `app/` and `features/` | Pass — both clean |
-| No database created | `ls data` | Pass — directory does not exist |
-| No LLM or database dependency | `package.json` diff | Pass — no dependency added or changed |
-| No feature pages | `src/app/` listing | Pass — still only the 0.2 files |
+| Production build | `npm run build` | Pass — routes `/` and `/_not-found` only |
+| Database created on demand | `npm run db:check` | Pass — from a nonexistent `data/` |
+| Database opens | `npm run db:check` | Pass — SQLite 3.53.4 |
+| Idempotent, clean exit | `npm run db:check` twice | Pass |
+| Pragmas | `npm run db:check` | Pass — `journal_mode = wal`, `foreign_keys = ON` |
+| No feature tables | `sqlite_master` query | Pass — 0 application tables |
+| Env override | `HARI_OS_DB_PATH=/tmp/... npm run db:check` | Pass |
+| `data/` ignored | `git check-ignore -v` | Pass — checked before creating the file |
+| No DB staged | `git status` | Pass |
+| Server-only guard | probe route with `"use client"` | Pass — build failed as designed |
+| 0.4 boundaries intact | probe in `src/domain/` | Pass — still blocked |
 
-All probe files used for boundary verification were deleted. No dependency was added in
-this micro-phase.
-
+All probe files and probe routes used for verification were deleted.
 
 ## Latest Commit
 
 `19206ce` — `feat(0.4): establish application architecture`
 
+Micro-phase 0.5 is committed after this file is written and its real hash is applied
+immediately afterwards. No hash is invented.
+
 ## Next Action
 
-Micro-phase **0.5 — Local SQLite foundation.** Set up SQLite for local development inside
-`src/lib/db/`: a reproducible setup, no external database dependency, the database file
-located outside `public/` and excluded from Git, and a clear access boundary. Do not build
-the full Hari OS schema and do not mix business logic into database setup.
+Micro-phase **0.6 — Environment and local data safety.** Configure `.env.example`,
+strengthen `.gitignore` for `data/` and future uploads, confirm secrets cannot be
+committed, and make setup reproducible from a fresh clone. Document the optional
+`HARI_OS_DB_PATH` override introduced in 0.5.
 
 ## Known Issues
 
