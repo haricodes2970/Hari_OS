@@ -37,7 +37,7 @@ here.
 | 0.6 — Environment and local data safety | `6cbf337` | Complete | Yes |
 | 0.7 — Persistent agent/project context | `25db46f` | Complete | Yes |
 | 0.8 — Project documentation system | `73ed2b3` | Complete | Yes |
-| 1.1 — Data schema foundation | pending commit | Complete | Yes |
+| 1.1 — Data schema foundation | `87e9dad` | Complete | Yes |
 
 ## Active Work
 
