@@ -38,7 +38,7 @@ not invented here.
 | 0.5 — Local SQLite foundation | `caa5ca3` | Complete | Yes |
 | 0.6 — Environment and local data safety | `6cbf337` | Complete | Yes |
 | 0.7 — Persistent agent/project context | `25db46f` | Complete | Yes |
-| 0.8 — Project documentation system | pending commit | Complete | Yes |
+| 0.8 — Project documentation system | `73ed2b3` | Complete | Yes |
 
 ## Active Work
 
@@ -133,10 +133,7 @@ infrastructure.
 
 ## Latest Commit
 
-`41ac463` — `docs(0.7): restore missing 0.6 and 0.7 rows in session report`
-
-Micro-phase 0.8 is committed after this file is written and its real hash is applied
-immediately afterwards. No hash is invented.
+`73ed2b3` — `docs(0.8): establish project documentation system`
 
 ## Next Action
 
