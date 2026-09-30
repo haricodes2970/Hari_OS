@@ -25,7 +25,7 @@ Next micro-phase: **0.6 — Environment and local data safety.**
 | 0.2 — Initialize/normalize Next.js foundation | `964bc29` | Complete | Yes |
 | 0.3 — Development tooling | `5db3686` | Complete | Yes |
 | 0.4 — Application architecture | `19206ce` | Complete | Yes |
-| 0.5 — Local SQLite foundation | pending commit | Complete | Yes |
+| 0.5 — Local SQLite foundation | `caa5ca3` | Complete | Yes |
 
 ## Active Work
 
@@ -96,10 +96,7 @@ All probe files and probe routes used for verification were deleted.
 
 ## Latest Commit
 
-`19206ce` — `feat(0.4): establish application architecture`
-
-Micro-phase 0.5 is committed after this file is written and its real hash is applied
-immediately afterwards. No hash is invented.
+`caa5ca3` — `feat(0.5): establish local sqlite foundation`
 
 ## Next Action
 
