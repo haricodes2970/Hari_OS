@@ -1,21 +1,31 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 0.7)
+- **Last updated:** 2026-09-30 (Phase 0 closed)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
 ## Current Phase
 
-**Phase 0 — Engineering / Bootstrap Foundation**
+| Phase | Name | Status |
+| --- | --- | --- |
+| 0 | Foundation infrastructure | **Complete** |
+| 1 | Application foundation | **Planned — not started** |
 
-No Hari OS product features have been built. Phase 0 makes the repository safe and organized
-enough that future agents can work without damaging the architecture.
+**Phase 0 is complete.** All eight micro-phases are done and verified. No Hari OS product
+features have been built, and that is the intended outcome of Phase 0: it made the
+repository safe and organized enough that future agents can work without damaging the
+architecture.
+
+**Phase 1 has not started.** No micro-phase of Phase 1 is active, and no product code,
+feature schema, or parser exists.
 
 ## Current Micro-Phase
 
-**0.7 — Persistent agent/project context: COMPLETE AND VERIFIED**
+**None active.** Phase 0 is closed.
 
-Next micro-phase: **0.8 — Project documentation system.**
+Next micro-phase: **1.1 — not yet defined.** Phase 1's scope is recorded in
+`docs/phases/PHASE_01_FOUNDATION.md`; its micro-phase breakdown has not been planned and is
+not invented here.
 
 ## Completed Micro-Phases
 
@@ -28,6 +38,7 @@ Next micro-phase: **0.8 — Project documentation system.**
 | 0.5 — Local SQLite foundation | `caa5ca3` | Complete | Yes |
 | 0.6 — Environment and local data safety | `6cbf337` | Complete | Yes |
 | 0.7 — Persistent agent/project context | `25db46f` | Complete | Yes |
+| 0.8 — Project documentation system | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -103,15 +114,44 @@ repository rather than written from memory. Two factual errors were caught and f
 commit message attributed to the wrong type, and an example quoting a future commit that
 does not exist yet.
 
+## Phase 0 Deliverables
+
+- Next.js 16.3.7 + TypeScript application that builds, serves, and renders
+- ESLint 9 with an architecture boundary rule that fails the build on violations
+- Prettier 3.9.9, `format` and `format:check` scripts
+- Directory architecture with `hari-os/boundaries` enforced, not merely documented
+- SQLite foundation: `data/hari-os.db`, created on demand, verified by `npm run db:check`
+- `server-only` guard proven to fail a build on client import
+- `.env.example` plus a proven ignore boundary for every secret and local-data path
+- `AGENTS.md` carrying persistent engineering rules
+- `docs/` navigation, roadmap, and phase documents for Phases 1–9
+- `docs/sessions/2026-09-29-session-01.md` and `docs/sessions/2026-09-30-session-01.md`
+
+**Deliberately not built in Phase 0:** any product feature, any feature schema, the command
+parser, OpenRouter, authentication, deployment, PWA packaging, uploads, and test
+infrastructure.
+
 ## Latest Commit
 
-`25db46f` — `chore(0.7): establish persistent agent context`
+`41ac463` — `docs(0.7): restore missing 0.6 and 0.7 rows in session report`
+
+Micro-phase 0.8 is committed after this file is written and its real hash is applied
+immediately afterwards. No hash is invented.
 
 ## Next Action
 
-Micro-phase **0.8 — Project documentation system.** Create the phase documents under
-`docs/phases/`, complete the project tracking set, and record the results of Phase 0 in a
-session report. This closes Phase 0.
+**Phase 1 has not started.** Before any feature work, plan the Phase 1 micro-phase
+breakdown, starting with the schema micro-phase described in
+`docs/phases/PHASE_01_FOUNDATION.md`.
+
+Two open items are carried into Phase 1:
+
+1. The **Phase 1 micro-phase list does not exist yet** and is not invented here.
+2. The **PRD-versus-roadmap scope divergence** recorded in `docs/project/ROADMAP.md` is
+   unresolved. The PRD frames V1 as a 2–3 hour prototype; the roadmap spreads the same
+   surface across nine phases. The user decides which governs.
+
+## Known Issues
 
 ## Known Issues
 
