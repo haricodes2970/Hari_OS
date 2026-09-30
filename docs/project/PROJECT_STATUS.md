@@ -26,7 +26,7 @@ Next micro-phase: **0.7 — Persistent agent/project context.**
 | 0.3 — Development tooling | `5db3686` | Complete | Yes |
 | 0.4 — Application architecture | `19206ce` | Complete | Yes |
 | 0.5 — Local SQLite foundation | `caa5ca3` | Complete | Yes |
-| 0.6 — Environment and local data safety | pending commit | Complete | Yes |
+| 0.6 — Environment and local data safety | `6cbf337` | Complete | Yes |
 
 ## Active Work
 
@@ -102,10 +102,7 @@ The database was re-verified after testing with `integrity_check: ok` and an emp
 
 ## Latest Commit
 
-`b96c07e` — `docs(0.5): record 0.5 commit hash in status and session report`
-
-Micro-phase 0.6 is committed after this file is written and its real hash is applied
-immediately afterwards. No hash is invented.
+`6cbf337` — `chore(0.6): harden environment and local data safety`
 
 ## Next Action
 
