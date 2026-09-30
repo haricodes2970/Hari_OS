@@ -41,7 +41,7 @@ and hands the result to a feature for storage. Phase 1's overall scope is in
 | 0.8 — Project documentation system | `73ed2b3` | Complete | Yes |
 | 1.1 — Data schema foundation | `87e9dad` | Complete | Yes |
 | 1.2 — Domain model and deterministic operations | `6782446` | Complete | Yes |
-| 1.3 — Validation and structured command contract | pending commit | Complete | Yes |
+| 1.3 — Validation and structured command contract | `5578457` | Complete | Yes |
 
 ## Active Work
 
