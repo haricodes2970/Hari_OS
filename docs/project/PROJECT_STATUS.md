@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 0.6)
+- **Last updated:** 2026-09-30 (micro-phase 0.7)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -13,9 +13,9 @@ enough that future agents can work without damaging the architecture.
 
 ## Current Micro-Phase
 
-**0.6 — Environment and local data safety: COMPLETE AND VERIFIED**
+**0.7 — Persistent agent/project context: COMPLETE AND VERIFIED**
 
-Next micro-phase: **0.7 — Persistent agent/project context.**
+Next micro-phase: **0.8 — Project documentation system.**
 
 ## Completed Micro-Phases
 
@@ -27,6 +27,7 @@ Next micro-phase: **0.7 — Persistent agent/project context.**
 | 0.4 — Application architecture | `19206ce` | Complete | Yes |
 | 0.5 — Local SQLite foundation | `caa5ca3` | Complete | Yes |
 | 0.6 — Environment and local data safety | `6cbf337` | Complete | Yes |
+| 0.7 — Persistent agent/project context | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -56,6 +57,11 @@ None.
   `commands/`, `lib/storage/`, and `lib/validation/` still hold boundary READMEs only.
 - No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication, no
   uploads.
+- `AGENTS.md` at the repository root holds the persistent engineering rules for coding
+  agents: project identity, canonical sources of truth, stack, architecture boundaries,
+  database rules, data and secret safety, the LLM boundary, product principles, Git and
+  micro-phase workflow, verification expectations, scope control, and documentation
+  discipline. It deliberately carries no live status.
 - Environment handling is explicit: a tracked `.env.example` documents the single variable
   the code reads, `HARI_OS_DB_PATH`. No `.env` file is committed. Every secret and
   local-data ignore rule has been proven against real files, including WAL sidecars and a
@@ -76,40 +82,39 @@ None.
 | `npm run format:check` | `prettier --check .` |
 | `npm run db:check` | Verify the SQLite foundation |
 
-## Verification Status for 0.6
+## Verification Status for 0.7
 
 | Check | Command | Result |
 | --- | --- | --- |
 | Install | `npm install` | Pass — 0 vulnerabilities |
 | Formatting | `npm run format:check` | Pass |
-| TypeScript | `npm run typecheck` | Pass — 0 errors, on a clean tree and after build |
+| TypeScript | `npm run typecheck` | Pass — 0 errors |
 | Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
 | Production build | `npm run build` | Pass |
-| SQLite default path | `npm run db:check` | Pass |
-| SQLite override | `HARI_OS_DB_PATH=... npm run db:check` | Pass — relative and absolute |
-| Ignore rules vs real files | `git check-ignore` on 12 created files | Pass — all ignored except `.env.example` |
-| `.env.example` trackable | `git check-ignore -v --no-index` | Pass — covered by `!.env.example` |
-| Fresh clone from GitHub | clone, install, checks | Pass — full suite green in an isolated clone |
-| Secret scan | `git grep` across tracked content | Pass — no keys, tokens, or assignment secrets |
-| History scan | all commits, all blobs | Pass — no secret or data ever committed |
-| Tracked database files | `git ls-files` | Pass — 0 |
-| 0.4 boundaries intact | probe in `src/domain/` | Pass — still blocked |
-| Server-only guard | probe route with `"use client"` | Pass — build failed as designed |
-| No feature schema | `sqlite_master` | Pass — empty |
+| SQLite foundation | `npm run db:check` | Pass — no feature tables |
+| Cited commit messages exist | compared against `git log` | Pass — 2 errors found and corrected |
+| Cited ADRs exist | compared against `DECISIONS.md` | Pass — ADR-001, 012, 014 all real |
+| Cited paths exist | compared against the filesystem | Pass — only `docs/phases/` and `src/types/` absent, both labelled as absent |
+| No forbidden tech in code | grep across `src/` and config | Pass — no Supabase, ORM, Tailwind, PWA package, auth, or deployment |
+| Secrets/data staged | `git status` and diff scan | Pass — none |
 
-Temporary test files, probe files, probe routes, and the temporary clone were all deleted.
-The database was re-verified after testing with `integrity_check: ok` and an empty schema.
+AGENTS.md was validated against the PRD, ARCHITECTURE.md, DECISIONS.md, and the actual
+repository rather than written from memory. Two factual errors were caught and fixed: a
+commit message attributed to the wrong type, and an example quoting a future commit that
+does not exist yet.
 
 ## Latest Commit
 
-`6cbf337` — `chore(0.6): harden environment and local data safety`
+`56945de` — `docs(0.6): record 0.6 commit hash in status and session report`
+
+Micro-phase 0.7 is committed after this file is written and its real hash is applied
+immediately afterwards. No hash is invented.
 
 ## Next Action
 
-Micro-phase **0.7 — Persistent agent/project context.** Create `AGENTS.md` covering what
-Hari OS is, the architecture, non-negotiable engineering rules, data safety, LLM boundaries,
-Git workflow, documentation workflow, micro-phase workflow, testing expectations, and scope
-control.
+Micro-phase **0.8 — Project documentation system.** Create the phase documents under
+`docs/phases/`, complete the project tracking set, and record the results of Phase 0 in a
+session report. This closes Phase 0.
 
 ## Known Issues
 
