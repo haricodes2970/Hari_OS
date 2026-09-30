@@ -1,6 +1,6 @@
 # Phase 1 — Application Foundation
 
-**Status: Active** (micro-phases 1.1 and 1.2 complete)
+**Status: Active** (micro-phases 1.1, 1.2, and 1.3 complete)
 
 ## Purpose
 
@@ -65,11 +65,16 @@ accounts — returning `Result` values with a closed set of error codes, with 17
 tests and no database dependency. Purity is enforced by lint. See section 10 and ADRs
 025–028.
 
-What remains: **no feature code exists, and nothing connects the domain rules to storage.**
-There are no repositories, services, or query modules, so `applyExpense` computes a new
-balance that nothing stores. Micro-phase 1.3 is expected to deliver the first end-to-end
-slice — route, feature, domain rule, and `src/lib/db/` — with a demonstrated data round trip
-and a demonstrated negative case.
+What 1.3 delivered: the structured command contract in `src/commands/contract.ts` — four
+command kinds carrying facts only, no ids, timestamps, or computed outcomes — and the
+validation boundary in `src/lib/validation`, which turns an untrusted object into either a
+command or a list of specific issues. 93 in-memory tests, no database, no parser, no LLM. See
+section 8 and ADRs 029–032.
+
+What remains: **no feature code exists, and nothing executes a command.** There are no
+repositories, services, or query modules, so `applyExpense` computes a new balance that
+nothing stores and a validated command goes nowhere. Micro-phase 1.4 is the execution
+pipeline, 1.5 the first visible slice, and 1.6 the foundation verification pass.
 
 One known limitation is carried forward from 1.2: the expense ledger cannot record a
 correcting entry, because `expense` holds non-negative spends only. Correcting a wrong spend

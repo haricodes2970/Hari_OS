@@ -478,3 +478,91 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
   unusual next to extensionless imports elsewhere; the alternative was adding a bundler or
   transpiler solely to run tests, which is a larger cost than the style inconsistency.
 - **Origin:** Micro-phase 1.2.
+
+## ADR-029 — The command contract carries facts, never results
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Micro-phase 1.3 needed the shape a future parser must produce. The tempting
+  design is a "rich" command that precomputes what will happen — an expense command carrying
+  the new balance, a stock command carrying the remaining quantity — because it would let the
+  UI show a preview with no extra work.
+- **Decision:** A command carries only what the user stated: an item name, a quantity, a
+  unit, an account name, an amount in minor units, an optional category, and the originating
+  sentence as `sourceText`. It carries no id, no timestamp, and no derived outcome.
+  `src/commands/contract.ts` declares four kinds: `inventory.consume`,
+  `inventory.restock`, `inventory.set_quantity`, `expense.record`.
+- **Consequences:**
+  - **Names, not ids.** A language model reading "used 2 onions" cannot know a row id, and
+    asking one to invent an id would be asking it to fabricate a fact. Resolution to a row is
+    execution's job and produces a domain failure when nothing matches.
+  - **No timestamp.** The moment a spend happened is the moment the user logged it, not the
+    moment a model finished responding. Inventing one at parse time would quietly record a
+    wrong time.
+  - **No computed outcome.** The PRD requires balances and quantities to be decided by
+    deterministic code. A command that already carried a new balance would put that number
+    in the trust boundary, where nothing checks it. A test asserts a validated command
+    contains no such field.
+  - `expense.record` names the account while the domain takes an id, so `domain-input.ts`
+    maps a resolved account into the operation's arguments. It is a translation only: no
+    lookup, no arithmetic, no execution.
+- **Origin:** Micro-phase 1.3.
+
+## ADR-030 — One required `version` literal, and nothing more
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** These objects are produced by a language model working from a prompt, so the
+  shape of what returns can change when the prompt changes. Without a marker, a payload from
+  an older prompt would be validated field by field and could be silently reinterpreted —
+  for example an `amount` that once meant rupees and now means minor units, which is a
+  factor of one hundred applied without anyone deciding to apply it.
+- **Decision:** A required `version` field that must equal `COMMAND_VERSION`. Anything else,
+  including a future version, is rejected. No compatibility machinery, no migration path, and
+  no support for any second version.
+- **Consequences:** The validator fails closed on a shape it was not written for, which is the
+  whole point of a boundary in front of a non-deterministic producer. The cost is that any
+  future contract change is a breaking change requiring both a version bump and prompt
+  changes; that is a deliberate cost, because silently accepting two meanings of `amount` is
+  the failure this prevents.
+- **Origin:** Micro-phase 1.3.
+
+## ADR-031 — Hand-written validation, no schema library
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** `src/lib/validation/README.md` committed to adding a library only when a real
+  schema demanded one. This micro-phase is the first concrete need, so the question had to be
+  answered rather than deferred again.
+- **Decision:** No library. The job is checking the shape of four object types against an
+  allowlist of fields, and that is roughly 200 lines of `typeof` checks.
+- **Consequences:** Zero dependencies, no build or plugin step, and guards that read as plain
+  rules. Errors carry a field path and a specific code, which is more precise than a schema
+  library would have produced without extra work. The cost is that this approach would not
+  scale gracefully to dozens of schemas, and a library should be reconsidered if the command
+  families grow substantially rather than incrementally. Representation checks deliberately
+  reuse the domain's own exported predicates (`isMoneyAmount`, `isQuantity`,
+  `isAccountName`) rather than re-implementing them, so the command boundary and the schema
+  `CHECK` constraints cannot drift apart.
+- **Origin:** Micro-phase 1.3.
+
+## ADR-032 — Validation and command boundaries are enforced, not documented
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** ADR-025 enforced purity for `src/domain` only. The two directories added in
+  this micro-phase have the same requirement and the same silent failure mode: a validator
+  that queries SQLite still passes every test written against a fixed schema, and a command
+  module that writes a row still typechecks fine.
+- **Decision:** Two more lint rules sharing one definition of impurity.
+  `hari-os/validation-purity` blocks filesystem, network, process, database, and framework
+  access in `src/lib/validation`. `hari-os/command-boundary` blocks the same persistence
+  modules in `src/commands`. Both also block `process.env`, `Date.now`, and `Math.random`.
+- **Consequences:** `src/commands` is *not* blocked from importing `src/domain`, because
+  `ARCHITECTURE.md` section 4 explicitly permits it; blocking it would pre-empt a decision
+  that belongs to the execution micro-phase. The distinction the rules do enforce is the one
+  the architecture states plainly: the command layer proposes and validates, and does not
+  persist. Verified with probe files that triggered nine violations across both rules, then
+  deleted. Proven independently of the lint rules by running the suite with
+  `better-sqlite3` removed from `node_modules`.
+- **Origin:** Micro-phase 1.3.

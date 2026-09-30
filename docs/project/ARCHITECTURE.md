@@ -92,15 +92,16 @@ Two rules cover this, both of which fail `npm run lint`:
   that would make a business rule untestable: `node:fs`, `node:os`, `node:path`,
   `node:child_process`, network modules, `better-sqlite3`, `server-only`, `next/*`, and
   `process.env`, `Date.now`, `Math.random` (ADR-025).
+- `hari-os/validation-purity` applies to `src/lib/validation`, and blocks the same
+  filesystem, network, process, and database access, so validation stays independent of data
+  (ADR-032).
+- `hari-os/command-boundary` applies to `src/commands`, and blocks persistence entirely, so
+  the command layer can propose and validate but not write. It deliberately still permits
+  `src/domain`, which section 4 allows (ADR-032).
 
-
-`eslint.config.mjs` defines a `hari-os/boundaries` rule using the built-in
-`no-restricted-imports`. Files under `src/domain/` and `src/components/` may not import
-`@/lib/db`, `@/lib/storage`, or `@/commands`. This costs no extra dependency and turns the
-two most important rules into a build failure rather than a code review comment.
-
-This was verified with probe files that were then deleted: violations were reported, and
-legitimate imports from `app/` and `features/` were not flagged.
+All four cost no extra dependency and turn the rules into build failures rather than code
+review comments. Each was verified with probe files that were then deleted: violations were
+reported, and legitimate imports from `app/`, `features/`, and `commands/` were not flagged.
 
 ## 5. SQLite access
 
@@ -178,20 +179,72 @@ upload code exists yet.
 ## 7. Validation
 
 `src/lib/validation/`. Shared so that a form, a route handler, and the command engine
-enforce the same rules. No validation library is installed, because nothing needs
-validating yet.
+enforce the same rules.
 
-## 8. Future command parser
+No validation library is installed. Hand-written guards were judged sufficient for the
+concrete need in micro-phase 1.3, and the reasoning is recorded in ADR-031.
 
-`src/commands/`. Phase 2. It will call OpenRouter and produce a typed intent such as
-`{ module: "expenses", item: "banana", amount: 10, account: "cash" }`.
+`result.ts` holds the validation failure vocabulary. `command.ts` holds the validator for
+untrusted command objects (section 8). Both are pure, and `hari-os/validation-purity` fails
+the build if either reaches for a database, a file, the network, the environment, or the
+clock.
 
-The boundary that matters: the model interprets and proposes, deterministic code decides
-and persists. Balances and inventory quantities are computed in `src/domain` and written
-by ordinary code. A wrong parse must be correctable, so intents are validated against
-`lib/validation` and shown to the user before or after being applied.
+## 8. The command contract
 
-No parser, no LLM dependency, and no OpenRouter integration exists yet.
+`src/commands/`. The boundary between natural language and deterministic action.
+
+`contract.ts` declares the structured command types. `domain-input.ts` maps a validated
+command onto the arguments a `src/domain` operation expects. Both were added in micro-phase
+1.3.
+
+The boundary that matters: the model interprets and proposes, deterministic code decides and
+persists. Balances and inventory quantities are computed in `src/domain` and written by
+ordinary code. A wrong parse must be correctable, so intents are validated and shown to the
+user before or after being applied.
+
+### A command carries facts, never results
+
+Four kinds exist, and only those with a domain operation behind them:
+
+| Kind | Carries |
+| --- | --- |
+| `inventory.consume` | item name, amount, unit |
+| `inventory.restock` | item name, amount, unit |
+| `inventory.set_quantity` | item name, quantity |
+| `expense.record` | account name, item, amount in minor units, optional category |
+
+Common to all: a `version` literal, and the originating sentence as `sourceText`, kept only
+so the application can show what it understood. Nothing ever reads `sourceText` to decide
+what a command means.
+
+Deliberately absent: ids, timestamps, and any computed outcome. A model cannot know a row id,
+the moment a spend happened is not the moment a model responded, and a command that already
+carried the new balance would put an unverified number inside the trust boundary. Routine,
+sleep, skills, and habits are absent because no domain operation exists for them yet, and a
+command type with no execution path would be a promise the code cannot keep (ADR-029).
+
+### Validation is the gate, and it only checks shape
+
+`parseCommand` in `src/lib/validation` turns an untrusted value into either a command or a
+list of specific issues. It checks structure and types. It does not check existence — "is
+there really an account called cash?" needs the database, so it is a domain failure at
+execution — and it computes nothing (ADR-032).
+
+It fails closed. Unknown fields are rejected rather than dropped, so a producer inventing an
+`amount` or a `balance` is reported rather than silently tolerated. Only own properties are
+read, so a poisoned prototype cannot inject a field. A field that throws while being read
+becomes a rejected command rather than an exception escaping the boundary.
+
+Representation checks reuse the domain's own exported predicates, so the command boundary
+and the schema `CHECK` constraints cannot drift apart. All issues are reported at once,
+because the usual caller is a model that has to try again, and one problem per attempt turns
+a two-error payload into two round trips.
+
+### What does not exist yet
+
+No parser, no natural-language handling, no LLM dependency, no OpenRouter integration, and no
+prompt. The contract is provider-agnostic: nothing here mentions a vendor, because the shape
+is dictated by the schema and the domain, not by how a sentence is turned into it.
 
 ## 9. Feature code
 

@@ -33,6 +33,32 @@ const impureModules = [
   "next/*",
 ];
 
+/**
+ * Modules the command layer may never reach for, because it must not persist.
+ *
+ * A subset of `impureModules`: `src/commands` is allowed to import `src/domain` and
+ * `src/lib/validation` per `ARCHITECTURE.md` section 4, so the infrastructure patterns that
+ * would also block those are not reused wholesale.
+ */
+const persistenceModules = [
+  "@/lib/db",
+  "@/lib/db/*",
+  "@/lib/storage",
+  "@/lib/storage/*",
+  "server-only",
+  "better-sqlite3",
+  "node:fs",
+  "node:fs/*",
+  "node:os",
+  "node:path",
+  "node:child_process",
+  "node:worker_threads",
+  "node:net",
+  "node:http",
+  "node:https",
+  "next/*",
+];
+
 const boundaries = {
   name: "hari-os/boundaries",
   files: ["src/domain/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}"],
@@ -51,6 +77,32 @@ const boundaries = {
     ],
   },
 };
+
+/**
+ * Globals that make a result depend on when or where it ran, rather than on its input.
+ *
+ * Shared by every pure-boundary rule below, so the three directories cannot drift apart on
+ * what "pure" means.
+ */
+const impureGlobals = [
+  {
+    object: "process",
+    property: "env",
+    message:
+      "Must not read the environment. Receive configuration as an argument.",
+  },
+  {
+    object: "Date",
+    property: "now",
+    message:
+      "Must not read the clock. Pass a timestamp in, so results stay deterministic.",
+  },
+  {
+    object: "Math",
+    property: "random",
+    message: "Must not generate random values. Pass an id in.",
+  },
+];
 
 /**
  * Purity rules for `src/domain`, enforced rather than merely documented (ADR-025).
@@ -76,26 +128,69 @@ const domainPurity = {
         ],
       },
     ],
-    "no-restricted-properties": [
+    "no-restricted-properties": ["error", ...impureGlobals],
+  },
+};
+
+/**
+ * Purity rules for `src/lib/validation` (ADR-032).
+ *
+ * Validation is the gate every untrusted input passes through, from a form, a route, or a
+ * language model. If the validator could open a database it would stop being callable from a
+ * test, a client component, or a form, and its verdict would depend on data rather than on
+ * the input. It may import `src/domain`, because reusing the domain's own representation
+ * predicates is what keeps the command boundary and the schema CHECK from drifting apart.
+ */
+const validationPurity = {
+  name: "hari-os/validation-purity",
+  files: ["src/lib/validation/**/*.{ts,tsx}"],
+  rules: {
+    "no-restricted-imports": [
       "error",
       {
-        object: "process",
-        property: "env",
-        message:
-          "Domain code must not read the environment. Receive configuration as an argument.",
-      },
-      {
-        object: "Date",
-        property: "now",
-        message:
-          "Domain code must not read the clock. Pass a timestamp in, so results stay deterministic.",
-      },
-      {
-        object: "Math",
-        property: "random",
-        message: "Domain code must not generate random values. Pass an id in.",
+        patterns: [
+          {
+            group: impureModules,
+            message:
+              "Validation must stay pure and data-independent: no filesystem, network, process, or database access, and no framework imports. Check structure, not existence.",
+          },
+        ],
       },
     ],
+    "no-restricted-properties": ["error", ...impureGlobals],
+  },
+};
+
+/**
+ * Boundary rules for `src/commands` (ADR-032).
+ *
+ * `ARCHITECTURE.md` section 4 allows `commands/` to use `src/domain` and
+ * `src/lib/validation`, and requires it to hand a validated intent to a feature rather than
+ * writing to the database itself. This rule enforces the second half of that sentence:
+ * the command layer may propose and validate, and may not persist.
+ *
+ * `src/domain` is deliberately *not* blocked here, unlike in `hari-os/domain-purity`, because
+ * the architecture explicitly permits it. Whether a validated intent reaches a domain
+ * operation inside this directory or via a feature is a decision for the execution
+ * micro-phase, not something this rule should pre-empt.
+ */
+const commandBoundary = {
+  name: "hari-os/command-boundary",
+  files: ["src/commands/**/*.{ts,tsx}"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: persistenceModules,
+            message:
+              "The command layer proposes and validates; it does not persist. Hand the validated intent to a feature, which owns the database.",
+          },
+        ],
+      },
+    ],
+    "no-restricted-properties": ["error", ...impureGlobals],
   },
 };
 
@@ -104,6 +199,8 @@ const eslintConfig = defineConfig([
   ...nextTs,
   boundaries,
   domainPurity,
+  validationPurity,
+  commandBoundary,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

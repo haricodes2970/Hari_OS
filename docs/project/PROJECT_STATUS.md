@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 1.2)
+- **Last updated:** 2026-09-30 (micro-phase 1.3)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -13,18 +13,18 @@
 
 **Phase 0 is complete.** All eight micro-phases are done and verified.
 
-**Phase 1 is active.** Micro-phase 1.1 established the V1 SQLite schema; micro-phase 1.2
-established the pure domain rules. No feature code exists yet, and nothing connects the domain
-rules to storage.
+**Phase 1 is active.** Micro-phase 1.1 established the V1 SQLite schema, 1.2 the pure domain
+rules, and 1.3 the validated command contract that sits between them. No feature code exists
+yet, and nothing executes a command or persists a domain result.
 
 ## Current Micro-Phase
 
-**1.2 — Domain model and deterministic operations: COMPLETE AND VERIFIED**
+**1.3 — Validation and structured command contract: COMPLETE AND VERIFIED**
 
-Next micro-phase: **1.3 — persistence for the domain rules.** Its scope must be planned
-before work begins; it is not invented here. The natural candidate is the first end-to-end
-slice: repositories in `src/lib/db/`, a feature module, and a route, so that a spend or a
-stock change actually reaches SQLite through a domain rule. Phase 1's overall scope is in
+Next micro-phase: **1.4 — command execution pipeline.** Its scope must be planned before work
+begins; it is not invented here. The natural candidate is the pipeline that takes a validated
+command, resolves the names it carries to real rows, applies the matching domain operation,
+and hands the result to a feature for storage. Phase 1's overall scope is in
 `docs/phases/PHASE_01_FOUNDATION.md`.
 
 ## Completed Micro-Phases
@@ -41,6 +41,7 @@ stock change actually reaches SQLite through a domain rule. Phase 1's overall sc
 | 0.8 — Project documentation system | `73ed2b3` | Complete | Yes |
 | 1.1 — Data schema foundation | `87e9dad` | Complete | Yes |
 | 1.2 — Domain model and deterministic operations | `6782446` | Complete | Yes |
+| 1.3 — Validation and structured command contract | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -75,8 +76,12 @@ None.
   inventory, and accounts, all returning `Result` and all tested in memory with
   `npm run domain:test` (170 assertions). Purity is enforced by the `hari-os/domain-purity`
   lint rule. **No repositories, services, or query modules connect them to SQLite yet.**
+- **Validated command contract in place** from micro-phase 1.3. `src/commands/contract.ts`
+  declares four command kinds carrying facts only, and `parseCommand` in
+  `src/lib/validation` turns an untrusted object into a command or a list of specific issues.
+  93 tests, no database dependency, no parser and no LLM.
 - No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication, no
-  uploads, no test framework beyond the two database scripts.
+  uploads, no test framework beyond the three scripts.
 - `AGENTS.md` at the repository root holds the persistent engineering rules for coding
   agents: project identity, canonical sources of truth, stack, architecture boundaries,
   database rules, data and secret safety, the LLM boundary, product principles, Git and
@@ -103,8 +108,9 @@ None.
 | `npm run db:check` | Apply migrations and verify the V1 schema |
 | `npm run db:test` | Isolated schema and constraint tests on temporary databases |
 | `npm run domain:test` | Domain rule tests, in memory, with no database |
+| `npm run contract:test` | Command contract and validation tests, in memory |
 
-## Verification Status for 1.2
+## Verification Status for 1.3
 
 | Check | Command | Result |
 | --- | --- | --- |
@@ -115,18 +121,25 @@ None.
 | Production build | `npm run build` | Pass |
 | Schema intact | `npm run db:check` | Pass — unchanged, 11 V1 tables |
 | Schema tests | `npm run db:test` | Pass — 53 passed, 0 failed |
-| **Domain tests** | `npm run domain:test` | **Pass — 170 passed, 0 failed** |
-| Real database untouched | `md5sum` before/after | Pass — identical, 0 application rows |
+| Domain tests | `npm run domain:test` | Pass — 170 passed, 0 failed |
+| **Contract tests** | `npm run contract:test` | **Pass — 93 passed, 0 failed** |
+| Real database untouched | `md5sum` before/after | Pass — identical |
 | No new tables | table count | Pass — still 12 |
-| Domain needs no SQLite | `better-sqlite3` removed from `node_modules` | Pass — 170 tests still pass |
-| Domain purity rule fires | probe file | Pass — 7 violations caught, then probe deleted |
-| Determinism audit | `grep` + replay tests | Pass — no clock, no random, no fs, no mutation |
+| Suites need no SQLite | `better-sqlite3` removed from `node_modules` | Pass — 170 and 93 tests pass |
+| Validation rule fires | probe file | Pass — 6 violations caught, probe deleted |
+| Command rule fires | probe file | Pass — 3 violations caught, probe deleted |
+| Command may not persist | probe file | Pass — `@/lib/db` and `better-sqlite3` blocked in `commands/` |
+| Type-level proof bites | injected drift | Pass — a changed argument list is a compile error |
+| Boundary fails closed | throwing getter | Pass — rejected, not thrown |
+| No LLM dependency | `package.json` + `node_modules` | Pass — none |
 | New dependencies | `package.json` diff | Pass — none added |
-| Secrets or data staged | `git status` | Pass — none |
 
-The `better-sqlite3` check is the real proof of the boundary: the domain suite was run with
-the driver removed from `node_modules` and passed unchanged, so it cannot be reaching the
-database by any path.
+The SQLite-independence check is the real proof: `better-sqlite3` was moved out of
+`node_modules` and both the domain and contract suites passed unchanged.
+
+## Verification Status for 1.2
+
+Retained for history. All checks passed; see `docs/sessions/2026-09-30-session-03.md`.
 
 ## Verification Status for 1.1
 
@@ -155,10 +168,11 @@ infrastructure.
 
 ## Next Action
 
-**1.3 is not yet defined in detail.** The natural candidate is the first feature slice end to
-end — a route, a feature, a domain rule, and `src/lib/db/` — starting with Kitchen or
-Expenses. The Phase 1 scope in `docs/phases/PHASE_01_FOUNDATION.md` expects a real data round
-trip and negative cases.
+**1.4 is not yet defined in detail.** The natural candidate is the execution pipeline:
+resolve a command's names to rows, apply the domain operation, hand the change to a feature
+for storage. After that, 1.5 is the first visible slice and 1.6 the foundation verification
+pass. The Phase 1 scope in `docs/phases/PHASE_01_FOUNDATION.md` expects a real data round trip
+and negative cases.
 
 One open item is carried forward: the **PRD-versus-roadmap scope divergence** recorded in
 `docs/project/ROADMAP.md` is unresolved. The PRD frames V1 as a 2–3 hour prototype; the
