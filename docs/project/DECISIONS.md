@@ -264,3 +264,40 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
 - **Consequences:** The warning is removed at its source rather than hidden. If a future
   tool requires CommonJS, this field is the single place to revert.
 - **Origin:** Micro-phase 0.5.
+
+## ADR-018 — `.env.example` documents one variable; no `.env` is committed
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Micro-phase 0.6 required explicit, reproducible environment handling. The
+  only environment variable the codebase reads is `HARI_OS_DB_PATH`, introduced in 0.5.
+- **Decision:** Add a tracked `.env.example` documenting `HARI_OS_DB_PATH` only, with safe
+  example values and no machine-specific absolute paths. Do not add a `.env` file, and do
+  not document variables that no code reads yet.
+- **Consequences:** A developer can discover the required variables without seeing any real
+  value. `.env.example` stays tracked via an explicit `!.env.example` negation, verified
+  with `git check-ignore -v --no-index`. `.env.example` will be extended when the OpenRouter
+  key is introduced in Phase 2 — not before.
+- **Origin:** Micro-phase 0.6.
+
+## ADR-019 — Ignore rules narrowed to secrets and local user data
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Micro-phase 0.6 required the database, WAL sidecars, and future uploads to be
+  untrackable, while explicitly forbidding broad ignores of source code or documentation.
+- **Decision:** Extend the existing rules rather than replace them. Added `data/**`, `*.db`,
+  `*.db-wal`, `*.db-shm`, `*.sqlite`, `*.sqlite3`, the explicit non-`.local` environment
+  variants (`.env.development`, `.env.test`, `.env.production`), and the `!.env.example`
+  negation.
+- **Evidence:** Every rule was proven with real files rather than assumed. Temporary
+  `.env`, `.env.local`, `.env.development`, `.env.development.local`, `.env.test.local`,
+  `.env.production.local`, `data/test.db`, `data/uploads/laundry/test.jpg`,
+  `data/hari-os.db-wal`, `data/hari-os.db-shm`, and a stray `stray-outside-data.db` were
+  created; `git check-ignore` reported every one as ignored and `.env.example` as not
+  ignored. All temporary files were then deleted and the database re-verified with
+  `integrity_check: ok`.
+- **Consequences:** A database created outside `data/` is still protected. Documentation
+  and source remain trackable. WAL and shm sidecars cannot be committed even if they appear
+  at an unexpected path.
+- **Origin:** Micro-phase 0.6.

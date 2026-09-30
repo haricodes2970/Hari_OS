@@ -96,14 +96,38 @@ legitimate imports from `app/` and `features/` were not flagged.
 
 `src/lib/db/`. Established in micro-phase 0.5. Implemented by `connection.ts`.
 
+### Location
+
 The database file lives at `data/hari-os.db`, which is git-ignored and outside `src/` and
-`public/`. The path is derived from the project root and may be overridden by the optional
-`HARI_OS_DB_PATH` environment variable for tests and tooling.
+`public/`. The path is derived from the project root:
 
-`connection.ts` does infrastructure only:
+```
+path.join(process.cwd(), "data", "hari-os.db")
+```
 
-- resolves the path and creates the directory and file on demand, so no manual setup step
-  and no committed database file;
+The directory and file are created automatically on first access, so a fresh clone needs
+no manual setup and no committed database.
+
+### The `HARI_OS_DB_PATH` override
+
+`HARI_OS_DB_PATH` is **optional** and unset in normal development. When set, it replaces the
+default path; relative values resolve from the current working directory.
+
+It exists for two reasons only: running tests or tooling against a throwaway database, and
+pointing at a scratch file while debugging. It is not a deployment mechanism. V1 has no
+deployment and no remote database, so there is nothing for it to point at in production.
+
+`.env.example` documents the variable with safe example values. Copy it to `.env.local` to
+use it locally; `.env.local` is git-ignored and must never be committed.
+
+Local database files are **intentionally untracked**. Nothing in `data/` is meant to reach
+the GitHub repository, and the repository is not a backup for real user data.
+
+### What `connection.ts` does
+
+Infrastructure only:
+
+- resolves the path and creates the directory and file on demand;
 - opens the database with WAL journaling and `foreign_keys = ON`;
 - returns a single shared handle, cached on `globalThis` so Next.js module reloads in
   development do not leak connections;
@@ -118,10 +142,28 @@ Component fails the build. This was verified with a probe route, not assumed.
 `better-sqlite3` is a native module, so `next.config.ts` sets
 `serverExternalPackages: ["better-sqlite3"]` to stop Next from bundling it.
 
+### Local data safety
+
+`.gitignore` protects all of the following, verified with real files rather than by
+inspection:
+
+| Ignored | Why |
+| --- | --- |
+| `data/`, `data/**` | The SQLite database and future uploaded photos |
+| `*.db`, `*.sqlite`, `*.sqlite3` | A database created outside `data/` |
+| `*.db-wal`, `*.db-shm` | SQLite WAL sidecars, which are runtime state |
+| `.env`, `.env.local`, `.env.development`, `.env.test`, `.env.production` | Real secrets |
+| `.env.development.local`, `.env.test.local`, `.env.production.local`, `.env.*.local` | Real secrets |
+| `!.env.example` | Explicit negation so the documentation file stays tracked |
+
+The rules are deliberately narrow. Source code, documentation, and configuration are not
+excluded; only secrets and local user data are.
+
 ## 6. Filesystem storage
 
 `src/lib/storage/`. Used for laundry photos from Phase 8. `public/` is never used for
-private user data. No upload code exists yet.
+private user data. Uploads will land under `data/uploads/`, which is already ignored. No
+upload code exists yet.
 
 ## 7. Validation
 

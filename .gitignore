@@ -20,13 +20,27 @@ next-env.d.ts
 # production
 /build
 
-# local secrets
+# local secrets — never commit real environment files
 .env
 .env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
 .env.*.local
+# the example file is documentation and stays tracked
+!.env.example
 
 # local data (SQLite database + uploads) — never commit
 data/
+data/**
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
 # misc
 .DS_Store

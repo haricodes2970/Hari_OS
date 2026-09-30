@@ -32,6 +32,25 @@ npm run dev
 
 The app is served at http://localhost:3000.
 
+The SQLite database is created automatically at `data/hari-os.db` on first use. Nothing
+needs to be created by hand, and `data/` is git-ignored — the repository is not a backup
+for local data.
+
+## Environment
+
+Copy `.env.example` to `.env.local` if you need to override anything:
+
+```bash
+cp .env.example .env.local
+```
+
+`.env.local` is git-ignored and must never be committed. `.env.example` is tracked and
+must never contain real secrets or machine-specific paths.
+
+The only variable the code currently reads is `HARI_OS_DB_PATH`, which is optional and
+defaults to `data/hari-os.db` relative to the project root. It exists for local testing and
+tooling. V1 has no deployment, so there is nothing to point it at in production.
+
 ## Scripts
 
 | Script                 | Purpose                       |

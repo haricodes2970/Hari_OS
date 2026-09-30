@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 0.5)
+- **Last updated:** 2026-09-30 (micro-phase 0.6)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -13,9 +13,9 @@ enough that future agents can work without damaging the architecture.
 
 ## Current Micro-Phase
 
-**0.5 — Local SQLite foundation: COMPLETE AND VERIFIED**
+**0.6 — Environment and local data safety: COMPLETE AND VERIFIED**
 
-Next micro-phase: **0.6 — Environment and local data safety.**
+Next micro-phase: **0.7 — Persistent agent/project context.**
 
 ## Completed Micro-Phases
 
@@ -26,6 +26,7 @@ Next micro-phase: **0.6 — Environment and local data safety.**
 | 0.3 — Development tooling | `5db3686` | Complete | Yes |
 | 0.4 — Application architecture | `19206ce` | Complete | Yes |
 | 0.5 — Local SQLite foundation | `caa5ca3` | Complete | Yes |
+| 0.6 — Environment and local data safety | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -55,7 +56,10 @@ None.
   `commands/`, `lib/storage/`, and `lib/validation/` still hold boundary READMEs only.
 - No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication, no
   uploads.
-- No `.env` handling yet; that arrives in 0.6.
+- Environment handling is explicit: a tracked `.env.example` documents the single variable
+  the code reads, `HARI_OS_DB_PATH`. No `.env` file is committed. Every secret and
+  local-data ignore rule has been proven against real files, including WAL sidecars and a
+  database created outside `data/`.
 - Localhost only, no deployment.
 
 
@@ -72,38 +76,43 @@ None.
 | `npm run format:check` | `prettier --check .` |
 | `npm run db:check` | Verify the SQLite foundation |
 
-## Verification Status for 0.5
+## Verification Status for 0.6
 
 | Check | Command | Result |
 | --- | --- | --- |
 | Install | `npm install` | Pass — 0 vulnerabilities |
 | Formatting | `npm run format:check` | Pass |
-| TypeScript | `npm run typecheck` | Pass — 0 errors |
+| TypeScript | `npm run typecheck` | Pass — 0 errors, on a clean tree and after build |
 | Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
-| Production build | `npm run build` | Pass — routes `/` and `/_not-found` only |
-| Database created on demand | `npm run db:check` | Pass — from a nonexistent `data/` |
-| Database opens | `npm run db:check` | Pass — SQLite 3.53.4 |
-| Idempotent, clean exit | `npm run db:check` twice | Pass |
-| Pragmas | `npm run db:check` | Pass — `journal_mode = wal`, `foreign_keys = ON` |
-| No feature tables | `sqlite_master` query | Pass — 0 application tables |
-| Env override | `HARI_OS_DB_PATH=/tmp/... npm run db:check` | Pass |
-| `data/` ignored | `git check-ignore -v` | Pass — checked before creating the file |
-| No DB staged | `git status` | Pass |
-| Server-only guard | probe route with `"use client"` | Pass — build failed as designed |
+| Production build | `npm run build` | Pass |
+| SQLite default path | `npm run db:check` | Pass |
+| SQLite override | `HARI_OS_DB_PATH=... npm run db:check` | Pass — relative and absolute |
+| Ignore rules vs real files | `git check-ignore` on 12 created files | Pass — all ignored except `.env.example` |
+| `.env.example` trackable | `git check-ignore -v --no-index` | Pass — covered by `!.env.example` |
+| Fresh clone from GitHub | clone, install, checks | Pass — full suite green in an isolated clone |
+| Secret scan | `git grep` across tracked content | Pass — no keys, tokens, or assignment secrets |
+| History scan | all commits, all blobs | Pass — no secret or data ever committed |
+| Tracked database files | `git ls-files` | Pass — 0 |
 | 0.4 boundaries intact | probe in `src/domain/` | Pass — still blocked |
+| Server-only guard | probe route with `"use client"` | Pass — build failed as designed |
+| No feature schema | `sqlite_master` | Pass — empty |
 
-All probe files and probe routes used for verification were deleted.
+Temporary test files, probe files, probe routes, and the temporary clone were all deleted.
+The database was re-verified after testing with `integrity_check: ok` and an empty schema.
 
 ## Latest Commit
 
-`caa5ca3` — `feat(0.5): establish local sqlite foundation`
+`b96c07e` — `docs(0.5): record 0.5 commit hash in status and session report`
+
+Micro-phase 0.6 is committed after this file is written and its real hash is applied
+immediately afterwards. No hash is invented.
 
 ## Next Action
 
-Micro-phase **0.6 — Environment and local data safety.** Configure `.env.example`,
-strengthen `.gitignore` for `data/` and future uploads, confirm secrets cannot be
-committed, and make setup reproducible from a fresh clone. Document the optional
-`HARI_OS_DB_PATH` override introduced in 0.5.
+Micro-phase **0.7 — Persistent agent/project context.** Create `AGENTS.md` covering what
+Hari OS is, the architecture, non-negotiable engineering rules, data safety, LLM boundaries,
+Git workflow, documentation workflow, micro-phase workflow, testing expectations, and scope
+control.
 
 ## Known Issues
 
