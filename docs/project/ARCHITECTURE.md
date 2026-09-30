@@ -84,6 +84,16 @@ Concretely:
 
 ### What is enforced today
 
+Two rules cover this, both of which fail `npm run lint`:
+
+- `hari-os/boundaries` applies to `src/domain` and `src/components`, and blocks imports of
+  `@/lib/db`, `@/lib/storage`, and `@/commands` (section 4).
+- `hari-os/domain-purity` applies to `src/domain` only, and blocks the imports and globals
+  that would make a business rule untestable: `node:fs`, `node:os`, `node:path`,
+  `node:child_process`, network modules, `better-sqlite3`, `server-only`, `next/*`, and
+  `process.env`, `Date.now`, `Math.random` (ADR-025).
+
+
 `eslint.config.mjs` defines a `hari-os/boundaries` rule using the built-in
 `no-restricted-imports`. Files under `src/domain/` and `src/components/` may not import
 `@/lib/db`, `@/lib/storage`, or `@/commands`. This costs no extra dependency and turns the
@@ -189,32 +199,108 @@ No parser, no LLM dependency, and no OpenRouter integration exists yet.
 `kitchen`, `expenses`, `skills`, `habits`. A feature owns its rules, its UI, and its data
 access, and shares only through its own public surface.
 
-## 10. Not implemented yet
+## 10. The domain layer (added in micro-phase 1.2)
+
+`src/domain/` holds the business rules that decide what a number *means*. It is pure: plain
+input, plain output, nothing else. A rule here that could not be tested by calling it with
+values belongs in a different layer.
+
+### What lives here
+
+| Module | Responsibility |
+| --- | --- |
+| `result.ts` | The `Result` type and the closed set of domain error codes |
+| `decimal.ts` | Exact decimal inspection, scale rounding, negative-zero normalisation |
+| `money.ts` | Integer minor units, rupee conversion, balance arithmetic |
+| `quantity.ts` | Non-negative quantities, scale rules, addition and subtraction |
+| `inventory.ts` | Kitchen stock rules and the stock correctability representation |
+| `accounts.ts` | Account and spend rules |
+
+`decimal.ts` exists because money and quantity share one real problem: deciding how many
+decimal places a `number` actually has without doing floating-point arithmetic to find out.
+`1.15 * 100` is `114.99999999999999`, so a conversion that multiplies is wrong in a way that
+depends on which way the error happens to fall. Both modules read the value's own decimal
+string instead.
+
+### The rules that matter
+
+- **Money is a whole number of minor units.** Never a float. `toMinorUnits` rejects an amount
+  with more than two decimal places rather than rounding it, because half a paise has no
+  meaning.
+- **Quantities are non-negative and within six decimal places.** Inputs are rejected when
+  they exceed the scale; only the result of arithmetic is rounded (ADR-027).
+- **Stock cannot go negative.** Consuming more than is recorded is an explicit refusal, not a
+  clamped value. Exhausting the stock to exactly zero is valid.
+- **A balance may go negative.** Being overdrawn is a real state (ADR-021). There is
+  deliberately no `insufficient_balance` error, because the PRD contains no rule that a spend
+  must be affordable, and inventing one would be inventing a business rule.
+- **Units are compared as trimmed strings and nothing else.** `piece` is not `kg`, and the
+  domain does not attempt to know whether `g` and `kg` are convertible — that would be
+  inference. Canonicalising what a user wrote belongs to whatever introduces the item.
+- **An unknown item or account is an explicit failure**, never a silent creation. Inventing
+  an item or an account would be the system deciding something on the user's behalf.
+
+### Failures are values
+
+Every operation returns a `Result`, never an exception for an expected refusal, and every
+failure carries a stable `code` from a closed set. Callers switch on `code`, never on
+`message` (ADR-026).
+
+### Determinism is a property of the design, not a promise
+
+The domain never reads the clock, never generates an id, never touches the filesystem, and
+never mutates an object the caller still holds. Timestamps and ids are arguments. That is
+what makes every rule testable by calling it twice with the same values, and it is what the
+`hari-os/domain-purity` lint rule enforces (ADR-025).
+
+### Correctability
+
+Inventory is logged as signed deltas, so `reverseInventoryChange` produces an exact
+compensating change rather than an approximate one. The expense ledger cannot do this and the
+code does not pretend it can: `expense` holds non-negative spends and nothing else, so there
+is no row in which a refund or correction could live. That limitation is documented where it
+would otherwise be discovered the hard way.
+
+### Testing
+
+`npm run domain:test` runs the rules on the real domain source with no build step, no test
+framework, and no database. Internal domain imports carry explicit `.ts` extensions so plain
+Node can resolve them (ADR-028).
+
+## 11. Not implemented yet
 
 None of the following exist, and their absence is intentional:
 
 - Any feature module, page, or UI beyond the minimal root page
 - **Seed data.** No sample or fake rows exist in any table
-- **Any business operation.** The schema exists, but nothing reads or writes it yet:
-  no inventory arithmetic, no balance calculation, no sleep, habit, or skill logic
-- Any repository, service, or query module for the schema
+- **Persistence of any domain result.** Inventory arithmetic and balance calculation exist
+  in `src/domain` and are fully tested, but nothing stores their outcome. No sleep, habit, or
+  skill logic exists at all
+- Any repository, service, or query module for the schema. The schema exists, and the domain
+  rules exist, and nothing connects them: a spend recorded by `applyExpense` does not reach
+  SQLite, because that connection is not built yet
+- Any command contract or intent type. The domain takes structured input, not a parsed
+  sentence
 - Filesystem upload handling
 - The natural language command parser
 - OpenRouter or any LLM integration
 - Authentication
 - Deployment configuration
 - PWA manifest, service worker, or offline support
-- A general test framework. The only tests are the two database scripts described below
+- A general test framework. The only tests are the two database scripts and the domain
+  script described below
 
-`src/lib/db/` contains the connection, migrations, and schema declaration. `app/` contains
-only the minimal root page from micro-phase 0.2. Every other directory still holds a README.
+`src/lib/db/` contains the connection, migrations, and schema declaration. `src/domain/`
+contains the pure rules. `app/` contains only the minimal root page from micro-phase 0.2.
+`components/`, `features/`, `commands/`, `lib/storage/`, and `lib/validation/` still hold
+boundary READMEs only.
 
 Do not assume a directory is functional because it exists, and do not assume a table being
 present means anything can use it yet.
 
 ---
 
-## 11. Schema and migrations (added in micro-phase 1.1)
+## 12. Schema and migrations (added in micro-phase 1.1)
 
 `src/lib/db/` owns the schema. Nothing outside it may create, alter, or drop a table.
 

@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 1.1)
+- **Last updated:** 2026-09-30 (micro-phase 1.2)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -13,17 +13,19 @@
 
 **Phase 0 is complete.** All eight micro-phases are done and verified.
 
-**Phase 1 is active.** Micro-phase 1.1 has established the V1 SQLite schema. No feature code
-exists yet: the schema stores facts, and nothing reads or writes it.
+**Phase 1 is active.** Micro-phase 1.1 established the V1 SQLite schema; micro-phase 1.2
+established the pure domain rules. No feature code exists yet, and nothing connects the domain
+rules to storage.
 
 ## Current Micro-Phase
 
-**1.1 — Data schema foundation: COMPLETE AND VERIFIED**
+**1.2 — Domain model and deterministic operations: COMPLETE AND VERIFIED**
 
-Next micro-phase: **1.2 — not yet defined in detail.** Its scope must be planned before work
-begins. Phase 1's overall scope is recorded in
-`docs/phases/PHASE_01_FOUNDATION.md`; the micro-phase breakdown beyond 1.1 is not invented
-here.
+Next micro-phase: **1.3 — persistence for the domain rules.** Its scope must be planned
+before work begins; it is not invented here. The natural candidate is the first end-to-end
+slice: repositories in `src/lib/db/`, a feature module, and a route, so that a spend or a
+stock change actually reaches SQLite through a domain rule. Phase 1's overall scope is in
+`docs/phases/PHASE_01_FOUNDATION.md`.
 
 ## Completed Micro-Phases
 
@@ -38,6 +40,7 @@ here.
 | 0.7 — Persistent agent/project context | `25db46f` | Complete | Yes |
 | 0.8 — Project documentation system | `73ed2b3` | Complete | Yes |
 | 1.1 — Data schema foundation | `87e9dad` | Complete | Yes |
+| 1.2 — Domain model and deterministic operations | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -63,12 +66,15 @@ None.
   created by an ordered migration in `src/lib/db/migrations.ts`. `npm run db:check` verifies
   tables, columns, constraints, and the absence of unexpected tables.
   `npm run db:test` runs 53 isolated tests on temporary databases.
-  **No seed data exists and no business operation reads or writes the schema yet.**
+  **No seed data exists and no domain result reaches the schema yet.**
 - `connection.ts` imports `server-only`, so a Client Component importing it fails the
   build. Verified with a probe route.
 - Only `src/app/` and `src/lib/db/` contain code. `components/`, `features/`, `domain/`,
   `commands/`, `lib/storage/`, and `lib/validation/` still hold boundary READMEs only.
-- No repositories, services, or query modules for the schema yet.
+- **Pure domain rules in place** from micro-phase 1.2, in `src/domain/`: money, quantity,
+  inventory, and accounts, all returning `Result` and all tested in memory with
+  `npm run domain:test` (170 assertions). Purity is enforced by the `hari-os/domain-purity`
+  lint rule. **No repositories, services, or query modules connect them to SQLite yet.**
 - No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication, no
   uploads, no test framework beyond the two database scripts.
 - `AGENTS.md` at the repository root holds the persistent engineering rules for coding
@@ -96,8 +102,9 @@ None.
 | `npm run format:check` | `prettier --check .` |
 | `npm run db:check` | Apply migrations and verify the V1 schema |
 | `npm run db:test` | Isolated schema and constraint tests on temporary databases |
+| `npm run domain:test` | Domain rule tests, in memory, with no database |
 
-## Verification Status for 1.1
+## Verification Status for 1.2
 
 | Check | Command | Result |
 | --- | --- | --- |
@@ -106,19 +113,24 @@ None.
 | TypeScript | `npm run typecheck` | Pass — 0 errors |
 | Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
 | Production build | `npm run build` | Pass |
-| Schema present | `npm run db:check` | Pass — 11 V1 tables, columns, constraints verified |
-| Migration idempotent | `npm run db:test` | Pass — re-running applies nothing |
-| Migrations non-destructive | `npm run db:test` | Pass — existing rows survive, no table dropped |
-| Fresh vs migrated schema | `npm run db:test` | Pass — identical |
-| Constraints reject bad data | `npm run db:test` | Pass — 24 accept/reject cases |
-| `db:check` failure detection | `npm run db:test` | Pass — missing table, unexpected table, missing column all fail it |
-| Unknown version refused | `npm run db:test` | Pass |
-| Real database preserved | row counts | Pass — 12 tables, only the migration record, no user data |
-| `data/` ignored | `git check-ignore` | Pass — no database file tracked |
+| Schema intact | `npm run db:check` | Pass — unchanged, 11 V1 tables |
+| Schema tests | `npm run db:test` | Pass — 53 passed, 0 failed |
+| **Domain tests** | `npm run domain:test` | **Pass — 170 passed, 0 failed** |
+| Real database untouched | `md5sum` before/after | Pass — identical, 0 application rows |
+| No new tables | table count | Pass — still 12 |
+| Domain needs no SQLite | `better-sqlite3` removed from `node_modules` | Pass — 170 tests still pass |
+| Domain purity rule fires | probe file | Pass — 7 violations caught, then probe deleted |
+| Determinism audit | `grep` + replay tests | Pass — no clock, no random, no fs, no mutation |
+| New dependencies | `package.json` diff | Pass — none added |
 | Secrets or data staged | `git status` | Pass — none |
 
-`npm run db:test` reports **53 passed, 0 failed** and removes all 10 temporary databases it
-creates. It never opens the real `data/hari-os.db`.
+The `better-sqlite3` check is the real proof of the boundary: the domain suite was run with
+the driver removed from `node_modules` and passed unchanged, so it cannot be reaching the
+database by any path.
+
+## Verification Status for 1.1
+
+Retained for history. All checks passed; see `docs/sessions/2026-09-30-session-02.md`.
 
 ## Phase 0 Deliverables
 
@@ -143,10 +155,10 @@ infrastructure.
 
 ## Next Action
 
-**1.2 is not yet defined in detail.** The natural candidate is the first feature slice end to
-end — a route, a feature, a domain rule, and `src/lib/db/` — starting with whichever PRD area
-gives the most value. The Phase 1 scope in `docs/phases/PHASE_01_FOUNDATION.md` expects a
-real data round trip and negative cases.
+**1.3 is not yet defined in detail.** The natural candidate is the first feature slice end to
+end — a route, a feature, a domain rule, and `src/lib/db/` — starting with Kitchen or
+Expenses. The Phase 1 scope in `docs/phases/PHASE_01_FOUNDATION.md` expects a real data round
+trip and negative cases.
 
 One open item is carried forward: the **PRD-versus-roadmap scope divergence** recorded in
 `docs/project/ROADMAP.md` is unresolved. The PRD frames V1 as a 2–3 hour prototype; the

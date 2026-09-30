@@ -400,3 +400,81 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
   and the schema's job is to refuse negatives and non-numerics. Storing thousandths instead
   would be exact but would push a conversion bug into every future caller.
 - **Origin:** Micro-phase 1.1.
+
+## ADR-025 — Domain purity is enforced by lint, not just documented
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** `AGENTS.md` and `ARCHITECTURE.md` require `src/domain` to stay free of
+  infrastructure, but until now only *imports* were enforced. A rule that read `Date.now()`,
+  `process.env`, or a file would still pass typecheck and still pass every test written
+  against a fixed clock, and would quietly become untestable. The failure is silent, which is
+  exactly when a rule is worth enforcing.
+- **Decision:** Add a `hari-os/domain-purity` ESLint rule over `src/domain` that restricts
+  `node:fs`, `node:os`, `node:path`, `node:child_process`, network modules, `better-sqlite3`,
+  `server-only`, `next/*`, `@/lib/db`, `@/lib/storage`, and `@/commands` imports, and that
+  restricts `process.env`, `Date.now`, and `Math.random`.
+- **Consequences:** Every impurity is a build failure with a message naming the fix. The
+  cost is that a genuinely pure use of `Date` or `Math` — reading a supplied `Date`, for
+  example — needs no exemption today, but would if one appears; the escape hatch is a
+  targeted disable comment, which is visible in review. Verified with a temporary probe file
+  that triggered all seven restrictions, then deleted.
+- **Origin:** Micro-phase 1.2.
+
+## ADR-026 — Result-typed failures instead of exceptions for expected refusals
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Domain operations are pure functions and cannot throw away a wrong answer, so
+  a validation failure has to come back as a value. Throwing would also force every caller to
+  wrap each call in a `try`, which is the shape that hides failures rather than surfacing
+  them.
+- **Decision:** Every operation returns `Result<T>`, a discriminated union of `{ ok: true,
+  value }` and `{ ok: false, error }`, with `error.code` drawn from a closed set of seven
+  codes. Callers switch on `code`, never on `message`.
+- **Consequences:** A caller cannot use a domain result without having handled failure,
+  because `value` does not exist on the failure branch. The cost is verbosity at every call
+  site, and a mild ergonomic imbalance against plain `try`. Codes are a closed union on
+  purpose: adding one later is a deliberate act rather than an incidental new `throw`.
+  Domain code cannot produce a database error, so no code exists for one — infrastructure
+  failures surface at the layer that owns them.
+- **Origin:** Micro-phase 1.2.
+
+## ADR-027 — Fractional quantities are accepted and their error is bounded, not eliminated
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** ADR-024 chose `NUMERIC` over `INTEGER` because stock is both whole counts and
+  fractional weights, and explicitly deferred the question of float error to "the domain layer
+  owns deterministic rounding". Micro-phase 1.2 is that layer, so the deferral has to be
+  resolved. Rejected alternatives: storing thousandths (exact, but ADR-024 rejected it as it
+  pushes a conversion bug into every caller), and restricting quantities to integers (exact,
+  but forces grams or an arbitrary scale factor onto the user).
+- **Decision:** Six decimal places. Inputs must already be within that scale and are rejected
+  otherwise; arithmetic results are rounded to that scale exactly once; magnitudes above
+  `1e9` are refused because decimal scaling stops being exact there.
+- **Consequences:** `0.1 + 0.2` is exactly `0.3`, and re-applying an operation to its own
+  output changes nothing, so results are stable and reproducible. Binary floating point
+  still cannot represent most decimals exactly, so fractional stock carries a bounded error
+  below one millionth of a unit. That limitation is documented in `quantity.ts` rather than
+  hidden, and it is far below the precision of any kitchen measurement. Rounding is applied
+  only to results, never to inputs, so no caller can silently lose precision on the way in.
+- **Origin:** Micro-phase 1.2.
+
+## ADR-028 — Explicit `.ts` import specifiers inside `src/domain`
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** The domain tests run on plain Node, which strips types but resolves ESM
+  specifiers itself and therefore requires an explicit file extension. TypeScript and Next
+  both accept extensionless specifiers, so the two resolvers disagreed. The domain's first
+  runtime imports are in this micro-phase; `src/lib/db` never had the problem because its
+  only cross-file import is `import type`, which is erased before resolution.
+- **Decision:** Internal domain imports are written as `./quantity.ts`, enabled by
+  `allowImportingTsExtensions` in `tsconfig.json`, which is permitted because the project
+  never emits.
+- **Consequences:** Domain tests run on the real domain source with no build step, no
+  transpiler dependency, and no test framework. The trade-off is that domain specifiers look
+  unusual next to extensionless imports elsewhere; the alternative was adding a bundler or
+  transpiler solely to run tests, which is a larger cost than the style inconsistency.
+- **Origin:** Micro-phase 1.2.

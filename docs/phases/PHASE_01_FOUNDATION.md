@@ -1,6 +1,6 @@
 # Phase 1 — Application Foundation
 
-**Status: Active** (micro-phase 1.1 complete)
+**Status: Active** (micro-phases 1.1 and 1.2 complete)
 
 ## Purpose
 
@@ -52,14 +52,26 @@ them.
 
 ## Status
 
-**Active.** Micro-phase **1.1 (data schema foundation) is complete and verified**.
+**Active.** Micro-phases **1.1 (data schema foundation)** and **1.2 (domain model and
+deterministic operations)** are complete and verified.
 
 What 1.1 delivered: the eleven PRD tables, an ordered migration mechanism in
 `src/lib/db/migrations.ts`, an independently declared expected schema in
 `src/lib/db/schema.ts`, and two verification scripts. See `docs/project/ARCHITECTURE.md`
-section 11 and ADRs 020–024.
+section 12 and ADRs 020–024.
 
-What remains: no feature code exists. Nothing reads or writes the schema yet, and there are
-no repositories, services, or query modules. The next micro-phase, 1.2, is expected to
-deliver the first end-to-end slice — route, feature, domain rule, and `src/lib/db/` — with a
-demonstrated data round trip and a demonstrated negative case.
+What 1.2 delivered: the pure domain layer in `src/domain/` — money, quantity, inventory, and
+accounts — returning `Result` values with a closed set of error codes, with 170 in-memory
+tests and no database dependency. Purity is enforced by lint. See section 10 and ADRs
+025–028.
+
+What remains: **no feature code exists, and nothing connects the domain rules to storage.**
+There are no repositories, services, or query modules, so `applyExpense` computes a new
+balance that nothing stores. Micro-phase 1.3 is expected to deliver the first end-to-end
+slice — route, feature, domain rule, and `src/lib/db/` — with a demonstrated data round trip
+and a demonstrated negative case.
+
+One known limitation is carried forward from 1.2: the expense ledger cannot record a
+correcting entry, because `expense` holds non-negative spends only. Correcting a wrong spend
+currently means replacing the row. Any fix belongs in a migration, not in a later feature
+slice.
