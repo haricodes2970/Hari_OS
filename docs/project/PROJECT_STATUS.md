@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (Phase 0 closed)
+- **Last updated:** 2026-09-30 (micro-phase 1.1)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -9,23 +9,21 @@
 | Phase | Name | Status |
 | --- | --- | --- |
 | 0 | Foundation infrastructure | **Complete** |
-| 1 | Application foundation | **Planned — not started** |
+| 1 | Application foundation | **Active** |
 
-**Phase 0 is complete.** All eight micro-phases are done and verified. No Hari OS product
-features have been built, and that is the intended outcome of Phase 0: it made the
-repository safe and organized enough that future agents can work without damaging the
-architecture.
+**Phase 0 is complete.** All eight micro-phases are done and verified.
 
-**Phase 1 has not started.** No micro-phase of Phase 1 is active, and no product code,
-feature schema, or parser exists.
+**Phase 1 is active.** Micro-phase 1.1 has established the V1 SQLite schema. No feature code
+exists yet: the schema stores facts, and nothing reads or writes it.
 
 ## Current Micro-Phase
 
-**None active.** Phase 0 is closed.
+**1.1 — Data schema foundation: COMPLETE AND VERIFIED**
 
-Next micro-phase: **1.1 — not yet defined.** Phase 1's scope is recorded in
-`docs/phases/PHASE_01_FOUNDATION.md`; its micro-phase breakdown has not been planned and is
-not invented here.
+Next micro-phase: **1.2 — not yet defined in detail.** Its scope must be planned before work
+begins. Phase 1's overall scope is recorded in
+`docs/phases/PHASE_01_FOUNDATION.md`; the micro-phase breakdown beyond 1.1 is not invented
+here.
 
 ## Completed Micro-Phases
 
@@ -39,6 +37,7 @@ not invented here.
 | 0.6 — Environment and local data safety | `6cbf337` | Complete | Yes |
 | 0.7 — Persistent agent/project context | `25db46f` | Complete | Yes |
 | 0.8 — Project documentation system | `73ed2b3` | Complete | Yes |
+| 1.1 — Data schema foundation | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -60,14 +59,18 @@ None.
 - SQLite foundation in place via `src/lib/db/connection.ts`, using `better-sqlite3@13`.
   The database creates itself at `data/hari-os.db` on first access, with WAL journaling
   and foreign keys enabled. Verified by `npm run db:check`.
-- **The database schema is empty by design.** Zero application tables. All PRD entities
-  are deferred to later schema work, and `db:check` fails if any of them appears.
+- **V1 schema implemented in micro-phase 1.1.** Eleven PRD tables plus `schema_migrations`,
+  created by an ordered migration in `src/lib/db/migrations.ts`. `npm run db:check` verifies
+  tables, columns, constraints, and the absence of unexpected tables.
+  `npm run db:test` runs 53 isolated tests on temporary databases.
+  **No seed data exists and no business operation reads or writes the schema yet.**
 - `connection.ts` imports `server-only`, so a Client Component importing it fails the
   build. Verified with a probe route.
 - Only `src/app/` and `src/lib/db/` contain code. `components/`, `features/`, `domain/`,
   `commands/`, `lib/storage/`, and `lib/validation/` still hold boundary READMEs only.
+- No repositories, services, or query modules for the schema yet.
 - No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication, no
-  uploads.
+  uploads, no test framework beyond the two database scripts.
 - `AGENTS.md` at the repository root holds the persistent engineering rules for coding
   agents: project identity, canonical sources of truth, stack, architecture boundaries,
   database rules, data and secret safety, the LLM boundary, product principles, Git and
@@ -91,9 +94,10 @@ None.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run format` | `prettier --write .` |
 | `npm run format:check` | `prettier --check .` |
-| `npm run db:check` | Verify the SQLite foundation |
+| `npm run db:check` | Apply migrations and verify the V1 schema |
+| `npm run db:test` | Isolated schema and constraint tests on temporary databases |
 
-## Verification Status for 0.7
+## Verification Status for 1.1
 
 | Check | Command | Result |
 | --- | --- | --- |
@@ -102,17 +106,19 @@ None.
 | TypeScript | `npm run typecheck` | Pass — 0 errors |
 | Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
 | Production build | `npm run build` | Pass |
-| SQLite foundation | `npm run db:check` | Pass — no feature tables |
-| Cited commit messages exist | compared against `git log` | Pass — 2 errors found and corrected |
-| Cited ADRs exist | compared against `DECISIONS.md` | Pass — ADR-001, 012, 014 all real |
-| Cited paths exist | compared against the filesystem | Pass — only `docs/phases/` and `src/types/` absent, both labelled as absent |
-| No forbidden tech in code | grep across `src/` and config | Pass — no Supabase, ORM, Tailwind, PWA package, auth, or deployment |
-| Secrets/data staged | `git status` and diff scan | Pass — none |
+| Schema present | `npm run db:check` | Pass — 11 V1 tables, columns, constraints verified |
+| Migration idempotent | `npm run db:test` | Pass — re-running applies nothing |
+| Migrations non-destructive | `npm run db:test` | Pass — existing rows survive, no table dropped |
+| Fresh vs migrated schema | `npm run db:test` | Pass — identical |
+| Constraints reject bad data | `npm run db:test` | Pass — 24 accept/reject cases |
+| `db:check` failure detection | `npm run db:test` | Pass — missing table, unexpected table, missing column all fail it |
+| Unknown version refused | `npm run db:test` | Pass |
+| Real database preserved | row counts | Pass — 12 tables, only the migration record, no user data |
+| `data/` ignored | `git check-ignore` | Pass — no database file tracked |
+| Secrets or data staged | `git status` | Pass — none |
 
-AGENTS.md was validated against the PRD, ARCHITECTURE.md, DECISIONS.md, and the actual
-repository rather than written from memory. Two factual errors were caught and fixed: a
-commit message attributed to the wrong type, and an example quoting a future commit that
-does not exist yet.
+`npm run db:test` reports **53 passed, 0 failed** and removes all 10 temporary databases it
+creates. It never opens the real `data/hari-os.db`.
 
 ## Phase 0 Deliverables
 
@@ -137,18 +143,14 @@ infrastructure.
 
 ## Next Action
 
-**Phase 1 has not started.** Before any feature work, plan the Phase 1 micro-phase
-breakdown, starting with the schema micro-phase described in
-`docs/phases/PHASE_01_FOUNDATION.md`.
+**1.2 is not yet defined in detail.** The natural candidate is the first feature slice end to
+end — a route, a feature, a domain rule, and `src/lib/db/` — starting with whichever PRD area
+gives the most value. The Phase 1 scope in `docs/phases/PHASE_01_FOUNDATION.md` expects a
+real data round trip and negative cases.
 
-Two open items are carried into Phase 1:
-
-1. The **Phase 1 micro-phase list does not exist yet** and is not invented here.
-2. The **PRD-versus-roadmap scope divergence** recorded in `docs/project/ROADMAP.md` is
-   unresolved. The PRD frames V1 as a 2–3 hour prototype; the roadmap spreads the same
-   surface across nine phases. The user decides which governs.
-
-## Known Issues
+One open item is carried forward: the **PRD-versus-roadmap scope divergence** recorded in
+`docs/project/ROADMAP.md` is unresolved. The PRD frames V1 as a 2–3 hour prototype; the
+roadmap spreads the same surface across nine phases. The user decides which governs.
 
 ## Known Issues
 

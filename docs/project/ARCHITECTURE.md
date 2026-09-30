@@ -191,20 +191,79 @@ access, and shares only through its own public surface.
 
 ## 10. Not implemented yet
 
-This is Phase 0. None of the following exist, and their absence is intentional:
+None of the following exist, and their absence is intentional:
 
 - Any feature module, page, or UI beyond the minimal root page
-- **Any database schema, migration, table, or seed data.** The database opens and reports
-  its configuration, and is deliberately empty
+- **Seed data.** No sample or fake rows exist in any table
+- **Any business operation.** The schema exists, but nothing reads or writes it yet:
+  no inventory arithmetic, no balance calculation, no sleep, habit, or skill logic
+- Any repository, service, or query module for the schema
 - Filesystem upload handling
 - The natural language command parser
 - OpenRouter or any LLM integration
 - Authentication
 - Deployment configuration
 - PWA manifest, service worker, or offline support
-- Test infrastructure
+- A general test framework. The only tests are the two database scripts described below
 
-`src/lib/db/` and `src/commands/` contain a README and, for `lib/db`, one infrastructure
-module. `app/` contains only the minimal root page from micro-phase 0.2.
+`src/lib/db/` contains the connection, migrations, and schema declaration. `app/` contains
+only the minimal root page from micro-phase 0.2. Every other directory still holds a README.
 
-Do not assume a directory is functional because it exists.
+Do not assume a directory is functional because it exists, and do not assume a table being
+present means anything can use it yet.
+
+---
+
+## 11. Schema and migrations (added in micro-phase 1.1)
+
+`src/lib/db/` owns the schema. Nothing outside it may create, alter, or drop a table.
+
+### Files
+
+| File | Role |
+| --- | --- |
+| `src/lib/db/connection.ts` | Opens the database, sets WAL and foreign keys, caches the handle |
+| `src/lib/db/migrations.ts` | Ordered migration list and the `migrate()` function |
+| `src/lib/db/schema.ts` | The expected V1 schema, declared independently of the migration SQL |
+| `scripts/db-check.mjs` | `npm run db:check` — applies migrations, then verifies the live schema |
+| `scripts/schema-test.mjs` | `npm run db:test` — isolated constraint and migration tests |
+
+`migrations.ts` holds SQL in TypeScript rather than in `.sql` files so migrations are part of
+the module graph instead of a runtime filesystem read. This keeps the mechanism working
+under a production build without extra file tracing, and keeps database access
+self-contained in one directory (ADR-020).
+
+### Applying migrations
+
+`migrate(database)` applies every version not yet recorded, in order, each inside a
+transaction that also records the version. Re-running is a no-op. A database containing a
+version this code does not know about is refused with a clear error rather than downgraded.
+
+Migrations are additive. `DROP TABLE` is not a normal strategy, and an already-applied
+migration is never edited.
+
+`connection.ts` deliberately does **not** migrate implicitly. Callers ask for it explicitly,
+so a read-only code path cannot silently write to the database.
+
+### Verification
+
+`npm run db:check` migrates and then checks the live schema against `schema.ts`: every
+expected table, every expected column, the structural constraints, and the absence of any
+unexpected table. Because `schema.ts` is declared separately from the SQL that creates the
+tables, a broken migration cannot silently agree with itself.
+
+`npm run db:test` runs isolated tests against disposable databases in the OS temp
+directory. It never opens the real `data/hari-os.db`.
+
+### Representation rules
+
+- **IDs:** `INTEGER PRIMARY KEY` on every table.
+- **Money:** `INTEGER` minor units. No `REAL` money column exists (ADR-021).
+- **Quantities:** `NUMERIC`, allowing exact integers and fractional weights (ADR-024).
+- **Dates and times:** ISO-8601 `TEXT`, which sorts chronologically (ADR-022).
+- **Booleans:** `INTEGER` constrained to `0` or `1`.
+- **Types are enforced with `typeof()` checks**, because SQLite column types are advisory
+  (ADR-023).
+
+No schema logic performs business arithmetic. The schema stores facts; `src/domain` decides
+what they mean.

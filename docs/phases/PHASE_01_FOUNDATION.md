@@ -1,6 +1,6 @@
 # Phase 1 — Application Foundation
 
-**Status: Planned**
+**Status: Active** (micro-phase 1.1 complete)
 
 ## Purpose
 
@@ -52,5 +52,14 @@ them.
 
 ## Status
 
-**Planned.** Nothing in this phase is implemented. Phase 0 completed with no product
-features, no schema, and no parser.
+**Active.** Micro-phase **1.1 (data schema foundation) is complete and verified**.
+
+What 1.1 delivered: the eleven PRD tables, an ordered migration mechanism in
+`src/lib/db/migrations.ts`, an independently declared expected schema in
+`src/lib/db/schema.ts`, and two verification scripts. See `docs/project/ARCHITECTURE.md`
+section 11 and ADRs 020–024.
+
+What remains: no feature code exists. Nothing reads or writes the schema yet, and there are
+no repositories, services, or query modules. The next micro-phase, 1.2, is expected to
+deliver the first end-to-end slice — route, feature, domain rule, and `src/lib/db/` — with a
+demonstrated data round trip and a demonstrated negative case.

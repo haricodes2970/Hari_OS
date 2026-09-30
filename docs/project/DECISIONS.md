@@ -301,3 +301,102 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
   and source remain trackable. WAL and shm sidecars cannot be committed even if they appear
   at an unexpected path.
 - **Origin:** Micro-phase 0.6.
+
+## ADR-020 — Hand-written ordered SQL migrations, no migration framework
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Micro-phase 1.1 required a reproducible, idempotent schema mechanism without
+  adding a package for its own sake. The options were a framework (`node-pg-migrate` and
+  equivalents, or an ORM's migrator) or a small owned mechanism in `src/lib/db/`.
+- **Decision:** A hand-written ordered migration list in `src/lib/db/migrations.ts`, tracked
+  in a `schema_migrations` table. Each migration runs inside a transaction together with the
+  insert that records it, so a failure cannot leave a half-applied version marked complete.
+  Re-running is a no-op.
+- **Consequences:** No new dependency. Migrations are schema-only and reviewable in a
+  normal diff. The tradeoff is that nothing enforces naming or ordering discipline, so the
+  rules are written at the top of the file: never edit an applied migration, never use
+  `DROP TABLE` as a normal strategy, no business arithmetic in SQL. A database containing a
+  version this code does not know about is refused with a clear error rather than silently
+  downgraded, which protects against running new code against an older database.
+- **Origin:** Micro-phase 1.1.
+
+## ADR-021 — Money stored as integer minor units
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** `account.balance` and `expense.amount` hold financial values. Floating-point
+  storage cannot represent common decimal currency values exactly, and Hari OS requires
+  balances to be deterministic (PRD principles 11 and 12).
+- **Decision:** Store money as `INTEGER` minor units (paise). No `REAL` money column exists
+  anywhere in the schema. The scale is fixed at two decimal places, which matches the
+  currency implied by the PRD's rupee examples.
+- **Evidence:** SQLite column types are *affinity*, not enforcement. `amount INTEGER` accepted
+  a value of `10.5` until a `CHECK (typeof(amount) = 'integer')` constraint was added. This
+  was found by a test written specifically to try it, not by inspection. `balance` carries
+  the same guard.
+- **Consequences:** Arithmetic is exact. Rounding and display formatting become the domain
+  layer's responsibility in a later micro-phase — the schema stores a whole number of minor
+  units and nothing more. `balance` is deliberately allowed to go negative: being overdrawn
+  is a real state, not a database error, so no `CHECK` constrains its sign.
+- **Origin:** Micro-phase 1.1.
+
+## ADR-022 — `INTEGER PRIMARY KEY` and ISO-8601 text timestamps
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Every table needs a primary key, and the PRD mixes daily records with
+  instants: `date` for `plan_task`, `sleep_log`, `nap_log`, `habit_log`, `private_log`, and
+  `timestamp` for `inventory_event`, `expense`, `skill_log`. The runtime already provides
+  `Date`, so no UUID package was needed.
+- **Decision:**
+  - **IDs:** `id INTEGER PRIMARY KEY` on every table, a rowid alias, so no extra index is
+    needed. No `AUTOINCREMENT`, since it only adds `sqlite_sequence` bookkeeping.
+  - **Daily dates:** `TEXT` in `YYYY-MM-DD`.
+  - **Wall-clock times** (bedtime, sleep time, wake time, nap start and end): `TEXT` in
+    `HH:MM`, 24-hour, local.
+  - **Instants:** `TEXT` ISO-8601 in UTC, which is what `new Date().toISOString()` emits.
+- **Consequences:** ISO-8601 strings sort lexicographically in chronological order, so range
+  queries and ordering work without a date library. Storing a calendar date as a date rather
+  than an instant avoids the timezone trap where "today" shifts depending on when it is
+  converted — a real risk for a sleep log written at 1 AM local. A local-first single-user app
+  with no multi-timezone requirement does not need a UUID; integer keys also keep foreign keys
+  compact and readable.
+- **Origin:** Micro-phase 1.1.
+
+## ADR-023 — `typeof()` checks because SQLite types are advisory
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** SQLite uses type *affinity*, not strict typing: a column declared `INTEGER`
+  will still store a `REAL` or `TEXT` value if the conversion is lossy. A `STRICT` table
+  would enforce types properly but only permits `INT`, `INTEGER`, `REAL`, `TEXT`, `BLOB`, and
+  `ANY` — it has no `NUMERIC` type, which the inventory quantity representation needs.
+- **Decision:** Keep ordinary tables and add explicit `CHECK (typeof(col) = ...)` constraints
+  where the type is structural: money (`amount`, `balance`), booleans (`done`, `active`,
+  `phone_outside`), whole-minute durations (`minutes`), and numeric-ness of quantities
+  (`quantity`, `delta`, `low_threshold` accept `integer` or `real`).
+- **Consequences:** Booleans reject `2` and `0.5`, not just values outside `0`/`1`. Money
+  rejects `10.5`. This costs some verbosity in the DDL, but each constraint is legible and
+  testable. `STRICT` tables remain an option for a future micro-phase if `NUMERIC` is no
+  longer needed.
+- **Origin:** Micro-phase 1.1.
+
+## ADR-024 — Inventory quantity uses `NUMERIC`, allowing integers to stay exact
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** PRD examples are `onions: 8 pieces` and `rice: kg`. A count is an integer, but
+  a weight in kilograms is usually fractional, so an integer-only representation would force
+  a unit change (grams) or an artificial scale factor (thousandths) that every caller must
+  remember to convert.
+- **Decision:** `quantity NUMERIC`, with a `CHECK` permitting `integer` or `real` and
+  rejecting negatives. Whole counts are stored as exact integers; only genuinely fractional
+  values become floating point.
+- **Consequences:** This avoids gratuitous float for the common case, at the cost of not
+  being fully exact for fractional quantities — binary floating point cannot represent most
+  decimal fractions precisely. That limitation is deliberate and bounded: the domain layer
+  owns deterministic rounding when it implements quantity arithmetic in a later micro-phase,
+  and the schema's job is to refuse negatives and non-numerics. Storing thousandths instead
+  would be exact but would push a conversion bug into every future caller.
+- **Origin:** Micro-phase 1.1.
