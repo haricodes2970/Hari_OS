@@ -250,9 +250,13 @@ is dictated by the schema and the domain, not by how a sentence is turned into i
 
 ## 9. Feature code
 
-`src/features/<area>/`, one directory per product area: `dashboard`, `routine`,
-`kitchen`, `expenses`, `skills`, `habits`. A feature owns its rules, its UI, and its data
-access, and shares only through its own public surface.
+`src/features/<area>/`, one directory per product area. A feature owns its rules, its UI, and
+its data access, and shares only through its own public surface.
+
+Only `src/features/shared/` exists so far, holding what the Kitchen and Expenses pages both
+need: the form-to-command translation, the composition root, the read side, and the mapping
+from error codes to sentences. Area directories for the remaining product areas do not exist
+yet — see section 12.
 
 ## 10. The domain layer (added in micro-phase 1.2)
 
@@ -322,40 +326,84 @@ would otherwise be discovered the hard way.
 framework, and no database. Internal domain imports carry explicit `.ts` extensions so plain
 Node can resolve them (ADR-028).
 
-## 11. Not implemented yet
+## 11. The application layer (added in micro-phase 1.5)
+
+The first vertical slice, from a submitted form to persisted state that a page then displays.
+
+```
+src/app/page.tsx, /kitchen, /expenses    pages: read state, render it, dispatch nothing
+src/components/CommandForm.tsx          the shared form (Server Component, no client JS)
+src/components/Nav.tsx                   section links
+src/components/OutcomeBanner.tsx         renders a redirect's outcome token
+src/app/api/commands/route.ts            POST only: the single command entry point
+src/features/shared/command-form.ts      form fields -> contract fields (the only translation)
+src/features/shared/command-runtime.ts   the composition root: real database, real clock
+src/features/shared/queries.ts           read side for the pages
+src/features/shared/outcomes.ts          error codes -> sentences a user can act on
+```
+
+Three rules hold this together.
+
+**There is exactly one entry point.** Every command reaches the executor through
+`POST /api/commands` (ADR-036). No page, component, or feature calls a repository or the
+executor directly, so there is no second path to the data that could skip validation.
+
+**The composition root is the only place that knows about the real world.**
+`command-runtime.ts` supplies the database handle and the clock — the single call to
+`new Date()` in the application. The executor itself takes both as arguments, which is why it
+stays deterministic and testable to the millisecond while this module is not testable at all.
+That asymmetry is deliberate.
+
+**Presentation decides nothing.** Pages and components never compute a balance, a quantity, a
+low-stock state, or an outcome. `formatMinorUnits` and `isLowStock` live in the domain;
+`outcomes.ts` maps codes to text and contains no rules. The `hari-os/boundaries` lint rule
+keeps `src/components/` free of `@/lib/db`, `@/lib/storage`, and `@/commands`, and `npm run
+build` fails if a Client Component reaches `server-only`.
+
+### The form posts without client-side JavaScript
+
+`CommandForm` is a Server Component containing a plain
+`<form method="post" action="/api/commands">`. The endpoint answers `303 See Other` back to
+the page with the outcome as short tokens in the query string, and `OutcomeBanner` renders
+it. This works identically with and without JavaScript because there is only one path
+(ADR-037). An earlier version used `useActionState` and React replaced the form's `action`
+attribute with a stub, so it worked *only* with JavaScript — the enhancement had quietly
+become the requirement.
+
+### The endpoint's two shapes
+
+A JSON body is passed to the executor untouched, so the API surface is exactly the validated
+contract. A form body is translated by `formToCommand`, because a person types `50`, not
+`5000`, and `amount` means money on `expense.record` but a quantity of stock on
+`inventory.consume` and `inventory.restock`. The money conversion is therefore chosen by
+command kind, never by field name. `formToCommand` fails closed: anything that is not
+recognisably a number is forwarded as raw text so validation rejects it and names the field.
+
+## 12. Not implemented yet
 
 None of the following exist, and their absence is intentional:
 
-- Any feature module, page, or UI beyond the minimal root page
-- **Seed data.** No sample or fake rows exist in any table
-- **Persistence of any domain result.** Inventory arithmetic and balance calculation exist
-  in `src/domain` and are fully tested, but nothing stores their outcome. No sleep, habit, or
-  skill logic exists at all
-- Any repository, service, or query module for the schema. The schema exists, and the domain
-  rules exist, and nothing connects them: a spend recorded by `applyExpense` does not reach
-  SQLite, because that connection is not built yet
-- Any command contract or intent type. The domain takes structured input, not a parsed
-  sentence
-- Filesystem upload handling
-- The natural language command parser
+- Any page beyond Dashboard, Kitchen, and Expenses
+- Sleep, routine, skills, habits, diary, or photo features. The schema has their tables and no
+  code reads or writes them
+- Any command to create an inventory item or set an opening balance. First-run rows come from
+  `npm run db:setup`
+- A correcting entry for the expense ledger, which holds non-negative spends only
+- The natural language command parser and any intent type that carries a parsed sentence
 - OpenRouter or any LLM integration
+- Filesystem upload handling
 - Authentication
 - Deployment configuration
-- PWA manifest, service worker, or offline support
-- A general test framework. The only tests are the two database scripts and the domain
-  script described below
-
-`src/lib/db/` contains the connection, migrations, and schema declaration. `src/domain/`
-contains the pure rules. `app/` contains only the minimal root page from micro-phase 0.2.
-`components/`, `features/`, `commands/`, `lib/storage/`, and `lib/validation/` still hold
-boundary READMEs only.
+- PWA manifest, service service worker, or offline support
+- A general test framework. The tests are five scripts: `db:test`, `domain:test`,
+  `contract:test`, `exec:test`, and `app:test`
 
 Do not assume a directory is functional because it exists, and do not assume a table being
 present means anything can use it yet.
 
 ---
 
-## 12. Schema and migrations (added in micro-phase 1.1)
+## 13. Schema and migrations (added in micro-phase 1.1)
 
 `src/lib/db/` owns the schema. Nothing outside it may create, alter, or drop a table.
 
@@ -383,8 +431,14 @@ version this code does not know about is refused with a clear error rather than 
 Migrations are additive. `DROP TABLE` is not a normal strategy, and an already-applied
 migration is never edited.
 
-`connection.ts` deliberately does **not** migrate implicitly. Callers ask for it explicitly,
-so a read-only code path cannot silently write to the database.
+**Changed in micro-phase 1.5 (ADR-038).** `connection.ts` previously did **not** migrate
+implicitly, on the reasoning that a read-only path should not silently write. That reasoning
+was sound for Phase 0, where nothing read the schema at runtime, but it caused every page to
+fail with `no such table` on a new database, which is an HTTP 500 and violates the PRD's
+requirement that empty states must not crash. `getDb()` now migrates on open. The original
+concern is addressed by the narrower rule that matters: **migrating creates tables, and
+creating rows stays in `npm run db:setup`** (ADR-039). Opening a database can never invent
+user state.
 
 ### Verification
 
@@ -392,6 +446,11 @@ so a read-only code path cannot silently write to the database.
 expected table, every expected column, the structural constraints, and the absence of any
 unexpected table. Because `schema.ts` is declared separately from the SQL that creates the
 tables, a broken migration cannot silently agree with itself.
+
+`npm run db:setup` creates the first-run rows the commands need: the three PRD accounts at a
+**zero** opening balance, and three example stock items. It is idempotent, and nothing in
+`src/` creates rows. Opening balances are zero because this project does not know the user's
+money.
 
 `npm run db:test` runs isolated tests against disposable databases in the OS temp
 directory. It never opens the real `data/hari-os.db`.

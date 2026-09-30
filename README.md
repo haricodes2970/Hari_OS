@@ -32,9 +32,35 @@ npm run dev
 
 The app is served at http://localhost:3000.
 
-The SQLite database is created automatically at `data/hari-os.db` on first use. Nothing
-needs to be created by hand, and `data/` is git-ignored — the repository is not a backup
-for local data.
+The SQLite database is created automatically at `data/hari-os.db` on first use, and its
+schema is applied automatically. Nothing needs to be created by hand, and `data/` is
+git-ignored — the repository is not a backup for local data.
+
+## First run
+
+The database needs the accounts and stock the commands refer to before the app can do
+anything. Create them once, explicitly:
+
+```bash
+npm run db:setup
+```
+
+This is **not** done automatically. Nothing in `src/` inserts rows, because opening a page
+should never be the act of inventing financial state. Accounts start at a zero opening
+balance, since this project does not know your money, and the example stock quantities are
+ordinary rows you are expected to correct or delete. The script is idempotent, so running it
+again changes nothing.
+
+## Pages
+
+| Path        | Shows                                             |
+| ----------- | ------------------------------------------------- |
+| `/`         | Today's spend, tracked count, what is running low |
+| `/kitchen`  | Stock levels, and use / restock / recount         |
+| `/expenses` | Account balances, and the record of recent spends |
+
+Every command is submitted to `POST /api/commands`. The form works with or without
+JavaScript.
 
 ## Environment
 
@@ -53,16 +79,22 @@ tooling. V1 has no deployment, so there is nothing to point it at in production.
 
 ## Scripts
 
-| Script                 | Purpose                       |
-| ---------------------- | ----------------------------- |
-| `npm run dev`          | Start the development server  |
-| `npm run build`        | Production build              |
-| `npm run start`        | Serve the production build    |
-| `npm run lint`         | ESLint                        |
-| `npm run typecheck`    | TypeScript check, no emit     |
-| `npm run format`       | Format files with Prettier    |
-| `npm run format:check` | Verify formatting, no writes  |
-| `npm run db:check`     | Verify the local SQLite setup |
+| Script                  | Purpose                                     |
+| ----------------------- | ------------------------------------------- |
+| `npm run dev`           | Start the development server                |
+| `npm run build`         | Production build                            |
+| `npm run start`         | Serve the production build                  |
+| `npm run lint`          | ESLint                                      |
+| `npm run typecheck`     | TypeScript check, no emit                   |
+| `npm run format`        | Format files with Prettier                  |
+| `npm run format:check`  | Verify formatting, no writes                |
+| `npm run db:check`      | Verify the local SQLite setup               |
+| `npm run db:setup`      | Create first-run accounts and example stock |
+| `npm run db:test`       | Schema tests on temporary databases         |
+| `npm run domain:test`   | Pure domain rules, in memory                |
+| `npm run contract:test` | Command validation                          |
+| `npm run exec:test`     | Execution against real SQLite               |
+| `npm run app:test`      | Form translation through to persisted state |
 
 ## Documentation
 

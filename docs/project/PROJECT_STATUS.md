@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 1.4)
+- **Last updated:** 2026-09-30 (micro-phase 1.5)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -13,18 +13,20 @@
 
 **Phase 0 is complete.** All eight micro-phases are done and verified.
 
-**Phase 1 is active.** Micro-phases 1.1 through 1.4 are complete: schema, pure domain rules,
-the validated command contract, and the execution pipeline that connects them to real SQLite.
-No feature code, route, or UI exists yet.
+**Phase 1 is active.** Micro-phases 1.1 through 1.5 are complete: schema, pure domain rules,
+the validated command contract, the execution pipeline, and the first vertical slice. A user
+can now record stock changes and expenses through the UI, and see the result persisted.
 
 ## Current Micro-Phase
 
-**1.4 — Command execution foundation: COMPLETE AND VERIFIED**
+**1.5 — First real vertical slice: COMPLETE AND VERIFIED**
 
-Next micro-phase: **1.5 — first real vertical slice. NOT STARTED.** Its scope must be planned
-before work begins; it is not invented here. The expected shape is Kitchen or Expenses: a
-route, a feature module, and the composition root that supplies the real execution clock.
-Phase 1's overall scope is in `docs/phases/PHASE_01_FOUNDATION.md`.
+Next micro-phase: **1.6 — foundation verification pass. NOT STARTED.** Its scope must be
+planned before work begins; it is not invented here. Phase 1's overall scope is in
+`docs/phases/PHASE_01_FOUNDATION.md`.
+
+A command now travels the full path — Dashboard, Kitchen, or Expenses, `POST /api/commands`,
+validation, execution, domain, SQLite, then back to a page that shows the stored result.
 
 ## Completed Micro-Phases
 
@@ -42,10 +44,11 @@ Phase 1's overall scope is in `docs/phases/PHASE_01_FOUNDATION.md`.
 | 1.2 — Domain model and deterministic operations | `6782446` | Complete | Yes |
 | 1.3 — Validation and structured command contract | `5578457` | Complete | Yes |
 | 1.4 — Command execution foundation | `0d94aad` | Complete | Yes |
+| 1.5 — First real vertical slice | `6f95885` | Complete | Yes |
 
 ## Active Work
 
-None.
+None. Micro-phase 1.5 is complete and verified; 1.6 is not started.
 
 ## Blockers
 
@@ -70,8 +73,7 @@ None.
   **No seed data exists and no domain result reaches the schema yet.**
 - `connection.ts` imports `server-only`, so a Client Component importing it fails the
   build. Verified with a probe route.
-- Only `src/app/` and `src/lib/db/` contain code. `components/`, `features/`, `domain/`,
-  `commands/`, `lib/storage/`, and `lib/validation/` still hold boundary READMEs only.
+- **Every layer now contains code.** `lib/storage/` holds its boundary README only.
 - **Pure domain rules in place** from micro-phase 1.2, in `src/domain/`: money, quantity,
   inventory, and accounts, all returning `Result` and all tested in memory with
   `npm run domain:test` (170 assertions). Purity is enforced by the `hari-os/domain-purity`
@@ -85,8 +87,21 @@ None.
   sequences a validated command: resolve names to rows, apply the domain operation, persist
   the result atomically. 76 integration tests against real SQLite.
   **No route, feature, or UI invokes it yet, so no production path can execute a command.**
-- No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication, no
-  uploads, no test framework beyond the four scripts.
+- **First vertical slice in place from micro-phase 1.5.** Dashboard (`/`), Kitchen
+  (`/kitchen`), and Expenses (`/expenses`) read persisted state and render it. The shared
+  `CommandForm` is a Server Component posting to `POST /api/commands` — the single command
+  entry point (ADR-036). There is no client JavaScript in the form and no hydration boundary;
+  the endpoint answers `303 See Other` with an outcome token that `OutcomeBanner` renders, so
+  the form works identically with and without JavaScript (ADR-037).
+- **`npm run db:setup`** creates the first-run rows the commands need: three accounts at a
+  zero opening balance, and three example stock items. It is idempotent, and nothing in `src/`
+  creates rows (ADR-039). `getDb()` migrates on open, so a new database renders empty states
+  instead of erroring (ADR-038).
+- **`npm run app:test`** runs 68 tests covering form translation, return-path safety, the
+  end-to-end slice, failure containment, outcome reporting, and display reads, against real
+  SQLite on a disposable database.
+- No parser, no LLM dependency, no OpenRouter, no pages beyond the three above, no
+  authentication, no uploads, no test framework beyond the five scripts.
 - `AGENTS.md` at the repository root holds the persistent engineering rules for coding
   agents: project identity, canonical sources of truth, stack, architecture boundaries,
   database rules, data and secret safety, the LLM boundary, product principles, Git and
@@ -174,15 +189,23 @@ infrastructure.
 
 ## Latest Commit
 
-`73ed2b3` — `docs(0.8): establish project documentation system`
+`6f95885` — `feat(1): complete first vertical slice`
 
 ## Next Action
 
-**1.4 is not yet defined in detail.** The natural candidate is the execution pipeline:
-resolve a command's names to rows, apply the domain operation, hand the change to a feature
-for storage. After that, 1.5 is the first visible slice and 1.6 the foundation verification
-pass. The Phase 1 scope in `docs/phases/PHASE_01_FOUNDATION.md` expects a real data round trip
-and negative cases.
+**1.6 is not yet defined in detail.** It is the foundation verification pass that closes
+Phase 1. The Phase 1 scope in `docs/phases/PHASE_01_FOUNDATION.md` expects a real data round
+trip and negative cases, both of which 1.5 has now delivered and verified, so 1.6 should
+audit that surface rather than build new feature scope.
+
+Carried-forward limitations that 1.6 should consider, none of which were fixed in 1.5:
+
+- The expense ledger cannot record a correcting entry, because `expense` holds non-negative
+  spends only. A fix requires a migration.
+- There is no command to create an inventory item or to set an opening balance, so both come
+  from `npm run db:setup` and an account reads `₹0.00` until one is spent from.
+- The Dashboard's task list renders, but nothing creates `plan_task` rows, so it is always
+  empty. Task planning is out of Phase 1 scope.
 
 One open item is carried forward: the **PRD-versus-roadmap scope divergence** recorded in
 `docs/project/ROADMAP.md` is unresolved. The PRD frames V1 as a 2–3 hour prototype; the

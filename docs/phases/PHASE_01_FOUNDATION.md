@@ -79,8 +79,8 @@ section 8 and ADRs 033–035.
 
 What remains: **no feature code exists, and no route can reach the executor.** There is no UI,
 no route handler, and no composition root supplying the real execution clock, so a command
-cannot yet be executed by a user. Micro-phase 1.5 is the first visible slice and 1.6 the
-foundation verification pass.
+can now be executed by a user: micro-phase 1.5 delivered the first visible slice. Micro-phase
+1.6, the foundation verification pass, has not started.
 
 **Carried-forward limitation** (unchanged since 1.2): the expense ledger cannot record a
 correcting entry, because `expense` holds non-negative spends only. Fixing it requires a

@@ -648,3 +648,105 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
   - Domain purity is untouched: `domain` still imports nothing, and no rule was relaxed for
     it.
 - **Origin:** Micro-phase 1.4.
+
+## ADR-036 — One route handler is the only entry point for commands
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** The executor built in 1.4 was deliberately unwired, so no user path could run
+  a command. A Next.js application can expose a server action, a route handler, or both. Two
+  entry points would mean two places where validation could be bypassed, two places to
+  update when the contract changes, and two places for a bug to hide.
+- **Decision:** A single route handler, `POST /api/commands`, is the only way a command enters
+  the application. No server action exists. `GET` on the same path answers `405` with an
+  `Allow: POST` header, because the surface accepts writes only.
+- **Consequences:**
+  - The path is `UI → route handler → validation → executor → domain → repositories →
+    SQLite`, and there is no alternative route to the data.
+  - The endpoint is a real HTTP interface, so the whole slice is testable with `curl` against
+    a disposable database. That is how the acceptance flow was verified.
+  - Two request shapes are accepted. A JSON body is passed to the executor **untouched**, so
+    the API surface is exactly the validated contract. A form body is translated by
+    `formToCommand` because a person types `50`, not `5000`.
+  - `amount` means two different things in this contract — money in minor units on
+    `expense.record`, a quantity of stock on `inventory.consume` and `inventory.restock` —
+    so the money conversion is chosen by command kind, never by field name. Getting this
+    wrong would have multiplied "2 onions" by 100. A regression test asserts it.
+  - This adds one server module that was not anticipated by the architecture, but it sits in
+    `src/app/`, where routing concerns belong, and it holds no business logic.
+- **Origin:** Micro-phase 1.5.
+
+## ADR-037 — The command form posts without client-side JavaScript
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** The command form was first written as a Client Component using
+  `useActionState`, to report the outcome in place. Doing so silently destroyed the
+  progressive enhancement it was supposed to improve: React replaces a form's `action`
+  attribute with a stub when it owns submission, so the rendered markup contained
+  `action="javascript:throw new Error('React form unexpectedly submitted.')"` and the form
+  only worked with scripts enabled. The no-JavaScript path did not exist at all.
+- **Decision:** `CommandForm` is a Server Component containing a plain
+  `<form method="post" action="/api/commands">`. There is no client JavaScript in it.
+  The endpoint answers `303 See Other` back to the originating page with the outcome in the
+  query string, and `OutcomeBanner` renders it server-side.
+- **Consequences:**
+  - The form works identically with and without JavaScript, because there is only one path.
+    A JavaScript-enabled browser performs a slightly slower full page load.
+  - The cost is a page reload per command, which is acceptable for a single-user localhost
+    application and is also how the user sees the new quantity, since that data lives in
+    Server Components.
+  - No hydration boundary exists for the form, so there is less client JavaScript to ship
+    and no client/server state to keep in step.
+  - The outcome is carried as short tokens (`saved=ok`, `err=insufficient_inventory`,
+    `field=amount`) rather than as prose. A token is a fixed word chosen by the server, so
+    reflecting an outcome into a URL cannot reflect anything a user typed. `describeOutcome`
+    expands the token to a sentence, and an unrecognised token renders as a neutral failure
+    rather than as its own text.
+- **Origin:** Micro-phase 1.5.
+
+## ADR-038 — Opening the database applies migrations; seeding stays explicit
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** The database file and its directory were created on first access, but the schema
+  was not. Every page therefore failed with `no such table: inventory_item` on a new
+  database, which returns HTTP 500 and violates the PRD's requirement that empty states must
+  not crash.
+- **Decision:** `getDb()` runs `migrate()` after opening. Migrations are idempotent and run on
+  every open. **Row seeding does not** — see ADR-039.
+- **Consequences:**
+  - Creating tables describes the shape the code expects and depends on nothing the user did,
+    so it is safe to do automatically. Creating rows depends on decisions only the user can
+    make, so it is not.
+  - Opening a database can never be the act of inventing user state. The two operations are
+    separated precisely so that this stays true.
+  - A fresh database now renders three empty states instead of erroring.
+  - `migrate` is imported with a relative path so the test scripts, which run under plain
+    Node rather than the bundler, can resolve it. This follows the convention already used in
+    `repositories.ts`, where `@/` is for types and relative `.ts` paths are for runtime
+    imports.
+- **Origin:** Micro-phase 1.5.
+
+## ADR-039 — First-run setup is an explicit script, never automatic seeding
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** `expense.record` resolves an account name to an account row and
+  `inventory.consume` resolves an item name to a tracked item. On an empty database neither
+  exists, so every command fails with `missing_account` or `unknown_item` and the application
+  looks broken rather than merely unconfigured.
+- **Decision:** `npm run db:setup` creates the three PRD accounts and three example stock
+  items. It is idempotent, and nothing in `src/` creates rows.
+- **Consequences:**
+  - Rejected: inserting defaults on first page render. It would write user state as a side
+    effect of reading a screen, make database contents depend on which page was opened, and
+    fabricate financial balances.
+  - **Opening balances are zero.** The project does not know the user's money, and inventing a
+    figure would be precisely the kind of plausible fabrication the PRD forbids. There is no
+    command for setting an opening balance in this phase, so an account reads `₹0.00` until
+    one is spent from.
+  - The example stock quantities are real rows and are expected to be corrected or deleted.
+  - Running the script after real use has begun will not reset a balance or a quantity,
+    because every insert is skipped when the row already exists.
+- **Origin:** Micro-phase 1.5.
