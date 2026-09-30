@@ -1,6 +1,6 @@
 # Phase 1 — Application Foundation
 
-**Status: Active** (micro-phases 1.1, 1.2, and 1.3 complete)
+**Status: Active** (micro-phases 1.1 through 1.4 complete)
 
 ## Purpose
 
@@ -71,10 +71,20 @@ validation boundary in `src/lib/validation`, which turns an untrusted object int
 command or a list of specific issues. 93 in-memory tests, no database, no parser, no LLM. See
 section 8 and ADRs 029–032.
 
-What remains: **no feature code exists, and nothing executes a command.** There are no
-repositories, services, or query modules, so `applyExpense` computes a new balance that
-nothing stores and a validated command goes nowhere. Micro-phase 1.4 is the execution
-pipeline, 1.5 the first visible slice, and 1.6 the foundation verification pass.
+What 1.4 delivered: the persistence boundary in `src/lib/db/repositories.ts` — the only
+module that reads or writes application tables — and the execution pipeline in
+`src/commands/executor.ts`, which resolves a command's names to real rows, applies the domain
+operation, and persists the result atomically. 76 integration tests against real SQLite. See
+section 8 and ADRs 033–035.
+
+What remains: **no feature code exists, and no route can reach the executor.** There is no UI,
+no route handler, and no composition root supplying the real execution clock, so a command
+cannot yet be executed by a user. Micro-phase 1.5 is the first visible slice and 1.6 the
+foundation verification pass.
+
+**Carried-forward limitation** (unchanged since 1.2): the expense ledger cannot record a
+correcting entry, because `expense` holds non-negative spends only. Fixing it requires a
+migration.
 
 One known limitation is carried forward from 1.2: the expense ledger cannot record a
 correcting entry, because `expense` holds non-negative spends only. Correcting a wrong spend

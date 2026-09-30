@@ -95,9 +95,11 @@ Two rules cover this, both of which fail `npm run lint`:
 - `hari-os/validation-purity` applies to `src/lib/validation`, and blocks the same
   filesystem, network, process, and database access, so validation stays independent of data
   (ADR-032).
-- `hari-os/command-boundary` applies to `src/commands`, and blocks persistence entirely, so
-  the command layer can propose and validate but not write. It deliberately still permits
-  `src/domain`, which section 4 allows (ADR-032).
+- `hari-os/command-boundary` applies to `src/commands`. It blocks `better-sqlite3`, the
+  filesystem, the network, the environment, and the clock, and blocks `@/lib/db/connection`,
+  `@/lib/db/migrations`, and `@/lib/db/schema`. It permits `src/domain` (section 4) and
+  `@/lib/db/repositories`, so the executor can coordinate repositories without performing
+  persistence (ADR-035).
 
 All four cost no extra dependency and turn the rules into build failures rather than code
 review comments. Each was verified with probe files that were then deleted: violations were

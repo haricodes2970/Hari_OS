@@ -566,3 +566,85 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
   deleted. Proven independently of the lint rules by running the suite with
   `better-sqlite3` removed from `node_modules`.
 - **Origin:** Micro-phase 1.3.
+
+## ADR-033 — The execution boundary: the domain decides, repositories store, the executor sequences
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Micro-phases 1.2 and 1.3 produced pure domain operations and validated commands,
+  but nothing connected them, so a validated command went nowhere. Three candidate shapes
+  were possible: put SQL inside the domain operations, put orchestration inside the
+  repositories, or add a thin layer that sequences the other two.
+- **Decision:** A third option. `src/commands/executor.ts` sequences, `src/lib/db/repositories.ts`
+  stores, and `src/domain` decides. For every command the executor resolves names to rows,
+  calls the domain operation, and persists the result the domain returned.
+- **Consequences:**
+  - **The domain runs before any write.** Nothing is written until the domain has decided the
+    outcome, so a refusal such as "only 3 onions" cannot leave a transaction open and the
+    executor never has to undo a change the domain declined to make.
+  - **The executor calculates nothing.** Every balance and remaining quantity in its output
+    arrived from `src/domain`. This is the PRD's rule that the model interprets and proposes
+    while deterministic code decides, expressed as a dependency rather than a convention.
+  - **Three error vocabularies stay separate**: `validation` (the producer is broken),
+    `domain` (the request is a real-world impossibility, carrying its own code such as
+    `unknown_item` or `insufficient_inventory`), and `persistence` (the request was valid and
+    storage failed — the one case where retrying makes sense). Collapsing them would make
+    "the model sent nonsense", "you only have 3 onions", and "the disk is full" look alike.
+  - **Identity and time are obtained, never supplied.** A command carries no id and no
+    timestamp, so the executor reads both from the row it loaded and from the execution clock.
+  - The executor accepts `unknown` rather than `Command`, re-validating at its entry. The
+    types already forbid a bad command, but the real caller holds a parsed model response,
+    and a runtime check means skipping validation is a failure rather than something a later
+    refactor can quietly introduce.
+- **Origin:** Micro-phase 1.4.
+
+## ADR-034 — The execution clock is injected, not read
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** Every command needs a real timestamp for the event or expense row it stores,
+  and the command is forbidden from supplying one. The obvious implementation reads
+  `Date.now()` in the executor — but `hari-os/command-boundary` bans that, for the same
+  reason `hari-os/domain-purity` bans it in the domain: an ambient clock makes a result depend
+  on when it ran rather than on its input.
+- **Decision:** The executor takes a `now: () => string` alongside its repositories. Whatever
+  composes the executor supplies the real clock.
+- **Consequences:** The executor stays deterministic and testable, and the boundary rule needs
+  no exception. The test is stronger for it: a clock the test controls can assert that two
+  executions of the same command store *different* real timestamps, which proves the value
+  comes from execution time rather than from the command — something an assertion about
+  `Date.now()` could only approximate. The cost is that 1.4 contains no code reading the real
+  clock; the composition root that supplies it arrives with the first route in a later
+  micro-phase, and until then no production path exists to execute a command.
+- **Origin:** Micro-phase 1.4.
+
+## ADR-035 — Repositories are enumerated, delegate name matching, and delegate storage
+
+- **Status:** Accepted
+- **Date:** 2026-09-30
+- **Context:** The four commands need six repository methods and a transaction. The
+  alternatives were a generic repository base class, a unit-of-work abstraction, or naming
+  rules mirroring table names. All three would have been more machinery than four commands
+  require.
+- **Decision:** One concrete module exporting `createRepositories(database)`, returning exactly
+  the reads and writes those four commands need plus `transaction`. A read returns the
+  domain's `Result`, because "no such item" is a domain concept; a write returns
+  `PersistenceResult`, because a write has no domain failure to report.
+- **Consequences:**
+  - **Name matching is not duplicated.** `findByName` loads candidates and delegates to the
+    domain's own `findInventoryItem` and `findAccount` rather than reimplementing comparison
+    in SQL. A kitchen inventory is tens of rows, and one matching rule is better than two
+    that can drift. This is where a real bug was caught: an early version labelled each row
+    with the *requested* name, so a request for an account that did not exist resolved to a
+    real one and spent from the wrong balance. The test that found it is now a regression
+    assertion.
+  - **The `hari-os/command-boundary` rule was amended, not weakened.** `@/lib/db/repositories`
+    became reachable from the command layer because 1.4 approves the executor coordinating
+    repositories. `connection`, `migrations`, `schema`, and `better-sqlite3` stay forbidden,
+    so the executor cannot open a database or write a query of its own. ESLint matches the
+    first pattern and does not support gitignore-style negation, so the allowed module is
+    enumerated rather than wildcarded — a new non-repository module in `src/lib/db` must be
+    added to the list, which is a visible review point.
+  - Domain purity is untouched: `domain` still imports nothing, and no rule was relaxed for
+    it.
+- **Origin:** Micro-phase 1.4.

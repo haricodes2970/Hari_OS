@@ -25,15 +25,22 @@ No parser, no natural-language handling, no prompt, no LLM dependency, and no Op
 integration. The contract is provider-agnostic on purpose: its shape is dictated by the
 schema and the domain, not by how a sentence becomes a sentence.
 
-Executing these commands — resolving a name to a row, applying the domain operation, storing
-the result — is a later micro-phase, and belongs to the owning feature rather than to this
-directory.
+`executor.ts` added execution in micro-phase 1.4. It resolves a command's names to real rows,
+calls the domain operation, and persists what the domain returned, atomically. The domain runs
+before any write, so a refusal can never leave a transaction open.
+
+The executor is reached by passing `repositories` and a `now` function. Nothing in the
+application wires those together yet — that composition root arrives with the first route in
+micro-phase 1.5, and until then there is no user-facing path to a command.
 
 ## Rules this directory keeps
 
-Enforced by `npm run lint` via `hari-os/command-boundary` (ADR-032): no database, no
-filesystem, no network, no environment, no clock. The command layer proposes and validates;
-it does not persist.
+Enforced by `npm run lint` via `hari-os/command-boundary` (ADR-032, amended in ADR-035): no
+`better-sqlite3`, no filesystem, no network, no environment, no clock, and no
+`@/lib/db/connection`, `@/lib/db/migrations`, or `@/lib/db/schema`.
+
+`@/lib/db/repositories` is permitted, so the executor can coordinate storage. It cannot reach
+the connection or the driver, so it delegates rather than persists.
 
 `src/domain` and `src/lib/validation` are permitted imports here, as `ARCHITECTURE.md`
 section 4 requires.

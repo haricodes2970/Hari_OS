@@ -34,18 +34,27 @@ const impureModules = [
 ];
 
 /**
- * Modules the command layer may never reach for, because it must not persist.
+ * Modules the command layer may never reach for, because it must not do persistence itself.
  *
- * A subset of `impureModules`: `src/commands` is allowed to import `src/domain` and
- * `src/lib/validation` per `ARCHITECTURE.md` section 4, so the infrastructure patterns that
- * would also block those are not reused wholesale.
+ * Micro-phase 1.4 approved the command executor to coordinate repositories, so
+ * `@/lib/db/repositories` is permitted. Everything else in `src/lib/db` is listed here
+ * explicitly, because ESLint matches the first pattern and does not support gitignore-style
+ * negation: `connection`, `migrations`, and `schema` stay forbidden, so the executor cannot
+ * open a database, run a migration, or inspect schema metadata. Combined with the ban on
+ * `better-sqlite3`, the executor can only reach storage through repositories — it delegates
+ * and receives results back, and never writes a query of its own.
+ *
+ * The list is enumerated rather than wildcarded on purpose. A wildcard would have had to be
+ * negated to allow repositories, which ESLint does not support. The cost is that a new
+ * non-repository module in `src/lib/db` must be added here, which is a small, explicit
+ * review point rather than a silent hole.
  */
 const persistenceModules = [
-  "@/lib/db",
-  "@/lib/db/*",
+  "@/lib/db/connection",
+  "@/lib/db/migrations",
+  "@/lib/db/schema",
   "@/lib/storage",
   "@/lib/storage/*",
-  "server-only",
   "better-sqlite3",
   "node:fs",
   "node:fs/*",
@@ -170,9 +179,13 @@ const validationPurity = {
  * the command layer may propose and validate, and may not persist.
  *
  * `src/domain` is deliberately *not* blocked here, unlike in `hari-os/domain-purity`, because
- * the architecture explicitly permits it. Whether a validated intent reaches a domain
- * operation inside this directory or via a feature is a decision for the execution
- * micro-phase, not something this rule should pre-empt.
+ * the architecture explicitly permits it.
+ *
+ * `src/lib/db/repositories` is now permitted too, since micro-phase 1.4 established the
+ * executor as the layer that coordinates repositories and domain operations. Everything else
+ * under `@/lib/db` remains forbidden, as does `better-sqlite3`, so the executor delegates
+ * storage rather than performing it. `server-only` is permitted as well: it is a marker that
+ * can only prevent client-side use, never enable anything.
  */
 const commandBoundary = {
   name: "hari-os/command-boundary",

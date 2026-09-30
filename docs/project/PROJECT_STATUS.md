@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 1.3)
+- **Last updated:** 2026-09-30 (micro-phase 1.4)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -13,19 +13,18 @@
 
 **Phase 0 is complete.** All eight micro-phases are done and verified.
 
-**Phase 1 is active.** Micro-phase 1.1 established the V1 SQLite schema, 1.2 the pure domain
-rules, and 1.3 the validated command contract that sits between them. No feature code exists
-yet, and nothing executes a command or persists a domain result.
+**Phase 1 is active.** Micro-phases 1.1 through 1.4 are complete: schema, pure domain rules,
+the validated command contract, and the execution pipeline that connects them to real SQLite.
+No feature code, route, or UI exists yet.
 
 ## Current Micro-Phase
 
-**1.3 — Validation and structured command contract: COMPLETE AND VERIFIED**
+**1.4 — Command execution foundation: COMPLETE AND VERIFIED**
 
-Next micro-phase: **1.4 — command execution pipeline.** Its scope must be planned before work
-begins; it is not invented here. The natural candidate is the pipeline that takes a validated
-command, resolves the names it carries to real rows, applies the matching domain operation,
-and hands the result to a feature for storage. Phase 1's overall scope is in
-`docs/phases/PHASE_01_FOUNDATION.md`.
+Next micro-phase: **1.5 — first real vertical slice. NOT STARTED.** Its scope must be planned
+before work begins; it is not invented here. The expected shape is Kitchen or Expenses: a
+route, a feature module, and the composition root that supplies the real execution clock.
+Phase 1's overall scope is in `docs/phases/PHASE_01_FOUNDATION.md`.
 
 ## Completed Micro-Phases
 
@@ -42,6 +41,7 @@ and hands the result to a feature for storage. Phase 1's overall scope is in
 | 1.1 — Data schema foundation | `87e9dad` | Complete | Yes |
 | 1.2 — Domain model and deterministic operations | `6782446` | Complete | Yes |
 | 1.3 — Validation and structured command contract | `5578457` | Complete | Yes |
+| 1.4 — Command execution foundation | pending commit | Complete | Yes |
 
 ## Active Work
 
@@ -80,8 +80,13 @@ None.
   declares four command kinds carrying facts only, and `parseCommand` in
   `src/lib/validation` turns an untrusted object into a command or a list of specific issues.
   93 tests, no database dependency, no parser and no LLM.
+- **Execution pipeline in place** from micro-phase 1.4. `src/lib/db/repositories.ts` is the
+  only module that reads or writes application tables, and `src/commands/executor.ts`
+  sequences a validated command: resolve names to rows, apply the domain operation, persist
+  the result atomically. 76 integration tests against real SQLite.
+  **No route, feature, or UI invokes it yet, so no production path can execute a command.**
 - No parser, no LLM dependency, no OpenRouter, no feature pages, no authentication, no
-  uploads, no test framework beyond the three scripts.
+  uploads, no test framework beyond the four scripts.
 - `AGENTS.md` at the repository root holds the persistent engineering rules for coding
   agents: project identity, canonical sources of truth, stack, architecture boundaries,
   database rules, data and secret safety, the LLM boundary, product principles, Git and
@@ -109,12 +114,12 @@ None.
 | `npm run db:test` | Isolated schema and constraint tests on temporary databases |
 | `npm run domain:test` | Domain rule tests, in memory, with no database |
 | `npm run contract:test` | Command contract and validation tests, in memory |
+| `npm run exec:test` | Command execution against real SQLite in temporary databases |
 
-## Verification Status for 1.3
+## Verification Status for 1.4
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Install | `npm install` | Pass — 0 vulnerabilities |
 | Formatting | `npm run format:check` | Pass |
 | TypeScript | `npm run typecheck` | Pass — 0 errors |
 | Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
@@ -122,20 +127,25 @@ None.
 | Schema intact | `npm run db:check` | Pass — unchanged, 11 V1 tables |
 | Schema tests | `npm run db:test` | Pass — 53 passed, 0 failed |
 | Domain tests | `npm run domain:test` | Pass — 170 passed, 0 failed |
-| **Contract tests** | `npm run contract:test` | **Pass — 93 passed, 0 failed** |
-| Real database untouched | `md5sum` before/after | Pass — identical |
-| No new tables | table count | Pass — still 12 |
-| Suites need no SQLite | `better-sqlite3` removed from `node_modules` | Pass — 170 and 93 tests pass |
-| Validation rule fires | probe file | Pass — 6 violations caught, probe deleted |
-| Command rule fires | probe file | Pass — 3 violations caught, probe deleted |
-| Command may not persist | probe file | Pass — `@/lib/db` and `better-sqlite3` blocked in `commands/` |
-| Type-level proof bites | injected drift | Pass — a changed argument list is a compile error |
-| Boundary fails closed | throwing getter | Pass — rejected, not thrown |
-| No LLM dependency | `package.json` + `node_modules` | Pass — none |
+| Contract tests | `npm run contract:test` | Pass — 93 passed, 0 failed |
+| **Execution tests** | `npm run exec:test` | **Pass — 76 passed, 0 failed** |
+| Development database untouched | `md5sum` before/after | Pass — identical |
+| Domain is SQLite-free | grep audit | Pass |
+| Validation is persistence-free | grep audit | Pass |
+| No SQL outside `src/lib/db` | grep audit | Pass |
+| Command layer cannot persist | probe file | Pass — `connection`, `migrations`, `schema`, `better-sqlite3` all blocked |
+| Command layer may use repositories | lint on executor | Pass — permitted deliberately |
+| No LLM, network, route, or UI | grep audit + file listing | Pass |
 | New dependencies | `package.json` diff | Pass — none added |
 
-The SQLite-independence check is the real proof: `better-sqlite3` was moved out of
-`node_modules` and both the domain and contract suites passed unchanged.
+Atomicity is proven with real SQLite rather than mocks: a `BEFORE INSERT` trigger raises
+mid-transaction, and the tests assert the surviving state afterwards. The expense case proves
+the balance rolls back when the expense insert fails; the inventory case proves the quantity
+rolls back when the event insert fails.
+
+## Verification Status for 1.3
+
+Retained for history. All checks passed; see `docs/sessions/2026-09-30-session-04.md`.
 
 ## Verification Status for 1.2
 
