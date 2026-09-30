@@ -128,3 +128,32 @@ export function addMinorUnits(
 
   return ok(total);
 }
+
+/**
+ * Formats whole minor units for display, as rupees.
+ *
+ * Display formatting belongs here rather than in a component, and this module's own
+ * documentation reserved the job for the domain layer in a later micro-phase. Keeping it
+ * here is what stops every view from inventing its own way to show a balance, which is how
+ * two screens end up disagreeing about the same number.
+ *
+ * The arithmetic is integer-only — `Math.floor` and a remainder, never a division — so a
+ * balance of one hundred million minor units formats exactly and never picks up a
+ * floating-point tail. An invalid balance renders as an em dash rather than as a number
+ * nobody should trust.
+ */
+export function formatMinorUnits(value: MinorUnits): string {
+  if (!isBalance(value)) {
+    return "—";
+  }
+
+  const negative = value < 0;
+  const absolute = Math.abs(value);
+  const major = Math.floor(absolute / MINOR_UNITS_PER_RUPEE);
+  const minor = absolute % MINOR_UNITS_PER_RUPEE;
+
+  // Grouped in threes, matching how the currency is written in the PRD's examples.
+  const grouped = String(major).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  return `${negative ? "-" : ""}₹${grouped}.${String(minor).padStart(2, "0")}`;
+}

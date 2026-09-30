@@ -15,10 +15,12 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:check": "node --conditions=react-server scripts/db-check.mjs",
+    "db:setup": "node --conditions=react-server scripts/db-setup.mjs",
     "db:test": "node --conditions=react-server scripts/schema-test.mjs",
     "domain:test": "node scripts/domain-test.mjs",
     "contract:test": "node scripts/contract-test.mjs",
-    "exec:test": "node --conditions=react-server scripts/exec-test.mjs"
+    "exec:test": "node --conditions=react-server scripts/exec-test.mjs",
+    "app:test": "node --conditions=react-server scripts/app-test.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

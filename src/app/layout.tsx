@@ -18,7 +18,12 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <header className="site-header">
+          <span className="site-name">Hari OS</span>
+        </header>
+        <main className="page">{children}</main>
+      </body>
     </html>
   );
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { migrate } from "./migrations.ts";
 
 import fs from "node:fs";
 import path from "node:path";
@@ -60,12 +61,23 @@ const globalForDb = globalThis as unknown as {
 /**
  * Opens the database on first use and returns the shared handle.
  *
- * The file and its directory are created automatically. No schema is created here;
- * schema work belongs to a later phase.
+ * The file and its directory are created automatically, and the schema is brought up to date
+ * on the way. Migrating here is deliberate and is **not** the same thing as seeding:
+ *
+ * - Creating tables is idempotent, describes the shape the code expects, and depends on
+ *   nothing the user did. Running it on every open is what lets a brand-new database work
+ *   immediately instead of failing every query with `no such table`.
+ * - Creating *rows* — accounts, stock — is not idempotent in meaning, depends on decisions
+ *   only the user can make, and stays in `npm run db:setup`.
+ *
+ * The two are separated precisely so that opening a database can never be the act of
+ * inventing user state.
  */
 export function getDb(): DatabaseHandle {
   if (!globalForDb.__hariOsDb) {
-    globalForDb.__hariOsDb = openDatabase();
+    const database = openDatabase();
+    migrate(database);
+    globalForDb.__hariOsDb = database;
   }
 
   return globalForDb.__hariOsDb;
