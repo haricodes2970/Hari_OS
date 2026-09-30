@@ -40,7 +40,7 @@ stock change actually reaches SQLite through a domain rule. Phase 1's overall sc
 | 0.7 — Persistent agent/project context | `25db46f` | Complete | Yes |
 | 0.8 — Project documentation system | `73ed2b3` | Complete | Yes |
 | 1.1 — Data schema foundation | `87e9dad` | Complete | Yes |
-| 1.2 — Domain model and deterministic operations | pending commit | Complete | Yes |
+| 1.2 — Domain model and deterministic operations | `6782446` | Complete | Yes |
 
 ## Active Work
 
