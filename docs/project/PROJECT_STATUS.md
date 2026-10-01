@@ -76,7 +76,7 @@ where the PRD contradicts itself and Phase 2's accepted ADR holds.
 | 1.6 — Phase 1 foundation verification and closeout | `946d807` | Complete | Yes |
 | 2 — Command engine (natural language) | `35cb0e3` | Complete | Yes, except the live provider call |
 | 3 — Kitchen inventory | `da9a89c` | Complete | Yes, except the live provider call |
-| 4 — Expenses | `pending commit` | Complete | Yes, except the live provider call and deferred correction |
+| 4 — Expenses | `71ac329` | Complete | Yes, except the live provider call and deferred correction |
 
 ## Active Work
 
@@ -402,7 +402,7 @@ infrastructure.
 
 ## Latest Commit
 
-`pending commit` — `feat(4): complete expenses`
+`71ac329` — `feat(4): complete expenses`
 
 ## Next Action
 

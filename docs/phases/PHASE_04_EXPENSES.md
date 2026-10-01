@@ -51,7 +51,8 @@ balance arithmetic is the strictest determinism requirement in the project.
 
 ## What was built
 
-Delivered as one unit. Full detail in `docs/sessions/2026-10-01-session-02.md`.
+Delivered as one unit in `71ac329` — `feat(4): complete expenses`. Full detail in
+`docs/sessions/2026-10-01-session-03.md`.
 
 Most of the foundation already existed and was **kept**, not rebuilt: Phase 1 wrote the money
 domain, the closed three-account model, the `expense.record` contract, and an atomic executor;
