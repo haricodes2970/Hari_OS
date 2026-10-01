@@ -50,7 +50,11 @@ import {
   stampInventoryChange,
 } from "../domain/inventory.ts";
 import type { HabitChange, HabitLog, PrivateLogEntry } from "@/domain/habits";
-import { recordHabit, recordPrivateEntry } from "../domain/habits.ts";
+import {
+  habitCommandView,
+  recordHabit,
+  recordPrivateEntry,
+} from "../domain/habits.ts";
 import type { Skill, SkillLog } from "@/domain/skills";
 import { createSkill, logSkillUse } from "../domain/skills.ts";
 import type { DomainError, Result } from "@/domain/result";
@@ -851,7 +855,10 @@ function executeHabitRecord(
 
     return succeed({
       kind: "habit",
-      change: { ...change.value, habit: saved },
+      // The row is projected rather than returned whole: `saved` is a full `HabitLog`, and
+      // returning it would put the day's diary note in this response body — the one place a note
+      // is not supposed to be readable from (ADR-056, ADR-061).
+      change: { ...change.value, habit: habitCommandView(saved) },
     });
   } catch (cause) {
     return fail({

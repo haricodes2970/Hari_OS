@@ -115,6 +115,9 @@ const { diarySummary, readDiary, readDiaryEntry, writeNote } =
 const { readDashboard } = await import("../src/features/dashboard/view.ts");
 const { readHabits } = await import("../src/features/habits/view.ts");
 const { POST: PHOTO_POST } = await import("../src/app/api/photos/route.ts");
+const { executeCommand } = await import("../src/commands/executor.ts");
+const { COMMAND_VERSION } = await import("../src/commands/contract.ts");
+const { createRepositories } = await import("../src/lib/db/repositories.ts");
 const { POST: NOTE_POST, GET: NOTE_GET } =
   await import("../src/app/api/photos/[id]/note/route.ts");
 
@@ -122,6 +125,15 @@ migrate(new Database(scratchFile));
 
 const scratch = new Database(scratchFile);
 scratch.pragma("foreign_keys = ON");
+const repositories = createRepositories(scratch);
+
+/** The same command path the endpoint uses, with the same clock. */
+function runCommand(command, at = "2026-10-01T12:00:00.000Z") {
+  return executeCommand(
+    { version: COMMAND_VERSION, ...command },
+    { repositories, now: () => at },
+  );
+}
 
 const row = (sql, ...args) => scratch.prepare(sql).get(...args);
 const count = (sql, ...args) => scratch.prepare(sql).get(...args).n;
@@ -481,6 +493,39 @@ assert(
   !dashboardSource.includes("habits/diary"),
   "20. and the Dashboard does not import the diary module, so there is no path to audit",
 );
+
+// Phase 9. A third reader appeared without anyone adding a reader: `executeCommand` re-reads the
+// row it wrote, and the command endpoint answers a JSON caller with that result verbatim. A diary
+// note on a re-recorded day was therefore in the body of a command response. The row is now
+// projected, and these two assertions are the ones that would catch it coming back.
+{
+  // The clock is the 1st, so "today" is the day this section photographed and gave a note to.
+  const executed = runCommand({
+    kind: "habit.record",
+    type: "laundry",
+    done: true,
+  });
+
+  assert(
+    executed.ok,
+    "20. a habit command on a day that has a note still succeeds",
+  );
+
+  const change = executed.ok ? JSON.stringify(executed.value) : "";
+
+  assert(
+    executed.ok &&
+      executed.value.change !== undefined &&
+      !change.includes("a note the dashboard must not receive"),
+    "20. and its result carries no diary note, so the note is readable only from the diary",
+  );
+  assert(
+    executed.ok &&
+      !change.toLowerCase().includes("photonote") &&
+      !change.toLowerCase().includes("photo_note"),
+    "20. and no field in it could hold one either",
+  );
+}
 
 const summary = diarySummary(readDiary());
 

@@ -122,8 +122,56 @@ export type HabitLog = {
  * `photoAttached` is reported so the caller can write a message that says the photo was stored
  * with it, rather than a generic confirmation that hides which of the two things happened.
  */
+/**
+ * What a command result may say about the row it changed.
+ *
+ * Phase 9. `POST /api/commands` answers a JSON caller with the result of the execution, and the
+ * execution re-reads the row it wrote — a full `HabitLog`, which since ADR-056 carries
+ * `photoNote`. That put a diary note in the body of a command response: not rendered anywhere,
+ * but reachable from an endpoint that is not the diary, which contradicts the rule that a note is
+ * read in exactly one place. The projection is the fix, and it lives here rather than in the
+ * executor because what may leave the domain in a response body is a domain decision.
+ *
+ * `photoUrl` is kept: it is an application URL, not a filesystem path, and a caller needs it to
+ * address the entry. `photoNote` is the one field deliberately absent.
+ */
+export type HabitCommandView = {
+  readonly id: number;
+  readonly date: CalendarDate;
+  readonly type: LoggableHabitType;
+  readonly done: boolean;
+  readonly photoUrl: string | null;
+  /** Whether a photo is attached, so a confirmation can say which of the two things happened. */
+  readonly photoAttached: boolean;
+  readonly minutes: number | null;
+};
+
+/**
+ * Projects a row onto what a command result may carry.
+ *
+ * Explicit field by field, so a column added to `habit_log` later is not automatically published
+ * in an API response. A test asserts the note is absent, which is the assertion that matters.
+ */
+export function habitCommandView(log: HabitLog): HabitCommandView {
+  return {
+    id: log.id,
+    date: log.date,
+    type: log.type,
+    done: log.done,
+    photoUrl: log.photoUrl,
+    photoAttached: log.photoUrl !== null,
+    minutes: log.minutes,
+  };
+}
+
 export type HabitChange = {
-  readonly habit: HabitLog;
+  /**
+   * The row, as a command result may report it.
+   *
+   * `HabitCommandView` rather than `HabitLog`, added in Phase 9: a change result is a response
+   * body, and a response body is not the place the diary note may be read from.
+   */
+  readonly habit: HabitCommandView;
   readonly photoAttached: boolean;
 };
 
@@ -219,7 +267,7 @@ export function recordHabit(input: {
         type: SCREEN_TIME,
         done: true,
         photoUrl: null,
-        photoNote: null,
+        photoAttached: false,
         minutes: stated,
       },
       photoAttached: false,
@@ -249,7 +297,7 @@ export function recordHabit(input: {
       type: input.type,
       done: input.done,
       photoUrl: null,
-      photoNote: null,
+      photoAttached: false,
       minutes: null,
     },
     photoAttached: false,
