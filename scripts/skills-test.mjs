@@ -141,7 +141,8 @@ const { readPrivateLog } =
   await import("../src/features/habits/private-log.ts");
 const { storeLaundryPhoto, loadPhoto, photoUrl } =
   await import("../src/features/habits/photos.ts");
-const { savePhoto } = await import("../src/lib/storage/photos.ts");
+const { savePhoto, readPhoto, deletePhoto, photoPath } =
+  await import("../src/lib/storage/photos.ts");
 const { readDashboard } = await import("../src/features/dashboard/view.ts");
 const { parseCommand } = await import("../src/lib/validation/command.ts");
 const { POST: PHOTO_POST, GET: PHOTO_GET } =
@@ -761,6 +762,53 @@ assertEqual(
   uploadCount(),
   before + 4,
   "20. the earlier file is left on disk rather than deleted, so nothing is silently destroyed",
+);
+
+// Phase 9: the upload directory boundary, enforced by the module that owns it rather than by every
+// caller. A name that this module could not have written names no file, and must not reach `join`.
+console.log(`\n--- a name from outside the upload directory`);
+
+for (const name of [
+  "../hari-os.db",
+  "../../etc/passwd",
+  "nested/photo.png",
+  "./stored.png",
+  "not-a-uuid.png",
+  "stored.png",
+  "\\u002e\\u002e\\u002e\\u002e\\u002e/x.png",
+]) {
+  const read = await readPhoto(name);
+
+  assertEqual(
+    read,
+    null,
+    `a name this module never wrote reads nothing: ${JSON.stringify(name)}`,
+  );
+
+  const removed = await deletePhoto(name);
+
+  assertEqual(
+    removed.ok,
+    true,
+    `and deleting it is a no-op rather than an error: ${JSON.stringify(name)}`,
+  );
+}
+
+const real = await savePhoto(pngBytes());
+assert(
+  real.ok,
+  "the real file is still stored, so the refusals above were not blanket refusals",
+);
+const realName = real.ok ? real.value.filename : "";
+
+assert(
+  (await readPhoto(realName)) !== null,
+  "a generated name is read back, so the guard accepts what savePhoto writes",
+);
+assert(
+  path.resolve(photoPath(realName)) ===
+    path.resolve(path.join(scratchDir, "data", "uploads", realName)),
+  "and photoPath resolves inside the upload directory",
 );
 
 // =============================================================================

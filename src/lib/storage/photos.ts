@@ -153,6 +153,21 @@ function uploadsDirectory(): string {
   return join(process.cwd(), "data", "uploads");
 }
 
+/**
+ * Whether a string is a filename this module could itself have written.
+ *
+ * `savePhoto` only ever names a file `<uuid>.<extension>`, so anything else did not come from
+ * here. Phase 9 added this because the module was trusting its callers instead: `photoPath`
+ * joined whatever it was given, and a name containing `../` or a separator would resolve outside
+ * the upload directory. No route can supply one today — `loadPhoto` compares the requested name
+ * against the URL stored on the row, and a stored URL only ever contains a generated name — so
+ * this is not closing a reachable hole. It is the boundary enforcing itself rather than relying
+ * on a caller three directories away to keep doing it correctly, which is the failure mode that
+ * appears the day someone adds a second reader.
+ */
+const STORED_FILENAME =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:png|jpg|webp|gif)$/u;
+
 /** The absolute path of one stored photo, given the filename from the database. */
 export function photoPath(filename: string): string {
   return join(uploadsDirectory(), filename);
@@ -230,6 +245,12 @@ export async function savePhoto(
  * the worse of the two.
  */
 export async function deletePhoto(filename: string): Promise<Result<null>> {
+  // A name this module never wrote names no file here, so the caller's intent — "this file should
+  // not be there" — is already satisfied and nothing is asked of the filesystem.
+  if (!STORED_FILENAME.test(filename)) {
+    return { ok: true, value: null };
+  }
+
   try {
     await unlink(photoPath(filename));
   } catch (error) {
@@ -257,6 +278,11 @@ export async function deletePhoto(filename: string): Promise<Result<null>> {
  * invent an empty image, because a 200 response with zero bytes renders as a broken image.
  */
 export async function readPhoto(filename: string): Promise<Uint8Array | null> {
+  // Refused before `photoPath` is called, so no name a caller supplied can ever reach `join`.
+  if (!STORED_FILENAME.test(filename)) {
+    return null;
+  }
+
   try {
     const contents = await readFile(photoPath(filename));
 
