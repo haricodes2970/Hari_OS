@@ -34,6 +34,7 @@ import {
 import {
   describeOutcome,
   describeResult,
+  outcomeRedirect,
   tokenForError,
 } from "../src/features/shared/outcomes.ts";
 
@@ -336,6 +337,47 @@ assertEqual(
   "/habits?err=invalid_quantity",
   "and a same-site path with a query is still kept, so the fix is not a blanket refusal",
 );
+
+// Phase 9. Three routes built the redirect by string concatenation. A `next` with a fragment put
+// the outcome before it, where the page cannot see it, and a `next` with its own query produced two
+// question marks. The parameters are now set on the URL, so both cases work.
+{
+  const outcome = new URLSearchParams({ err: "unknown_item" });
+
+  assertEqual(
+    outcomeRedirect(
+      "/habits#notes",
+      "http://localhost:3111/api/commands",
+      outcome,
+    ).toString(),
+    "http://localhost:3111/habits?err=unknown_item#notes",
+    "an outcome is readable when the return path carries a fragment",
+  );
+  assertEqual(
+    outcomeRedirect(
+      "/habits?from=kitchen",
+      "http://localhost:3111/api/commands",
+      outcome,
+    ).toString(),
+    "http://localhost:3111/habits?from=kitchen&err=unknown_item",
+    "and an existing query is kept rather than producing two question marks",
+  );
+  assertEqual(
+    outcomeRedirect(
+      "/habits",
+      "http://localhost:3111/api/commands",
+      outcome,
+    ).searchParams.get("err"),
+    "unknown_item",
+    "and an ordinary return path still carries exactly the outcome parameters",
+  );
+  assertEqual(
+    outcomeRedirect("/habits", "http://localhost:3111/api/commands", outcome)
+      .origin,
+    "http://localhost:3111",
+    "and the redirect stays on this origin",
+  );
+}
 
 // ---------------------------------------------------------------------------
 // The vertical slice, end to end

@@ -31,6 +31,7 @@ import type { ChatResult } from "@/features/chat/presentation";
 import { describeChatResult } from "@/features/chat/presentation";
 import { getChatEngine } from "@/features/chat/runtime";
 import { safeReturnPath } from "@/features/shared/command-form";
+import { outcomeRedirect } from "@/features/shared/outcomes";
 import { isSameOriginRequest } from "@/features/shared/same-origin";
 
 /** Per request; the engine holds a provider client, not request state. */
@@ -182,10 +183,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   return NextResponse.redirect(
-    new URL(
-      `${returnTo}?${outcomeQuery(result, sentence).toString()}`,
-      request.url,
-    ),
+    outcomeRedirect(returnTo, request.url, outcomeQuery(result, sentence)),
     { status: 303 },
   );
 }

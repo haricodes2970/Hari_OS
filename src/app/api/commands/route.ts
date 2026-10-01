@@ -42,7 +42,11 @@ import {
   formToCommand,
   safeReturnPath,
 } from "@/features/shared/command-form";
-import { fieldForError, tokenForError } from "@/features/shared/outcomes";
+import {
+  fieldForError,
+  outcomeRedirect,
+  tokenForError,
+} from "@/features/shared/outcomes";
 import { isSameOriginRequest } from "@/features/shared/same-origin";
 
 import { runCommand } from "@/features/shared/command-runtime";
@@ -135,7 +139,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   return NextResponse.redirect(
-    new URL(`${returnTo}?${outcomeQuery(result).toString()}`, request.url),
+    outcomeRedirect(returnTo, request.url, outcomeQuery(result)),
     { status: 303 },
   );
 }

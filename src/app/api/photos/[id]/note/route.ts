@@ -38,6 +38,7 @@ import { NextResponse } from "next/server";
 
 import { writeNote } from "@/features/habits/diary";
 import { safeReturnPath } from "@/features/shared/command-form";
+import { outcomeRedirect } from "@/features/shared/outcomes";
 import { isSameOriginRequest } from "@/features/shared/same-origin";
 
 /** Runs per request, so the route holds no state. */
@@ -113,7 +114,12 @@ async function readSubmission(
   const rawNext = form.get("next");
 
   return {
-    note: typeof rawNote === "string" ? rawNote : null,
+    // Phase 9. A form that carries no `note` field at all is not the same as a form that carries an
+    // empty one, and the difference is the user's words. The diary's clear button posts `note=""`
+    // deliberately, and a misspelled field name or a truncated body would previously have been read
+    // as that same empty string — so a broken form deleted what the user had written. Absent is now
+    // `undefined`, which the caller refuses, exactly as an unreadable body is.
+    note: typeof rawNote === "string" ? rawNote : undefined,
     next: typeof rawNext === "string" ? rawNext : DEFAULT_RETURN_PATH,
   };
 }
@@ -170,7 +176,7 @@ export async function POST(
     const query = new URLSearchParams({ err: written.error.code });
 
     return NextResponse.redirect(
-      new URL(`${returnTo}?${query.toString()}`, request.url),
+      outcomeRedirect(returnTo, request.url, query),
       { status: 303 },
     );
   }
@@ -196,10 +202,9 @@ export async function POST(
     query.set("msg", `Note saved for ${written.value.entry.date}.`);
   }
 
-  return NextResponse.redirect(
-    new URL(`${returnTo}?${query.toString()}`, request.url),
-    { status: 303 },
-  );
+  return NextResponse.redirect(outcomeRedirect(returnTo, request.url, query), {
+    status: 303,
+  });
 }
 
 /** The note surface accepts writes only. Reading a note is part of the page. */

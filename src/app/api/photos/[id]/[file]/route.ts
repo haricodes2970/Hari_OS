@@ -62,7 +62,22 @@ export async function GET(
     return NextResponse.json({ error: "No such photo." }, { status: 404 });
   }
 
-  const photo = await loadPhoto(id, file);
+  // Phase 9. `readPhoto` re-throws anything that is not "the file is not there" — a permission
+  // error, a directory where a file should be, too many open files. Without this, one of those
+  // became an unhandled rejection and a framework error page, and the 500 branch below was
+  // unreachable: `loadPhoto` has never returned a failure, so the handler that was written to
+  // report a storage problem could never run. A photo is the user's own data, so the message is
+  // the one this route has always used, and the detail stays out of the response.
+  let photo: Awaited<ReturnType<typeof loadPhoto>>;
+
+  try {
+    photo = await loadPhoto(id, file);
+  } catch {
+    return NextResponse.json(
+      { error: "That photo could not be read." },
+      { status: 500 },
+    );
+  }
 
   if (!photo.ok) {
     return NextResponse.json({ error: photo.error.message }, { status: 500 });

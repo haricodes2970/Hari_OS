@@ -601,6 +601,42 @@ assertEqual(
 );
 assertEqual(storedNote(routeId), null, "25. and it clears the note");
 
+// Phase 9. An absent `note` field and an empty one used to be the same request, so a form with a
+// misspelled field name deleted what the user had written. The clear button posts an empty field
+// deliberately; a broken form must not be able to do the same by accident.
+{
+  const withWords = await uploadPhoto(
+    "2026-10-06",
+    "words that must survive a broken form",
+  );
+  const id = withWords.ok ? withWords.value.id : 0;
+  const { boundary, body } = multipart({ notnote: "a typo", next: "/diary" });
+
+  const response = await NOTE_POST(
+    new Request(`http://localhost:3000/api/photos/${id}/note`, {
+      method: "POST",
+      headers: {
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        origin: "http://localhost:3000",
+      },
+      body,
+    }),
+    noteContext(id),
+  );
+
+  assert(
+    response.status === 400 ||
+      !String(response.headers.get("location") ?? "").includes("saved=ok"),
+    "25. and the broken form was refused rather than reported as a clear",
+  );
+
+  assertEqual(
+    storedNote(id),
+    "words that must survive a broken form",
+    "25. a note written before a broken form is still there afterwards",
+  );
+}
+
 const refusedPost = noteRequest(routeId, "x".repeat(501));
 
 const refusedResponse = await NOTE_POST(
