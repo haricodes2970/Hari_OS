@@ -1,28 +1,111 @@
 /**
- * The Dashboard: today's spend, and what is running low.
+ * The Dashboard: the day's command center.
  *
- * A Server Component. It reads state and renders it and does nothing else — the PRD's
- * requirement that a day's first screen is not a blank mind is met by showing what is
- * already stored, not by this page deciding anything.
+ * A Server Component. It renders what the application already knows and nothing else. Every value
+ * on this page comes from `readDashboard`, which composes the Kitchen and Expenses read sides and
+ * reads `plan_task` and `habit_log`; this file formats nothing, sums nothing, and compares
+ * nothing, so the page cannot disagree with the Kitchen page, the Expenses page, or the bill.
  *
- * Both figures come from `readDashboardSummary`, which applies the domain's own rules. The
- * "today" here is a UTC date, matching how every timestamp is stored; a local date would
- * quietly disagree with the expense rows near midnight.
+ * ## The order on the screen is the order of the questions
+ *
+ * 1. **Say what happened** — the shared natural-language input, because in this application
+ *    recording something is the first thing a person does.
+ * 2. **What matters today** — the tasks written last night, and the first one not yet done.
+ * 3. **What needs attention** — what is running low.
+ * 4. **What changed** — today's spend, from the same rows the daily bill uses.
+ *
+ * ## What this page refuses to do
+ *
+ * - **It does not suggest a decision.** The "first action" is the first task the user wrote down
+ *   that is not done. It is not ranked, scored, generated, or reordered, and no model is involved
+ *   in producing any word on this page.
+ * - **It does not fabricate a future module.** Routine, Sleep, Skills, Habits, and Photo Diary are
+ *   later phases. Where the PRD's Dashboard expects one, this page says plainly that it is not
+ *   available yet, rather than showing an empty list that would read as "you have no skills" or
+ *   "your laundry is fine".
+ * - **It does not mutate anything.** There is no Dashboard endpoint. Every change on this
+ *   application goes through `POST /api/commands` or `POST /api/kitchen`, and the Dashboard only
+ *   sends you there.
  */
 import { ChatInput } from "@/components/ChatInput";
 import { Nav } from "@/components/Nav";
+import { OutcomeBanner } from "@/components/OutcomeBanner";
 import { parserAvailability } from "@/features/chat/runtime";
-import { readDashboardSummary } from "@/features/shared/queries";
+import {
+  readDashboard,
+  type DashboardHabitLine,
+  type DashboardTaskLine,
+} from "@/features/dashboard/view";
 
 export const metadata = { title: "Hari OS" };
 export const dynamic = "force-dynamic";
+
+/** How a habit type is written when a person reads it. */
+const HABIT_LABELS: Readonly<Record<string, string>> = {
+  cooking: "Cooking",
+  dishes: "Dishes",
+  laundry: "Laundry",
+};
+
+/**
+ * The habits the PRD names for the Dashboard, in its own order.
+ *
+ * Rendered from this list rather than from whatever rows happen to exist, so an absent entry reads
+ * as "not recorded" instead of vanishing. The difference matters: an entry that is missing is not
+ * the same claim as an entry that says `done = 0`, and only the second one is a statement about
+ * the user's day.
+ */
+const TRACKED_HABITS = ["dishes", "laundry"] as const;
+
+function habitLabel(type: string): string {
+  return HABIT_LABELS[type] ?? type;
+}
+
+function Tasks({ tasks }: { tasks: readonly DashboardTaskLine[] }) {
+  return (
+    <ol className="list">
+      {tasks.map((task) => (
+        <li key={task.id}>
+          {task.title} {task.done ? <span className="muted">done</span> : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Habits({ habits }: { habits: readonly DashboardHabitLine[] }) {
+  const byType = new Map(habits.map((entry) => [entry.type, entry] as const));
+
+  return (
+    <ul className="list">
+      {TRACKED_HABITS.map((type) => {
+        const entry = byType.get(type);
+
+        return (
+          <li key={type}>
+            {habitLabel(type)} —{" "}
+            {entry === undefined ? (
+              <span className="muted">not recorded</span>
+            ) : entry.done ? (
+              <span className="muted">
+                recorded as done{entry.hasPhoto ? ", with a photo" : ""}
+              </span>
+            ) : (
+              <span className="muted">recorded as not done</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export default function DashboardPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const summary = readDashboardSummary();
+  const dashboard = readDashboard();
   const parser = parserAvailability();
 
   return (
@@ -35,42 +118,64 @@ export default function DashboardPage({
         unavailableReason={parser.reason}
       />
       <h1>Dashboard</h1>
-      <p className="muted">{summary.date}</p>
+      <p className="muted">{dashboard.date}</p>
+      <OutcomeBanner searchParams={searchParams} />
 
-      <div className="tiles">
-        <section className="tile">
-          <h2>Spent today</h2>
-          <p className="tile-value">{summary.formattedTodaySpend}</p>
-          <p className="muted">
-            {summary.todayExpenseCount === 0
-              ? "Nothing recorded yet."
-              : `Across ${summary.todayExpenseCount} ${
-                  summary.todayExpenseCount === 1 ? "entry" : "entries"
-                }.`}
-          </p>
-        </section>
+      <h2>Today&apos;s top {dashboard.taskCount === 1 ? "task" : "tasks"}</h2>
+      {dashboard.taskCount === 0 ? (
+        <p className="empty">
+          Nothing is planned for today. Writing tomorrow&apos;s three tasks at
+          night is part of the Routine module, which is not built yet, so
+          nothing can create them here.
+        </p>
+      ) : (
+        <>
+          <Tasks tasks={dashboard.tasks} />
+          {dashboard.taskCount > dashboard.tasks.length ? (
+            <p className="muted">
+              Showing the first {dashboard.tasks.length} of{" "}
+              {dashboard.taskCount} planned tasks.
+            </p>
+          ) : null}
+        </>
+      )}
 
-        <section className="tile">
-          <h2>Tracked items</h2>
-          <p className="tile-value">{summary.inventoryCount}</p>
-          <p className="muted">
-            {summary.inventoryCount === 0
-              ? "Nothing tracked yet."
-              : "In the kitchen."}
-          </p>
-        </section>
-      </div>
+      <h2>Suggested first action</h2>
+      <p>
+        {dashboard.suggestedFirstAction === null ? (
+          dashboard.taskCount === 0 ? (
+            <span className="muted">
+              No suggestion, because no task is planned for today. Nothing is
+              chosen for you.
+            </span>
+          ) : (
+            <span className="muted">
+              Everything planned for today is already done.
+            </span>
+          )
+        ) : (
+          dashboard.suggestedFirstAction
+        )}
+      </p>
 
       <h2>Running low</h2>
-      {summary.lowStockItems.length === 0 ? (
+      {dashboard.inventoryCount === 0 ? (
         <p className="empty">
-          Nothing is low right now. An empty list here means stock is healthy,
-          not that anything is missing.
+          Nothing is tracked in the kitchen yet, so there is nothing to run low.
+          Start tracking an item on the <a href="/kitchen">Kitchen page</a>.
+        </p>
+      ) : dashboard.lowStock.length === 0 ? (
+        <p className="empty">
+          Nothing is low right now. All {dashboard.inventoryCount} tracked{" "}
+          {dashboard.inventoryCount === 1 ? "item is" : "items are"} above
+          {dashboard.inventoryCount === 1 ? " its" : " their"} alert level. An
+          empty list here means stock is healthy, not that anything is missing.
         </p>
       ) : (
         <ul className="list">
-          {summary.lowStockItems.map((item) => (
+          {dashboard.lowStock.map((item) => (
             <li key={item.id}>
+              <span className="badge badge-low">low</span>{" "}
               <strong>{item.name}</strong> — {item.quantity} {item.unit}
               {item.lowThreshold === null ? null : (
                 <span className="muted"> (alert at {item.lowThreshold})</span>
@@ -80,21 +185,48 @@ export default function DashboardPage({
         </ul>
       )}
 
-      <h2>Today&apos;s plan</h2>
-      {summary.tasks.length === 0 ? (
+      <h2>Today&apos;s spend</h2>
+      {dashboard.spend.computed === false ? (
         <p className="empty">
-          No tasks planned for today. Task planning is not part of this phase,
-          so this list stays empty until it is.
+          Today&apos;s total could not be computed from the recorded entries.
+          Nothing has been changed, and this is not a zero.
         </p>
       ) : (
-        <ul className="list">
-          {summary.tasks.map((task) => (
-            <li key={task.id}>
-              {task.title}{" "}
-              {task.done ? <span className="muted">done</span> : null}
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="tile-value">{dashboard.spend.formattedTotal}</p>
+          <p className="muted">
+            {dashboard.spend.count === 0
+              ? "Nothing has been spent today. This is the day's total, not an account balance."
+              : `Spent across ${dashboard.spend.count} ${
+                  dashboard.spend.count === 1 ? "entry" : "entries"
+                } today. This is the day's total, not an account balance.`}
+          </p>
+          <p className="muted">
+            <a href="/expenses">Open Expenses</a> for balances and history, or{" "}
+            <a href="/expenses/daily-bill">read today&apos;s bill as text</a>.
+          </p>
+        </>
+      )}
+
+      <h2>Dishes and laundry</h2>
+      <Habits habits={dashboard.habits} />
+      <p className="muted">
+        Habit logging is a later module. Nothing here writes a habit entry yet,
+        so a line above reads as recorded only if a row already says so.
+      </p>
+
+      <h2>I feel like scrolling</h2>
+      {dashboard.skillsAvailable ? (
+        <p className="empty">
+          <a href="/skills">Open the replacement list</a>. The full list is
+          always shown, and you pick from it — nothing is ever chosen for you.
+        </p>
+      ) : (
+        <p className="empty">
+          The replacement-activity list is not available yet. It is part of the
+          Skills module, which has not been built. When it exists it will list
+          every skill and let you choose, because choosing is the point.
+        </p>
       )}
     </>
   );

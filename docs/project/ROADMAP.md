@@ -12,7 +12,7 @@ live state. If the two ever disagree, `PROJECT_STATUS.md` is correct.
 | 2 | Command engine | **Complete** |
 | 3 | Kitchen | **Complete** |
 | 4 | Expenses | **Complete** |
-| 5 | Dashboard | Planned |
+| 5 | Dashboard | **Complete** |
 | 6 | Routine + Sleep | Planned |
 | 7 | Skills + Habits | Planned |
 | 8 | Photo + Diary | Planned |
@@ -31,10 +31,10 @@ execution pipeline, persistence, the server boundary, and the first usable verti
 (Dashboard, Kitchen, Expenses). Complete; 1.1–1.6. See
 [`phases/PHASE_01_FOUNDATION.md`](../phases/PHASE_01_FOUNDATION.md).
 
-Note that Phases 4 (Expenses) and 5 (Dashboard) below remain planned. Phase 1 delivered an
-initial working slice of those areas as its vertical-slice micro-phase, not the finished areas;
-those phases still exist and still have scope. Phase 3 has since made Kitchen a finished area,
-including its correction path, so Kitchen is no longer in this group.
+Phases 4 (Expenses) and 5 (Dashboard) were also planned on top of Phase 1's initial working
+slice of those areas. Both are now complete: Expenses in Phase 4, and the Dashboard in Phase 5,
+which completed the screen from real Kitchen and Expenses state and left Routine, Sleep, Skills,
+Habits, and Photo Diary to their own phases.
 
 **Phase 2 — Command engine (complete).** Natural-language input parsed into a validated,
 structured intent, with deterministic execution and no arithmetic performed by a model. See
@@ -53,8 +53,16 @@ expense provably mutates nothing, and a negative balance stays a valid state. Se
 Expense correction/refund and batch entry were both assessed and **deferred** by explicit
 decision; the phase document records why.
 
-**Phases 5–8 — Product areas.** Dashboard, Routine + Sleep, Skills + Habits, Photo + Diary, one
-per document under [`phases/`](../phases/).
+**Phase 5 — Dashboard (complete).** The daily command center: the shared natural-language input,
+today's top tasks, a first action that is only ever the user's own first undone task, real
+low-stock from Kitchen, and today's spend taken from the same rows the daily bill uses. Cards
+whose modules do not exist yet say so rather than showing an empty list. See
+[`phases/PHASE_05_DASHBOARD.md`](../phases/PHASE_05_DASHBOARD.md).
+
+**Phases 6–8 — Product areas.** Routine + Sleep, Skills + Habits, Photo + Diary, one per document
+under [`phases/`](../phases/). Phase 5 deliberately did not start any of them, and it left the
+Dashboard's task, skill, and habit cards pointed at real, empty tables so those phases plug into
+a screen that already works.
 
 **Phase 9 — Hardening.** Reliability, correction paths, empty states, and test coverage
 appropriate to what was actually built. See
@@ -65,8 +73,9 @@ appropriate to what was actually built. See
 The plan is not a strict order. Phase 1 must come first, and Phase 2 is required before
 natural-language entry is usable across modules. Phases 3–7 are largely independent slices
 that can proceed in any order once the foundation and command engine exist, though
-Dashboard (5) aggregates state from Kitchen, Expenses, Routine, and Habits, so it is most
-useful last among them.
+Dashboard (5) aggregates state from Kitchen and Expenses — both now complete — and deliberately
+does not wait for Routine and Habits, reporting them as unavailable rather than as empty. That is
+recorded in ADR-047.
 
 ## Scope: the Tonight prototype and the full target
 

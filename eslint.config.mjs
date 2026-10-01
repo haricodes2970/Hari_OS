@@ -68,6 +68,18 @@ const persistenceModules = [
   "next/*",
 ];
 
+/**
+ * `persistenceModules` without the framework.
+ *
+ * `src/app` is the one scope that legitimately imports `next/server` — every route handler does.
+ * What must not appear there is storage: no SQL driver, no `node:fs`, no direct handle. So the
+ * framework entry is dropped and everything else kept, which is the difference between "no
+ * database in the routing layer" and a rule that could not be turned on at all.
+ */
+const storageModules = persistenceModules.filter(
+  (specifier) => specifier !== "next/*",
+);
+
 const boundaries = {
   name: "hari-os/boundaries",
   files: ["src/domain/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}"],
@@ -457,6 +469,61 @@ const enforcedBoundaries = [
               group: providerModules,
               message:
                 "A client component must not import the parser, its provider, or its configuration. Render the outcome the server produced instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: "hari-os/dashboard-boundaries-enforced",
+    files: ["src/features/dashboard/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: persistenceModules,
+              message:
+                "The Dashboard is a read model. It composes the owning features' read sides through src/features/shared/command-runtime and may not open a database, touch the filesystem, or import a driver itself.",
+            },
+            {
+              group: providerModules,
+              message:
+                "The Dashboard renders persisted state. It must not know a language model exists, and it never asks one what to do.",
+            },
+            {
+              group: [
+                "@/commands/executor",
+                "@/features/kitchen/setup",
+                "@/features/kitchen/correction",
+              ],
+              message:
+                "The Dashboard is read-only. It may not execute a command or call a feature's write side; every change goes through the command endpoint or the Kitchen route.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: "hari-os/application-boundaries-enforced",
+    files: ["src/app/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: storageModules,
+              message:
+                "src/app holds no SQL and no driver. Read through a feature's view, or persist through the repositories a feature owns.",
+            },
+            {
+              group: ["@/features/chat/openrouter", "@/features/chat/config"],
+              message:
+                "The provider is reached through src/features/chat/runtime, which is the only module that reads a credential.",
             },
           ],
         },

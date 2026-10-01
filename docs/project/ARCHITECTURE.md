@@ -606,6 +606,12 @@ SELECT SUM(delta) FROM inventory_event WHERE item_id = ?   -- == inventory_item.
   does not convert between units. The rule is in `src/domain`, so no caller can skip it.
 - **A threshold of zero is refused.** It would flag every item forever, which is a bug that
   looks like a feature. No threshold is `NULL` and is distinct from zero.
+  - **Discrepancy recorded in Phase 5, not fixed here.** This claim does not match the code.
+    `setLowStockThreshold` in `src/domain/inventory.ts` accepts zero, and
+    `scripts/dashboard-test.mjs` asserts the behaviour that actually exists: a threshold of zero
+    flags an item only while its quantity is zero, and one piece above that it is not low. The
+    documentation is not being silently corrected and the code is not being silently changed; the
+    mismatch is the user's call. See `docs/sessions/2026-10-01-session-04.md`.
 - **A recount that also reports a use refuses a use larger than the count.** "I had 10 onions,
   used 2" is a count of 10 and a use of 2, and the difference of 8 is computed here — the model
   reports the two numbers the user actually said and never the difference. A use of 3 against a
@@ -666,3 +672,61 @@ could import `@/lib/db` and `npm run lint` passed. Later ESLint configs silently
 ones for the same rule, and only the provider patterns were ever in effect. The rules are fixed
 and `npm run architecture:probe` asserts each one fires — including that the imports the
 architecture *permits* still pass.
+
+## 17. The dashboard slice (added in Phase 5)
+
+The Dashboard is the one screen that displays no data of its own, so its architecture is entirely
+about where each figure comes from.
+
+```
+src/features/dashboard/view.ts   the read model: one function, four sources, no rules   server-only
+src/domain/habits.ts             the habit_log vocabulary, mirroring the schema's CHECK       pure
+src/app/page.tsx                 the screen: render, and nothing else
+```
+
+### One read model, composed from the owning features
+
+```
+DashboardPage → readDashboard(date) → listKitchenStock()      (Kitchen view, isLowStock)
+                                └→ readDailyBill(date)       (Expenses view, summariseDay)
+                                └→ display.tasksForDate(date) (plan_task)
+                                └→ display.habitsForDate(date)(habit_log)
+```
+
+`readDashboardSummary` used to live in `src/features/shared/queries.ts` and it moved. That file
+holds the Kitchen page's inventory projection; a Dashboard that aggregates three features is not
+a shared helper, and leaving the old name behind would have allowed a second definition of "what
+the dashboard shows" to drift away from this one.
+
+### Two figures that are the same number on purpose
+
+- **Low stock** is the domain's `isLowStock`, reached through the Kitchen read side. The rule
+  `quantity <= threshold` exists once; the Dashboard does not restate it.
+- **Today's spend** is `summariseDay` over the day's rows — the function behind the daily bill.
+  The Dashboard and the bill therefore cannot disagree, which is why the repository's SQL
+  aggregate `spendForDate` is not used here. Two ways to total a day is the failure ADR-047
+  describes.
+
+### The read model has no rules, and no opinion
+
+It selects, it calls existing rules, and it shapes. It does not rank, score, or suggest: the
+"first action" is the first task row the user wrote down that is not marked done, and it is
+absent when there is nothing planned or everything is finished. No model is involved in producing
+any word on the page.
+
+A module that does not exist is reported as unavailable rather than as empty. Skills is a build
+constant set to `false`; a missing `habit_log` row reads as **not recorded**, which is a statement
+about the data rather than a verdict about the user's day.
+
+### New enforced scopes
+
+`npm run architecture:probe` now also asserts, for the Dashboard specifically:
+
+| Scope | Refuses |
+| --- | --- |
+| `src/features/dashboard/**` | `@/lib/db`, `better-sqlite3`, `node:fs`, provider modules, `@/commands/executor`, feature write sides |
+| `src/app/**` | `@/lib/db`, `better-sqlite3`, `node:fs`, provider config and transport |
+
+`next/server` is exempt from the `src/app` rule: every route handler imports it, and a framework
+import is not storage access. The rule exists because "no SQL in the page component" is a claim
+that was, until Phase 5, made only in prose.

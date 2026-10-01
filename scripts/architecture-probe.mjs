@@ -102,6 +102,41 @@ const CASES = [
     "src/components/Nav.tsx",
     "@/features/chat/openrouter",
   ],
+
+  // src/features/dashboard — a read model. It composes; it does not open a database and it never
+  // asks a model anything.
+  [
+    "src/features/dashboard/__probe.ts",
+    "src/features/dashboard/view.ts",
+    "@/lib/db/connection",
+  ],
+  [
+    "src/features/dashboard/__probe.ts",
+    "src/features/dashboard/view.ts",
+    "better-sqlite3",
+  ],
+  [
+    "src/features/dashboard/__probe.ts",
+    "src/features/dashboard/view.ts",
+    "node:fs",
+  ],
+  [
+    "src/features/dashboard/__probe.ts",
+    "src/features/dashboard/view.ts",
+    "@/features/chat/openrouter",
+  ],
+  [
+    "src/features/dashboard/__probe.ts",
+    "src/features/dashboard/view.ts",
+    "@/commands/executor",
+  ],
+
+  // src/app — routing only. The page that aggregates everything must not be able to reach a
+  // driver or the filesystem, because "no SQL in the page component" is a claim worth proving.
+  ["src/app/__probe.ts", "src/app/page.tsx", "@/lib/db/connection"],
+  ["src/app/__probe.ts", "src/app/page.tsx", "better-sqlite3"],
+  ["src/app/__probe.ts", "src/app/page.tsx", "node:fs"],
+  ["src/app/__probe.ts", "src/app/page.tsx", "@/features/chat/openrouter"],
 ];
 
 /**
@@ -127,6 +162,21 @@ const ALLOWED = [
     "src/features/expenses/__probe_allowed.ts",
     "src/features/expenses/view.ts",
     "@/domain/expenses",
+  ],
+  [
+    "src/features/dashboard/__probe_allowed.ts",
+    "src/features/dashboard/view.ts",
+    "@/features/shared/command-runtime",
+  ],
+  [
+    "src/features/dashboard/__probe_allowed.ts",
+    "src/features/dashboard/view.ts",
+    "@/domain/habits",
+  ],
+  [
+    "src/app/__probe_allowed.ts",
+    "src/app/page.tsx",
+    "@/features/dashboard/view",
   ],
 ];
 

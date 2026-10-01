@@ -1028,8 +1028,9 @@ console.log(
 console.log("\n# 42. the Dashboard projection follows real Kitchen state");
 
 {
-  const { readDashboardSummary } =
-    await import("../src/features/shared/queries.ts");
+  // The Dashboard's own read model lives in its feature now; this section asserts that its
+  // low-stock projection is the Kitchen's state, not a second opinion about it.
+  const { readDashboard } = await import("../src/features/dashboard/view.ts");
 
   reset();
   submit({
@@ -1047,13 +1048,13 @@ console.log("\n# 42. the Dashboard projection follows real Kitchen state");
     lowThreshold: "",
   });
 
-  let summary = readDashboardSummary();
+  let dashboard = readDashboard();
   assertEqual(
-    summary.lowStockItems.length,
+    dashboard.lowStock.length,
     0,
     "42. nothing is low above its threshold",
   );
-  assertEqual(summary.inventoryCount, 2, "42. both items are counted");
+  assertEqual(dashboard.inventoryCount, 2, "42. both items are counted");
 
   // Down to exactly the threshold, which counts as low.
   runCommand({
@@ -1064,14 +1065,14 @@ console.log("\n# 42. the Dashboard projection follows real Kitchen state");
     unit: "pieces",
     sourceText: "used 7 onions",
   });
-  summary = readDashboardSummary();
+  dashboard = readDashboard();
   assertEqual(
-    summary.lowStockItems.length,
+    dashboard.lowStock.length,
     1,
     "42. an item exactly on its threshold is low",
   );
   assertEqual(
-    summary.lowStockItems[0].name,
+    dashboard.lowStock[0].name,
     "onions",
     "42. and it is the right item",
   );
@@ -1085,22 +1086,22 @@ console.log("\n# 42. the Dashboard projection follows real Kitchen state");
     unit: "pieces",
     sourceText: "restocked 5 onions",
   });
-  summary = readDashboardSummary();
+  dashboard = readDashboard();
   assertEqual(
-    summary.lowStockItems.length,
+    dashboard.lowStock.length,
     0,
     "42. and it stops being low once restocked past it",
   );
 
   // An empty kitchen must not break the summary.
   reset();
-  summary = readDashboardSummary();
+  dashboard = readDashboard();
   assertEqual(
-    summary.lowStockItems.length,
+    dashboard.lowStock.length,
     0,
     "42. an empty inventory produces no low-stock items and no crash",
   );
-  assertEqual(summary.inventoryCount, 0, "42. and counts nothing");
+  assertEqual(dashboard.inventoryCount, 0, "42. and counts nothing");
 }
 
 // ---------------------------------------------------------------------------

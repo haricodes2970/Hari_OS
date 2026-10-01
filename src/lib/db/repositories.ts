@@ -38,6 +38,7 @@ import {
   findInventoryItem,
   findInventoryItemById,
 } from "../../domain/inventory.ts";
+import { isHabitType, type HabitType } from "../../domain/habits.ts";
 import type { Quantity } from "@/domain/quantity";
 import type { MinorUnits } from "@/domain/money";
 import type { Result } from "@/domain/result";
@@ -140,6 +141,15 @@ export type DisplayQueries = {
   /** The plan for one calendar day, for the dashboard. Read-only; nothing creates these yet. */
   tasksForDate(date: string): PlanTask[];
   /**
+   * The habit entries recorded on one calendar day.
+   *
+   * Read-only and additive: `habit_log` has existed since micro-phase 1.1, so reading it is not a
+   * new capability, and nothing in `src/` writes to it. Rows whose `type` is outside the closed
+   * set are dropped rather than coerced — the schema's CHECK makes that impossible while it holds,
+   * and inventing a habit the user never logged is worse than omitting one.
+   */
+  habitsForDate(date: string): HabitEntry[];
+  /**
    * The most recent stock movements, newest first, with the item name resolved.
    *
    * Ordering is `timestamp DESC, id DESC` so two entries written in the same millisecond
@@ -164,6 +174,14 @@ export type PlanTask = {
   readonly id: number;
   readonly title: string;
   readonly done: boolean;
+};
+
+/** One `habit_log` row, read-only, with the photo reduced to whether one is attached. */
+export type HabitEntry = {
+  readonly type: HabitType;
+  readonly done: boolean;
+  /** `photo_url IS NOT NULL`. The path itself is never read: nothing renders or serves it in V1. */
+  readonly hasPhoto: boolean;
 };
 
 export type Repositories = {
@@ -503,6 +521,9 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
   const tasksForDateRows = database.prepare(
     "SELECT id, title, done FROM plan_task WHERE date = ? ORDER BY id",
   );
+  const habitsForDateRows = database.prepare(
+    "SELECT type, done, photo_url FROM habit_log WHERE date = ? ORDER BY id",
+  );
   const recentEventRows = database.prepare(
     `SELECT e.id, e.item AS item_id, e.delta, e.timestamp, e.source_text, i.name AS item_name
      FROM inventory_event e
@@ -553,6 +574,22 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
           done: number;
         })[]
       ).map((row) => ({ id: row.id, title: row.title, done: row.done === 1 }));
+    },
+
+    habitsForDate(date) {
+      return (
+        habitsForDateRows.all(date) as {
+          type: string;
+          done: number;
+          photo_url: string | null;
+        }[]
+      )
+        .filter((row) => isHabitType(row.type))
+        .map((row) => ({
+          type: row.type as HabitType,
+          done: row.done === 1,
+          hasPhoto: row.photo_url !== null,
+        }));
     },
 
     recentInventoryEvents(limit) {

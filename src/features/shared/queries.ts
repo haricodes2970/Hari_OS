@@ -1,14 +1,20 @@
 /**
- * Read-side helpers the pages use to show persisted state.
+ * Read-side helpers the Kitchen page uses to show persisted stock.
  *
  * Presentation, not business logic: these fetch rows, apply an existing domain rule where one
- * exists, and shape the result for rendering. No page queries the database directly, so
- * there is one place where "what does today's spend mean" is answered, and no component can
- * invent its own version of it.
+ * exists, and shape the result for rendering. No page queries the database directly, so there is
+ * one place where "what does this row mean" is answered, and no component can invent its own
+ * version of it.
  *
  * Low-stock is decided by the domain's own `isLowStock` rather than by a comparison written
- * here. Duplicating that rule in a view would be the first step towards two screens
- * disagreeing about whether the onions are low.
+ * here. Duplicating that rule in a view would be the first step towards two screens disagreeing
+ * about whether the onions are low.
+ *
+ * The Dashboard's own read model is `src/features/dashboard/view.ts`. It used to live here as
+ * `readDashboardSummary`, and it moved out because the Dashboard composes several features'
+ * projections rather than one: keeping it in `shared/` made a second, parallel definition of "what
+ * the dashboard shows" possible, and two would be able to disagree. The one definition is now in
+ * the feature that owns the screen.
  *
  * Server-only.
  */
@@ -17,7 +23,7 @@ import "server-only";
 import { isLowStock, type InventoryItem } from "@/domain/inventory";
 import { formatMinorUnits, type MinorUnits } from "@/domain/money";
 
-import { currentUtcDate, getRepositories } from "./command-runtime.ts";
+import { getRepositories } from "./command-runtime.ts";
 
 /** One inventory line as the Kitchen page needs it. */
 export type InventoryView = {
@@ -44,16 +50,6 @@ export type ExpenseView = {
   readonly formattedAmount: string;
   readonly accountName: string;
   readonly category: string | null;
-};
-
-export type DashboardSummary = {
-  readonly date: string;
-  readonly lowStockItems: readonly InventoryView[];
-  readonly inventoryCount: number;
-  readonly todaySpend: MinorUnits;
-  readonly formattedTodaySpend: string;
-  readonly todayExpenseCount: number;
-  readonly tasks: readonly { id: number; title: string; done: boolean }[];
 };
 
 function toInventoryView(item: InventoryItem): InventoryView {
@@ -92,21 +88,4 @@ export function listRecentExpenses(limit = 10): ExpenseView[] {
       accountName: expense.accountName,
       category: expense.category,
     }));
-}
-
-export function readDashboardSummary(): DashboardSummary {
-  const { display } = getRepositories();
-  const date = currentUtcDate();
-  const inventory = display.listInventory().map(toInventoryView);
-  const spend = display.spendForDate(date);
-
-  return {
-    date,
-    lowStockItems: inventory.filter((item) => item.lowStock),
-    inventoryCount: inventory.length,
-    todaySpend: spend.total,
-    formattedTodaySpend: formatMinorUnits(spend.total),
-    todayExpenseCount: spend.count,
-    tasks: display.tasksForDate(date),
-  };
 }

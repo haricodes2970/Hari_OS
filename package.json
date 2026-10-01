@@ -25,6 +25,9 @@
     "chat:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/chat-test.mjs",
     "kitchen:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/kitchen-test.mjs",
     "expenses:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/expenses-test.mjs",
+    "dashboard:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/dashboard-test.mjs",
+    "dashboard:accept": "node scripts/dashboard-accept.mjs",
+    "responsive:check": "node scripts/responsive-check.mjs",
     "architecture:probe": "node scripts/architecture-probe.mjs"
   },
   "dependencies": {

@@ -986,3 +986,77 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
     scope must be expressed as one rule, or the earlier ones are decorative.** `src/features/chat`
     had it right by accident, and the scopes with two or more configs were the broken ones.
 - **Origin:** Phase 4, found by probing every architecture claim rather than trusting it.
+
+---
+
+## ADR-047 — The Dashboard is a read model over the owning features, and it says what is missing
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 5
+
+**Context.** The PRD's Dashboard is six cards: today's top 3 tasks, a suggested first action,
+low stock, laundry/dishes, today's spend, and an "I feel like scrolling" entry to Skills. Two of
+the five modules those depend on exist (Kitchen, Expenses). Routine, Sleep, Skills, Habits, and
+Photo Diary do not. The Dashboard page already showed a low-stock count and a spend figure, both
+read through `readDashboardSummary` in `src/features/shared/queries.ts`, and the summary's task
+list had never been fed by anything.
+
+That leaves two ways to finish the phase. Either fill the screen — add a task list, a habit
+tracker, a skills catalogue — or complete the screen from state that exists and mark the rest
+unavailable. The first option is five more phases, and each would be built to satisfy a card
+rather than to be a feature.
+
+**Alternatives considered.**
+
+- **Build the missing modules to fill the cards.** Rejected: it is Routine, Skills, and Habits
+  built as decoration, and it would put half-built features in front of the user.
+- **Keep `readDashboardSummary` in `shared/` and extend it.** Rejected: `shared/` is where the
+  Kitchen page's inventory view lives, and a Dashboard that composes three features is not a
+  shared helper. It would also leave two definitions of "what the dashboard shows" — one in
+  `shared/`, one in `features/dashboard/` — able to disagree.
+- **Use the SQL aggregate `display.spendForDate` for the dashboard figure.** Rejected: it is a
+  second implementation of the day's total. Phase 4's architecture notes name this exact risk,
+  and the consequence would be a Dashboard that can say a different number from the bill.
+- **Add a repository read per card.** Rejected for low stock and spend, where the owning feature
+  already has a read side that applies the real rule. Accepted for `plan_task` and `habit_log`,
+  which have no owning feature yet and whose rows would otherwise be fetched by ad-hoc SQL.
+- **Invent a suggestion.** Rejected outright. The PRD's principle is that the assistant
+  organises and the user decides; a ranked or generated "first action" is the failure, not the
+  feature.
+
+**Decision.**
+
+- The Dashboard read model lives in `src/features/dashboard/view.ts` and is the only thing the
+  page reads. It composes the Kitchen and Expenses read sides and two focused repository reads.
+  It contains no comparison, no sum, and no clock.
+- **Low stock** is the domain's `isLowStock` applied to persisted rows. Threshold equality is
+  low, as it has always been.
+- **Today's spend** is `summariseDay` over the day's rows — the same function that produces the
+  daily bill, so the two cannot disagree.
+- **Tasks** are real `plan_task` rows, capped at three for display with the true count kept.
+  **The suggested first action is the first not-done task**, or nothing. No ranking, no
+  generation, no model.
+- **Skills** are a build constant, `false`, and the page renders an unavailable state. No route
+  was created for a module that does not exist.
+- **Dishes and laundry** are read from `habit_log`. A missing row renders as **not recorded**,
+  not as "not done": only the second is a claim about the user's day, and nothing in `src/`
+  writes a habit row, so the distinction is currently the whole content of that card.
+- Two new enforced boundary scopes, probed like the rest: `src/features/dashboard/**` (no
+  storage, no driver, no filesystem, no provider, no executor, no feature write side) and
+  `src/app/**` (no storage, no driver, no filesystem, no provider config — `next/server`
+  exempt, because it is a framework and not storage).
+
+**Consequences.**
+
+- The Dashboard can be completed and verified without starting Phase 6, and the next phase
+  starts from a real screen rather than a blank one.
+- "Not available yet" is a supported product state, stated in the product rather than only in
+  this file. Three cards say it today: tasks, skills, habits.
+- The read model has no second source of truth for anything, so the only way for the Dashboard
+  to be wrong is for the owning feature to be wrong.
+- `scripts/dashboard-accept.mjs` and `scripts/responsive-check.mjs` are new verification
+  scripts rather than new production code. The first exists because a Server Component cannot
+  be rendered outside Next.js, so page claims have to be checked over HTTP; the second because
+  "the stylesheet uses `auto-fit`" is not a responsive check.
+
+**Origin:** Phase 5, from the finding that the Dashboard's missing parts are five later phases,
+not one screen.
