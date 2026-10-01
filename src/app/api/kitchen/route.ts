@@ -264,9 +264,13 @@ export function runKitchenOperation(
     );
   }
 
-  const eventId = Number(fields.get("eventId") ?? "");
+  // Read like `readItemId` above, and for the same reason. `Number` alone is a reader that
+  // guesses: `1e3` is 1000, `0x1f` is 31, an empty field is 0, and `  12  ` is 12 — so a
+  // correction could be aimed at an entry the user did not name. A correction reverses a
+  // movement, which is the last thing in this application to address loosely.
+  const rawEventId = fields.get("eventId") ?? "";
 
-  if (!Number.isInteger(eventId)) {
+  if (!/^\d+$/.test(rawEventId)) {
     return {
       ok: false,
       token: "unknown_item",
@@ -274,7 +278,7 @@ export function runKitchenOperation(
     };
   }
 
-  return correctInventoryEntry(eventId);
+  return correctInventoryEntry(Number(rawEventId));
 }
 
 export async function POST(request: Request): Promise<NextResponse> {

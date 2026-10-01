@@ -930,6 +930,25 @@ console.log("\n# 37-43. empty states, duplicates, renames, and refusals");
     "unknown_item",
     "a correction with no usable entry id",
   );
+
+  // Phase 9. The entry id was read with `Number`, which is a reader that guesses: `1e3` is 1000,
+  // `0x1f` is 31, an empty field is 0, and surrounding spaces are ignored. A correction reverses a
+  // movement, so being addressed at the wrong entry is the one outcome that cannot be undone by
+  // re-reading the page. Every other id reader in this codebase is digits-only; this one now is too.
+  for (const [submitted, description] of [
+    ["1e3", "scientific notation, which Number accepts as 1000"],
+    ["0x1f", "a hexadecimal literal, which Number accepts as 31"],
+    ["", "an absent field, which Number accepted as 0"],
+    [" 1 ", "surrounding spaces, which Number ignores"],
+    ["-1", "a negative id, which Number accepts as a number"],
+    ["1.0", "a decimal id, which Number accepts as 1"],
+  ]) {
+    assertRefusedToken(
+      submit({ operation: "correct", eventId: submitted }),
+      "unknown_item",
+      `a correction id of ${JSON.stringify(submitted)} is refused: ${description}`,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -958,6 +977,14 @@ console.log(
 
   const originalEvent = row(
     "SELECT id FROM inventory_event WHERE source_text = 'used 2 onions'",
+  );
+
+  // The same entry id, read the way the route now reads it: digits only. A padded id is refused
+  // here, so this is also the proof that the stricter reader still addresses a real entry.
+  assertRefusedToken(
+    submit({ operation: "correct", eventId: `${originalEvent.id} ` }),
+    "unknown_item",
+    "46. a padded id is refused before anything is reversed",
   );
 
   const corrected = correctInventoryEntry(originalEvent.id);
@@ -1002,6 +1029,20 @@ console.log(
     reloaded.prepare("SELECT COUNT(*) AS n FROM inventory_event").get().n,
     3,
     "47. and the correction was persisted as an event of its own",
+  );
+
+  // The positive direction: a plain digits id is still read. It is checked after the assertions
+  // above rather than before them because it is a real correction — correcting the same entry
+  // twice reverses it twice, which is correct and would have made every assertion above a test of
+  // something else. The reversal itself is not re-asserted here; the section above already covers
+  // one, and `exec:test` covers two.
+  const secondCorrection = submit({
+    operation: "correct",
+    eventId: `${originalEvent.id}`,
+  });
+  assert(
+    secondCorrection.ok,
+    "47. a plain digits entry id is still read, so the stricter reader is not a blanket refusal",
   );
   reloaded.close();
 
