@@ -4,7 +4,7 @@
 the state. Where they disagree, this file is correct.
 
 - **Current phase:** 6 — Routine and Sleep. **Complete and verified.**
-- **Latest commit:** pending — `feat(6): complete routine and sleep`
+- **Latest commit:** `015aa38` — `feat(6): complete routine and sleep`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none. The threshold-of-zero discrepancy Phase 5 recorded was resolved in Phase 6
   (ADR-048): the code's behaviour was kept and `ARCHITECTURE.md` section 15 was corrected, because
@@ -72,7 +72,7 @@ cards state that they are unavailable. No skill, habit, photo, or log is fabrica
 | 3 — Kitchen | Complete | `da9a89c` | Inventory, thresholds, history, correction/reversal, Dashboard integration |
 | 4 — Expenses | Complete | `71ac329` | Accounts, natural-language expense entry, daily bill, Dashboard integration |
 | 5 — Dashboard | **Complete** | `a87210c` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
-| 6 — Routine + Sleep | **Complete** | pending | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
+| 6 — Routine + Sleep | **Complete** | `015aa38` | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
 | 7 — Skills + Habits | **Not started** | — | `skill` and `habit_log` are read; nothing writes them |
 | 8 — Photo + Diary | Not started | — | |
 | 9 — Hardening | Not started | — | |
