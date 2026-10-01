@@ -20,7 +20,9 @@
     "domain:test": "node scripts/domain-test.mjs",
     "contract:test": "node scripts/contract-test.mjs",
     "exec:test": "node --conditions=react-server scripts/exec-test.mjs",
-    "app:test": "node --conditions=react-server scripts/app-test.mjs"
+    "app:test": "node --conditions=react-server scripts/app-test.mjs",
+    "parser:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/parser-test.mjs",
+    "chat:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/chat-test.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

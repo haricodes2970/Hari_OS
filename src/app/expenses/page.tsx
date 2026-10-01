@@ -5,9 +5,11 @@
  * formatted by the domain's own `formatMinorUnits`, which is what `listAccountViews` already
  * did — so no view repeats the money formatting, and no view recomputes a balance.
  */
+import { ChatInput } from "@/components/ChatInput";
 import { CommandForm, type CommandField } from "@/components/CommandForm";
 import { Nav } from "@/components/Nav";
 import { OutcomeBanner } from "@/components/OutcomeBanner";
+import { parserAvailability } from "@/features/chat/runtime";
 import {
   listAccountViews,
   listRecentExpenses,
@@ -44,10 +46,17 @@ export default function ExpensesPage({
 }) {
   const accounts = listAccountViews();
   const expenses = listRecentExpenses();
+  const parser = parserAvailability();
 
   return (
     <>
       <Nav currentPath="/expenses" />
+      <ChatInput
+        searchParams={searchParams}
+        returnTo="/expenses"
+        available={parser.available}
+        unavailableReason={parser.reason}
+      />
       <h1>Expenses</h1>
       <OutcomeBanner searchParams={searchParams} />
 

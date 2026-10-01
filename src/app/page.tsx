@@ -9,18 +9,31 @@
  * "today" here is a UTC date, matching how every timestamp is stored; a local date would
  * quietly disagree with the expense rows near midnight.
  */
+import { ChatInput } from "@/components/ChatInput";
 import { Nav } from "@/components/Nav";
+import { parserAvailability } from "@/features/chat/runtime";
 import { readDashboardSummary } from "@/features/shared/queries";
 
 export const metadata = { title: "Hari OS" };
 export const dynamic = "force-dynamic";
 
-export default function DashboardPage() {
+export default function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const summary = readDashboardSummary();
+  const parser = parserAvailability();
 
   return (
     <>
       <Nav currentPath="/" />
+      <ChatInput
+        searchParams={searchParams}
+        returnTo="/"
+        available={parser.available}
+        unavailableReason={parser.reason}
+      />
       <h1>Dashboard</h1>
       <p className="muted">{summary.date}</p>
 

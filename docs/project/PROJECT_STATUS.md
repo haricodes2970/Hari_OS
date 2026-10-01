@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 1.6, Phase 1 closeout)
+- **Last updated:** 2026-10-01 (Phase 2, command engine)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | 0 | Foundation infrastructure | **Complete** |
 | 1 | Application foundation | **Complete** |
+| 2 | Command engine (natural language) | **Complete** |
 
 **Phase 0 is complete.** All eight micro-phases are done and verified.
 
@@ -18,20 +19,22 @@ rules, the validated command contract, the execution pipeline, persistence, the 
 boundary, and a user-facing vertical slice. A user can record stock changes and expenses
 through the UI and see the result persisted.
 
-**Phase 2 has not started.** No natural-language parsing and no LLM exist.
+**Phase 2 is complete.** The natural-language command engine is implemented and verified:
+a sentence is parsed by a language model into an untrusted proposal, allowlisted into a
+command candidate, and applied by the Phase 1 executor with no arithmetic performed by the
+model. Detail in `docs/sessions/2026-10-01-session-01.md`.
 
 ## Current Micro-Phase
 
-**1.6 — Phase 1 foundation verification and closeout: COMPLETE AND VERIFIED**
+**Phase 2 — Command engine: COMPLETE AND VERIFIED**
 
-Phase 1 is closed. There is no active micro-phase.
+There is no active micro-phase. Phase 2 was delivered as one unit, because the parser, the
+provider, the engine, and the route are only meaningful together: a parser with no route is
+untestable, and a route with no parser is a stub.
 
-The foundation was re-verified end to end rather than rebuilt: the full automated suite
-(460 assertions), the architecture audit, the end-to-end acceptance flow against a disposable
-database, and the repository audit. Nothing was added. Detail in
-`docs/sessions/2026-09-30-session-07.md`.
-
-**Phase 2 has not started and is not begun in this micro-phase.**
+The automated suite is 717 assertions, up from 460. The live provider call is **not**
+verified — no `OPENROUTER_API_KEY` was available. Everything reachable without a credential
+is verified, including the provider itself, which is tested against a local HTTP stub.
 
 ## Completed Micro-Phases
 
@@ -51,14 +54,28 @@ database, and the repository audit. Nothing was added. Detail in
 | 1.4 — Command execution foundation | `0d94aad` | Complete | Yes |
 | 1.5 — First real vertical slice | `6f95885` | Complete | Yes |
 | 1.6 — Phase 1 foundation verification and closeout | `946d807` | Complete | Yes |
+| 2 — Command engine (natural language) | `pending commit` | Complete | Yes, except the live provider call |
 
 ## Active Work
 
-None. Phase 1 is complete and verified. Phase 2 has not started.
+None. Phases 0, 1, and 2 are complete.
 
 ## Blockers
 
 None.
+
+## Not verified
+
+- **A live OpenRouter call.** No `OPENROUTER_API_KEY` or `OPENROUTER_MODEL` was available, so
+  no request has ever reached the real provider. The request this application builds is asserted
+  against a local HTTP stub in `scripts/chat-test.mjs` section 37 and against an injected
+  transport in `scripts/parser-test.mjs` section 21, but the model id, the account, and the
+  schema's acceptance by a real provider remain untested. Everything up to the socket is verified.
+- **Two architecture gaps found during verification and not fixed here.** `src/lib/db` may
+  import `@/commands/parser`, and `src/commands` may import
+  `@/features/shared/command-runtime`. Both are pre-existing gaps in the Phase 0/1 lint
+  configuration rather than Phase 2 regressions, and neither is exercised by the current code.
+  Closing them is an architecture change and needs an ADR.
 
 ## Current State
 
@@ -242,14 +259,14 @@ infrastructure.
 
 ## Next Action
 
-**Phase 2 — Command engine: NOT STARTED.** Phase 1 closed at micro-phase 1.6 without
-beginning it. Its scope must be planned before work begins; it is not invented here. See
-`docs/phases/PHASE_02_COMMAND_ENGINE.md` and `docs/project/ROADMAP.md`.
+**Phase 3 — Kitchen: NOT STARTED.** Phase 2 is complete and verified.
 
-Phase 2 is where natural-language input is parsed into a validated structured intent, with
-deterministic execution. **No parser, no OpenRouter, no LLM integration, and no model API key
-exists today.** The command contract and validation boundary that Phase 2 will wrap are
-already built and proven.
+Phase 3 is where the kitchen becomes a real module rather than the Phase 1 vertical slice.
+Its scope must be planned before work begins; it is not invented here. See
+`docs/phases/PHASE_03_KITCHEN.md` and `docs/project/ROADMAP.md`.
+
+The command contract, validation boundary, and natural-language entry point that Phase 3
+builds on are already built and proven.
 
 Limitations carried into Phase 2, all recorded and none silently dropped:
 

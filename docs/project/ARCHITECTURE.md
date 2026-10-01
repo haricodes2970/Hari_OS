@@ -244,19 +244,24 @@ a two-error payload into two round trips.
 
 ### What does not exist yet
 
-No parser, no natural-language handling, no LLM dependency, no OpenRouter integration, and no
-prompt. The contract is provider-agnostic: nothing here mentions a vendor, because the shape
-is dictated by the schema and the domain, not by how a sentence is turned into it.
+`src/commands/` still contains no provider dependency. The contract remains provider-agnostic:
+nothing in `contract.ts` mentions a vendor, because the shape is dictated by the schema and the
+domain, not by how a sentence is turned into it. The parser port added in Phase 2 lives in
+`src/commands/parser.ts` and holds the same rule — it defines the port, and the provider is an
+implementation behind it. See section 14.
 
 ## 9. Feature code
 
 `src/features/<area>/`, one directory per product area. A feature owns its rules, its UI, and
 its data access, and shares only through its own public surface.
 
-Only `src/features/shared/` exists so far, holding what the Kitchen and Expenses pages both
-need: the form-to-command translation, the composition root, the read side, and the mapping
-from error codes to sentences. Area directories for the remaining product areas do not exist
-yet — see section 12.
+`src/features/shared/` holds what the Kitchen and Expenses pages both need: the form-to-command
+translation, the composition root, the read side, and the mapping from error codes to sentences.
+
+`src/features/chat/` is the natural-language slice. It owns the OpenRouter provider, the
+runtime seam that reads configuration, the engine that sequences parse-then-execute, and the
+pure presentation layer. Of these, only `presentation.ts` is reachable from a component; see
+section 14. Area directories for the remaining product areas do not exist yet — see section 12.
 
 ## 10. The domain layer (added in micro-phase 1.2)
 
@@ -389,14 +394,12 @@ None of the following exist, and their absence is intentional:
 - Any command to create an inventory item or set an opening balance. First-run rows come from
   `npm run db:setup`
 - A correcting entry for the expense ledger, which holds non-negative spends only
-- The natural language command parser and any intent type that carries a parsed sentence
-- OpenRouter or any LLM integration
 - Filesystem upload handling
 - Authentication
 - Deployment configuration
 - PWA manifest, service service worker, or offline support
-- A general test framework. The tests are five scripts: `db:test`, `domain:test`,
-  `contract:test`, `exec:test`, and `app:test`
+- A general test framework. The tests are seven scripts: `db:test`, `domain:test`,
+  `contract:test`, `exec:test`, `app:test`, `parser:test`, and `chat:test`
 
 Do not assume a directory is functional because it exists, and do not assume a table being
 present means anything can use it yet.
@@ -467,3 +470,71 @@ directory. It never opens the real `data/hari-os.db`.
 
 No schema logic performs business arithmetic. The schema stores facts; `src/domain` decides
 what they mean.
+
+## 14. The command engine (added in Phase 2)
+
+A sentence reaches the application through one route and is applied by the same executor that
+Phase 1 built. There is one execution path and two ways of reaching it.
+
+```
+  "used 2 onions"
+        │
+        ▼
+  POST /api/commands/parse          src/app/api/commands/parse/route.ts
+        │  same-origin check, body read, no state
+        ▼
+  getChatEngine()                   src/features/chat/runtime.ts    server-only
+        │
+        ▼
+  parser.parse(text)                src/commands/parser.ts         the port
+        │  untrusted: unknown in, unknown out
+        ▼
+  fetch openrouter.ai               src/features/chat/openrouter.ts  server-only
+        │  the only network call and the only place the key travels
+        ▼
+  interpret(proposal, sourceText)   src/commands/parser.ts
+        │  allowlist; money converted by src/domain
+        ▼
+  parseCommand(candidate)           src/lib/validation/            the existing gate
+        │
+        ▼
+  runCommand()                     src/commands/executor.ts       unchanged since Phase 1
+        │
+        ▼
+  SQLite
+```
+
+### The four chat modules and who may import them
+
+| Module | May import | Must not |
+| --- | --- | --- |
+| `features/chat/config.ts` | `server-only` | — |
+| `features/chat/openrouter.ts` | the port, the prompt, `config` | persist, execute, compute domain results |
+| `features/chat/engine.ts` | the port, the executor, the domain | — |
+| `features/chat/presentation.ts` | the engine's result types | the provider, the engine, a credential |
+| `features/chat/runtime.ts` | `config`, `openrouter`, `engine` | be imported by a component |
+
+This is enforced, not documented. `hari-os/provider-boundary` stops `domain/`, `lib/validation/`,
+`lib/db/`, and `commands/` from importing a provider module, so the parser cannot come to depend
+on knowing one exists. `hari-os/provider-purity` stops the provider and the prompt from
+importing storage, the executor, or `command-runtime`. `hari-os/chat-boundary` stops a
+component from importing any of them. All three were verified with probe files.
+
+### What the model is structurally unable to do
+
+Not by instruction — by construction. `candidateToCommand` copies a fixed allowlist of fields,
+so an invented field is never read; `toMinorUnits` in `src/domain` performs the money
+conversion, so no balance or quantity is ever computed by a model; and the port returns
+`unknown`, so nothing downstream is tempted to trust the shape. See ADR-040.
+
+### One sentence, one command
+
+A single input yields at most one command. A proposal containing several is refused. There is
+no batch planning, no chaining, no retry, and no conversation history, so nothing accumulates
+context between calls.
+
+### Results reach the page as tokens, never as prose
+
+A form cannot read a response body, so the route answers with a `303` carrying an enum and
+closed-set tokens in the query string. The sentences a user reads are written by
+`presentation.ts` from the trusted execution result. Model text is never rendered.

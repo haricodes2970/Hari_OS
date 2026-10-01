@@ -1,6 +1,8 @@
 # Phase 2 — Command Engine
 
-**Status: Planned**
+**Status: Complete (2026-10-01)** — implemented and verified. See
+[`../sessions/2026-10-01-session-01.md`](../sessions/2026-10-01-session-01.md).
+A live provider call remains unverified: no API key was available.
 
 ## Purpose
 

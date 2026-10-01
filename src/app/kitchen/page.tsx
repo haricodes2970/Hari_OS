@@ -6,9 +6,11 @@
  * data, which is the point — a page that could both display and mutate state would make it
  * unclear which numbers came from where.
  */
+import { ChatInput } from "@/components/ChatInput";
 import { CommandForm, type CommandField } from "@/components/CommandForm";
 import { Nav } from "@/components/Nav";
 import { OutcomeBanner } from "@/components/OutcomeBanner";
+import { parserAvailability } from "@/features/chat/runtime";
 import { listInventoryView } from "@/features/shared/queries";
 
 export const metadata = { title: "Kitchen · Hari OS" };
@@ -50,10 +52,17 @@ export default function KitchenPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const items = listInventoryView();
+  const parser = parserAvailability();
 
   return (
     <>
       <Nav currentPath="/kitchen" />
+      <ChatInput
+        searchParams={searchParams}
+        returnTo="/kitchen"
+        available={parser.available}
+        unavailableReason={parser.reason}
+      />
       <h1>Kitchen</h1>
       <OutcomeBanner searchParams={searchParams} />
 

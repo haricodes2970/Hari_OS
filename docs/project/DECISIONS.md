@@ -750,3 +750,88 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
   - Running the script after real use has begun will not reset a balance or a quantity,
     because every insert is skipped when the row already exists.
 - **Origin:** Micro-phase 1.5.
+
+## ADR-040 — The parser is a port, and the model is an interpreter rather than an authority
+
+- **Status:** Accepted
+- **Date:** 2026-10-01
+- **Context:** Phase 2 introduces a language model that reads a sentence and proposes what the
+  user meant. `AGENTS.md` section 7 and PRD principles 11 and 12 require that the model never
+  perform arithmetic affecting balances or quantities, and that deterministic code own all
+  mutation. Those rules are only worth something if they are structural rather than advisory.
+- **Decision:** `src/commands/parser.ts` defines a `NaturalLanguageParser` port whose `parse`
+  returns `unknown` on success. Nothing above the port knows a provider exists, and
+  `src/features/chat/openrouter.ts` is one implementation behind it. Three guarantees are
+  enforced by construction:
+  1. **No arithmetic.** A proposal reports `amountRupees`, the number the user said. Conversion
+     to whole minor units is `toMinorUnits` in `src/domain`. A model answering `5000` produces
+     a field the contract does not accept, and validation refuses the command.
+  2. **No identity, time, or outcomes.** `candidateToCommand` copies a fixed allowlist of
+     fields and nothing else, so `id`, `timestamp`, `balance`, `after`, `confidence`, and `sql`
+     in a response are never read. A model cannot smuggle a value in by inventing a field,
+     because no invented field is ever read.
+  3. **No authority over execution.** The parser calls neither the executor, the domain, nor
+     the database. It emits an unvalidated candidate, which is exactly what the existing
+     `parseCommand` gate is designed to receive.
+- **Consequences:**
+  - A proposal carrying a forged `balance` alongside legitimate facts still executes. That is
+    correct: the extras are neutralised by the allowlist rather than by a veto, so a model
+    cannot make a valid command unexecutable by adding noise to it. The result is asserted in
+    `scripts/chat-test.mjs` section 31.
+  - Rejected: a repair step that re-prompts or coerces malformed output. It would be a second,
+    weaker implementation of the interpretation logic the trust model depends on not existing.
+  - Rejected: sanitising by prompt instruction. Instruction is not enforcement; the allowlist is.
+  - The provider returns content that is not JSON as a raw string rather than failing, because
+    the transport did its job and whether the content is executable is `interpret`'s question.
+    Duplicating that decision would create two places that must agree what a proposal is.
+- **Origin:** Phase 2.
+
+## ADR-041 — A second entry point widens the input, never the execution path
+
+- **Status:** Accepted
+- **Date:** 2026-10-01
+- **Context:** Phase 1 has exactly one command entry point, `POST /api/commands` (ADR-036),
+  which receives an already-shaped command. Phase 2 needs to receive a sentence instead.
+  Replacing the structured endpoint would put a language model in front of the one path the
+  whole application trusts.
+- **Decision:** Add `POST /api/commands/parse` as a *second* endpoint. It receives a sentence,
+  parses it, and then converges on the same executor through the same engine the rest of the
+  application uses. `POST /api/commands` is untouched and remains available. There is one
+  execution path and two ways of reaching it.
+- **Consequences:**
+  - The structured forms on `/kitchen` and `/expenses` keep working with no provider configured,
+    which is what makes the missing-key state a degraded mode rather than a broken application.
+  - Results travel back as query parameters for form callers: an **enum and closed-set tokens
+    only**, plus the user's own sentence echoed as `said`. Model prose is never reflected into a
+    URL or a page, so a model cannot place arbitrary content in the interface.
+  - A caller that sends `Accept: application/json` receives the structured result instead, and
+    the route answers that case too.
+  - An unreadable request body is `400`, not an empty sentence. Treating a broken client as
+    "the user typed nothing" reports success for a request that was never understood.
+- **Origin:** Phase 2.
+
+## ADR-042 — Command submission is guarded by an origin check, because V1 has no session
+
+- **Status:** Accepted
+- **Date:** 2026-10-01
+- **Context:** `POST /api/commands/parse` is a write: a parsed sentence is executed. ADR-002
+  puts authentication out of scope for V1, so there is no cookie or session to protect the
+  write. That leaves any page the user happens to have open able to post a form to
+  `localhost` and cause a command to run. This was found by direct HTTP acceptance testing,
+  after the route had already been committed to a passing test suite that never posted to it.
+- **Decision:** Reject a submission whose `Origin` names another site, with `403`, before the
+  sentence is read and before any provider call. A request with no `Origin` is allowed, because
+  non-browser clients do not send one and refusing them would break `curl` and the tests.
+  `safeReturnPath` continues to restrict the `next` parameter to same-site paths.
+- **Consequences:**
+  - The check accepts `Origin` against **both** the reconstructed request URL and the `Host`
+    header. `next start` derives its own canonical hostname from configuration, so a request
+    that genuinely arrived at `http://127.0.0.1:3111` is seen server-side as
+    `http://localhost:3111`. Comparing against the URL alone refuses the application's own
+    users, which is worse than having no guard. `http://` and `https://` are both tried because
+    a TLS-terminating proxy would present one scheme while the internal URL carries the other.
+  - The guard is a CSRF defence, not an authorisation system. It does not stop a local process,
+    and it is not a substitute for authentication if V1 ever becomes multi-user.
+  - The route now has direct handler tests. It previously had none, which is why the gap was
+    invisible to `npm test`.
+- **Origin:** Phase 2, found during verification.

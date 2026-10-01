@@ -207,6 +207,129 @@ const commandBoundary = {
   },
 };
 
+/**
+ * Provider boundary rules (ADR-041).
+ *
+ * Phase 2 put a language model in front of the Phase 1 foundation. The model is an untrusted
+ * parser, and the only thing keeping it untrusted is that the surrounding layers are
+ * structurally unable to depend on it. These rules make that structural rather than a matter
+ * of care, and they are added alongside the existing rules, not in place of any of them.
+ *
+ * Two directions are forbidden:
+ *
+ * 1. **Nothing that computes or persists may reach the provider.** Domain, validation, the
+ *    command layer, and the database must have zero knowledge of OpenRouter. A domain rule
+ *    that could call a model is no longer pure, a validator whose verdict depended on a
+ *    network call would be untestable, and an executor that could reach a provider would let
+ *    a model's availability decide whether a write is possible.
+ * 2. **The provider may not reach execution or storage.** The parser converts text to facts.
+ *    If it could call a repository, run a domain mutation, or invoke the executor, then a
+ *    model response would be one function call away from a committed transaction, and the
+ *    allowlist in `src/commands/parser.ts` would be a suggestion.
+ *
+ * A component may not import the provider either, and the boundary that prevents a client
+ * bundle from reaching an API key is `server-only` plus the fact that these modules are
+ * `server-only` by construction. `providerBoundary` enforces the first two;
+ * `components/chat-boundary` closes the third.
+ */
+const providerModules = [
+  "@/features/chat/openrouter",
+  "@/features/chat/config",
+  "@/features/chat/runtime",
+];
+
+const providerBoundary = {
+  name: "hari-os/provider-boundary",
+  files: [
+    "src/domain/**/*.{ts,tsx}",
+    "src/lib/validation/**/*.{ts,tsx}",
+    "src/lib/db/**/*.{ts,tsx}",
+    "src/commands/**/*.{ts,tsx}",
+  ],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: providerModules,
+            message:
+              "The language model is an untrusted parser behind a port. Domain, validation, storage, and the command layer must not know a provider exists. Reach it through src/commands/parser.ts.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
+/**
+ * The parser may convert text into facts and nothing else.
+ *
+ * Applied to the whole chat provider area rather than to the two files it started with, and
+ * with the two modules that legitimately need more excluded. An earlier version listed the
+ * filenames explicitly, which looked correct and was not: a new module added beside the
+ * provider was outside the rule and could import `better-sqlite3` freely. A probe now covers
+ * this, because a boundary rule that only covers the files it already knows about is worse
+ * than none — it reports a guarantee it is not providing.
+ *
+ * `engine.ts` is excluded because connecting a parsed candidate to the Phase 1 executor is
+ * precisely its job. `presentation.ts` is excluded because it is pure and imports nothing
+ * beyond the domain.
+ */
+const providerPurity = {
+  name: "hari-os/provider-purity",
+  files: ["src/features/chat/**/*.{ts,tsx}"],
+  // Excluded with `ignores` rather than by negating inside `files`. A `files` array whose
+  // positive patterns match nothing falls back to matching *everything*, so negating there
+  // applied this rule across the whole repository — which is how it came to flag `node:fs` in
+  // an unrelated nested worktree. `ignores` alongside `files` is the supported way to carve
+  // exceptions out.
+  ignores: ["src/features/chat/engine.ts", "src/features/chat/presentation.ts"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: [
+              ...persistenceModules,
+              "@/commands/executor",
+              "@/features/shared/command-runtime",
+            ],
+            message:
+              "The parser converts text into facts. It may not persist, execute a command, or compute domain results. Validation happens in src/lib/validation and execution in src/commands/executor.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
+/**
+ * The browser may never reach the provider, directly or through the engine.
+ *
+ * `ChatInput` and `presentation.ts` are the only chat modules a component may use, and both
+ * are pure: no key, no endpoint, no engine.
+ */
+const chatBoundary = {
+  name: "hari-os/chat-boundary",
+  files: ["src/components/**/*.{ts,tsx}"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: providerModules,
+            message:
+              "A client component must not import the parser, its provider, or its configuration. Render the outcome the server produced instead.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -214,6 +337,9 @@ const eslintConfig = defineConfig([
   domainPurity,
   validationPurity,
   commandBoundary,
+  providerBoundary,
+  providerPurity,
+  chatBoundary,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -221,6 +347,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Tool state, and any git worktree nested inside the project. `.kilo/` is git-ignored, so
+    // it is never part of this project's source, and another session's worktree carries its
+    // own copy of the config and its own sources. Linting it from here applied this
+    // repository's rules to unrelated code.
+    ".kilo/**",
   ]),
 ]);
 
