@@ -414,7 +414,24 @@ const upperLayerModules = [
 // all but the command endpoint) and a second copy of these rules would be free to drift from the
 // first. The `@/lib/db` entry is new in this phase — the directory itself was previously only
 // refused as `@/lib/db/connection`, so a route could import the repositories it sits above.
-const appScopePatterns = [
+// Phase 9. The two modules that read rows a user would not want restated: a private entry and a
+// diary note. Each is the *only* reader of its table (ADR-052, ADR-056), which made the boundary a
+// convention held by two files rather than a rule — a third reader could have been added and
+// `npm run lint` would have stayed green.
+const privateReadModules = [
+  "@/features/habits/private-log",
+  "@/features/habits/diary",
+];
+
+const privateReadRule = {
+  group: privateReadModules,
+  message:
+    "A private entry and a diary note are read in one place each: the Habits page and the diary. Nothing else may import them, and least of all the Dashboard.",
+};
+
+// The rules that hold for every file in `src/app`, with no exception. The two readers above are
+// the only additions, and the files allowed to import them are covered by a later scope.
+const appScopeBase = [
   {
     group: storageModules,
     message:
@@ -431,6 +448,8 @@ const appScopePatterns = [
       "A route handler or a client component reaches data through a feature. It may not hold a repository itself.",
   },
 ];
+
+const appScopePatterns = [...appScopeBase, privateReadRule];
 
 const enforcedBoundaries = [
   {
@@ -543,6 +562,7 @@ const enforcedBoundaries = [
         "error",
         {
           patterns: [
+            privateReadRule,
             {
               group: persistenceModules,
               message:
@@ -722,6 +742,27 @@ const enforcedBoundaries = [
   },
 ];
 
+// The three files in `src/app` that are *supposed* to read a private entry or a diary note: the
+// Habits page, which is the private log's own page and the diary's own preview; the diary page; and
+// the route that writes one note back. Named rather than matched by pattern, because the boundary is
+// "these three and no others" — a fourth page importing either module is a mistake whatever it is
+// called. They are given the base rules through the same constants, so this is a narrowing of the
+// `src/app` scope rather than a hole in it.
+const diaryReaderScope = {
+  name: "hari-os/private-reader-scope",
+  // The note route's own path is written with `*` for the `[id]` segment: in a glob, `[id]` is a
+  // character class matching a single `i` or `d`, so the literal form would silently match
+  // nothing and the scope would be a no-op that looks like it works.
+  files: [
+    "src/app/habits/page.tsx",
+    "src/app/diary/page.tsx",
+    "src/app/api/photos/*/note/route.ts",
+  ],
+  rules: {
+    "no-restricted-imports": ["error", { patterns: appScopeBase }],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -734,6 +775,8 @@ const eslintConfig = defineConfig([
   chatBoundary,
   // Last, so these win for the scopes they cover. See ADR-046 before moving anything above.
   ...enforcedBoundaries,
+  // After the enforced scopes, because it is a narrowing of one of them rather than a new rule.
+  diaryReaderScope,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

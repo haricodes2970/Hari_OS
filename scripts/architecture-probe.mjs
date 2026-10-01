@@ -160,6 +160,38 @@ const CASES = [
     "@/lib/db/connection",
   ],
   ["src/app/diary/__probe.tsx", "src/app/diary/page.tsx", "node:fs"],
+  // Phase 9. The two readers are allowed by file, not by directory, so a probe file written beside
+  // either of them is *not* allowed — which is the property worth asserting, because a rule scoped
+  // to the directory would let the next file added to `src/app/diary` read private rows.
+  //
+  // The positive direction cannot be probed this way: a probe would have to be written at the exact
+  // path of the real reader, and this file does not overwrite source. It is asserted instead by
+  // `npm run lint` passing, which is only possible while the three named files are the exceptions.
+  [
+    "src/app/diary/__probe.tsx",
+    "src/app/diary/page.tsx",
+    "@/features/habits/private-log",
+  ],
+  [
+    "src/app/api/photos/__probe.ts",
+    "src/app/api/photos/[id]/note/route.ts",
+    "@/features/habits/private-log",
+  ],
+  [
+    "src/app/habits/__probe.tsx",
+    "src/app/habits/page.tsx",
+    "@/features/habits/diary",
+  ],
+  [
+    "src/app/diary/__probe.tsx",
+    "src/app/diary/page.tsx",
+    "@/features/habits/diary",
+  ],
+  [
+    "src/app/api/photos/__probe.ts",
+    "src/app/api/photos/[id]/note/route.ts",
+    "@/features/habits/diary",
+  ],
   [
     "src/app/diary/__probe.tsx",
     "src/app/diary/page.tsx",
@@ -374,16 +406,6 @@ const ALLOWED = [
     "src/features/habits/__probe_allowed.ts",
     "src/features/habits/diary.ts",
     "@/features/shared/command-runtime",
-  ],
-  [
-    "src/app/diary/__probe_allowed.tsx",
-    "src/app/diary/page.tsx",
-    "@/features/habits/diary",
-  ],
-  [
-    "src/app/api/photos/__probe_allowed.ts",
-    "src/app/api/photos/[id]/note/route.ts",
-    "@/features/habits/diary",
   ],
   [
     "src/features/routine/__probe_allowed.ts",
