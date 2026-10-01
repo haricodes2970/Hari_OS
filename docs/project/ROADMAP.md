@@ -71,12 +71,14 @@ for laundry, manually entered screen time, a private log that can produce no num
 photo path — laundry completion requires an uploaded picture, and the picture timeline is the Photo
 Diary.
 
-Phase 8 is **partial**. The photograph half shipped in Phase 7. What was added here is the other
+Phase 8 is **complete**. The photograph half shipped in Phase 7. What was added here is the other
 half of the PRD's sentence: `/diary` is the timeline of those photos with the user's own notes
 beside each one, editable and clearable in place, and `habit_log.photo_note` is where those words
-live (ADR-056). The phase document's PWA deliverables — installability, camera or file-picker
-access through the installed app, a manifest, a service worker, icons — are **not** done and still
-need a package choice recorded as an ADR.
+live (ADR-056). The phase document's PWA deliverables shipped in the same phase and needed no
+package: a generated manifest, five generated icons, a service worker that makes the application
+installable while intercepting nothing, and a camera input on the existing upload form (ADR-059).
+The client component required to register that worker also exposed two boundary gaps in `src/app`,
+now closed (ADR-060).
 
 **Phase 9 — Hardening.** Reliability, correction paths, empty states, and test coverage
 appropriate to what was actually built. See

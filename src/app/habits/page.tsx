@@ -188,9 +188,38 @@ export default async function HabitsPage({
         action="/api/photos"
         encType="multipart/form-data"
       >
+        {/*
+          Two inputs, one form, one endpoint.
+
+          The second carries `capture="environment"`, which is the native way to offer the camera:
+          on a phone it opens the rear camera, and the platform's own picker still lets the user
+          choose an existing picture. The first has no `capture`, so on a desktop — where the
+          attribute is ignored — nothing changes and the ordinary file dialog opens.
+
+          They are two inputs rather than one because `capture` is a hint, not a requirement, and a
+          browser that treats it as "camera only" would take away the file picker entirely. Naming
+          them differently (`photo` and `capture`) is also what lets both submit into one form
+          without either being `required`: a form where both were required could never be valid,
+          since no browser populates two file inputs from one choice.
+
+          Nothing here is a second upload path. Both post to `/api/photos` and are validated by the
+          same code: magic bytes decide the type, the server names the file, and the size limit is
+          the same. A camera capture is not trusted for being a camera capture.
+        */}
         <label className="field">
-          <span>Photo (JPEG, PNG, WebP, or GIF, up to {LIMIT_MB} MB)</span>
-          <input type="file" name="photo" accept="image/*" required />
+          <span>
+            Choose a photo (JPEG, PNG, WebP, or GIF, up to {LIMIT_MB} MB)
+          </span>
+          <input type="file" name="photo" accept="image/*" />
+        </label>
+        <label className="field">
+          <span>Or take one with the camera</span>
+          <input
+            type="file"
+            name="capture"
+            accept="image/*"
+            capture="environment"
+          />
         </label>
         {/*
           Optional, and worded as an optional. Phase 8: the thought usually arrives while the

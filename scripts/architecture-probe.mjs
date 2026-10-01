@@ -176,6 +176,42 @@ const CASES = [
     "node:fs",
   ],
 
+  // Phase 8. The service worker registration is the application's only client component, and a
+  // client component is the one place in this codebase that runs in the user's browser with no
+  // server involved. It therefore has to be held to the same rules as `src/components` — and
+  // stricter ones about the database, because a module that reaches `@/lib/db` from the browser
+  // fails at import rather than merely misbehaving. The probes are the ones that would catch that.
+  [
+    "src/app/__probe.tsx",
+    "src/app/service-worker-registration.tsx",
+    "@/lib/db",
+  ],
+  [
+    "src/app/__probe.tsx",
+    "src/app/service-worker-registration.tsx",
+    "@/lib/db/connection",
+  ],
+  [
+    "src/app/__probe.tsx",
+    "src/app/service-worker-registration.tsx",
+    "better-sqlite3",
+  ],
+  [
+    "src/app/__probe.tsx",
+    "src/app/service-worker-registration.tsx",
+    "@/lib/storage/photos",
+  ],
+  [
+    "src/app/__probe.tsx",
+    "src/app/service-worker-registration.tsx",
+    "@/commands/executor",
+  ],
+  [
+    "src/app/__probe.tsx",
+    "src/app/service-worker-registration.tsx",
+    "@/features/chat/openrouter",
+  ],
+
   // src/components — render and dispatch; no database, no filesystem, no provider.
   ["src/components/__probe.tsx", "src/components/Nav.tsx", "@/lib/db"],
   ["src/components/__probe.tsx", "src/components/Nav.tsx", "@/lib/storage"],
@@ -298,6 +334,15 @@ const ALLOWED = [
     "src/app/__probe_allowed.ts",
     "src/app/page.tsx",
     "@/features/dashboard/view",
+  ],
+  // Phase 8. The manifest route names icons that live in `public/` and reads nothing else, and the
+  // registration component imports React and nothing from the server. Both directions are asserted,
+  // because a rule that simply rejected everything would otherwise pass this file.
+  ["src/app/__probe_allowed.ts", "src/app/manifest.ts", "next"],
+  [
+    "src/app/__probe_allowed.tsx",
+    "src/app/service-worker-registration.tsx",
+    "react",
   ],
   // Phase 7. A feature may own a filesystem operation through `src/lib/storage` — that is the
   // only way a photo can be written, since `src/app` is forbidden from storage — while still being

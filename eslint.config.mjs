@@ -409,6 +409,29 @@ const upperLayerModules = [
   "@/commands/*",
 ];
 
+// Phase 8. Declared once, because `no-restricted-imports` does not merge pattern lists: the
+// `src/app` scope is expressed twice below (once for every file, once with the executor added for
+// all but the command endpoint) and a second copy of these rules would be free to drift from the
+// first. The `@/lib/db` entry is new in this phase — the directory itself was previously only
+// refused as `@/lib/db/connection`, so a route could import the repositories it sits above.
+const appScopePatterns = [
+  {
+    group: storageModules,
+    message:
+      "src/app holds no SQL and no driver. Read through a feature's view, or persist through the repositories a feature owns.",
+  },
+  {
+    group: ["@/features/chat/openrouter", "@/features/chat/config"],
+    message:
+      "The provider is reached through src/features/chat/runtime, which is the only module that reads a credential.",
+  },
+  {
+    group: ["@/lib/db"],
+    message:
+      "A route handler or a client component reaches data through a feature. It may not hold a repository itself.",
+  },
+];
+
 const enforcedBoundaries = [
   {
     name: "hari-os/domain-boundaries-enforced",
@@ -669,19 +692,28 @@ const enforcedBoundaries = [
     name: "hari-os/application-boundaries-enforced",
     files: ["src/app/**/*.{ts,tsx}"],
     rules: {
+      "no-restricted-imports": ["error", { patterns: appScopePatterns }],
+    },
+  },
+  {
+    // The same scope, plus the executor, for every route except the one whose job is executing
+    // commands. `no-restricted-imports` replaces its patterns rather than merging them, so this
+    // repeats the list through the shared constant instead of restating it, and the exception is
+    // scoped to one file rather than left implicit: a second route holding the executor would let
+    // a change happen outside the feature that owns it.
+    name: "hari-os/route-command-boundary",
+    files: ["src/app/**/*.{ts,tsx}"],
+    ignores: ["src/app/api/commands/route.ts"],
+    rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
+            ...appScopePatterns,
             {
-              group: storageModules,
+              group: ["@/commands/executor"],
               message:
-                "src/app holds no SQL and no driver. Read through a feature's view, or persist through the repositories a feature owns.",
-            },
-            {
-              group: ["@/features/chat/openrouter", "@/features/chat/config"],
-              message:
-                "The provider is reached through src/features/chat/runtime, which is the only module that reads a credential.",
+                "Only the command endpoint executes commands. Every other route hands a change to the feature that owns it.",
             },
           ],
         },

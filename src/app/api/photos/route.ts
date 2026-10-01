@@ -9,14 +9,19 @@
  *
  * ## What the request must contain
  *
- * A `multipart/form-data` body with one non-empty `photo` part, because a `<form>` can post a file
- * and a chat sentence cannot. An optional `day` is a **stated day reference** — "today",
+ * A `multipart/form-data` body with one non-empty file part, named `photo` (chosen from the
+ * device) or `capture` (taken with the camera), because a `<form>` can post a file and a chat
+ * sentence cannot. An optional `day` is a **stated day reference** — "today",
  * "tomorrow", "yesterday" — never a date, matching every other write path in the application, so
  * no client can name a calendar day it worked out for itself. Absent means today.
  *
  * An optional `note` is the user's own words about the picture, written at the moment they upload
  * it. It is validated before anything is written — see `storeLaundryPhoto` — so a note that cannot
  * be stored does not cost the user the photo they just chose.
+ *
+ * A camera capture is not a second, weaker path through this handler. `capture="environment"` is a
+ * browser hint about which UI to open; what arrives here is a `File`, and it is checked exactly
+ * like any other.
  *
  * ## Three answers, and why each is specific
  *
@@ -44,6 +49,19 @@ import { currentUtcDate } from "@/features/shared/command-runtime";
 export const dynamic = "force-dynamic";
 
 /**
+ * The field names a photo may arrive under.
+ *
+ * Two, because the upload form offers both: `photo` for a file chosen from the device and
+ * `capture` for one taken with the camera. They are read in that order and **both go through
+ * exactly the same validation** — the camera hint is a browser UI affordance and grants nothing, so
+ * a file that arrived as `capture` is held to the same magic-byte check, the same size limit, and
+ * the same server-chosen name as one that arrived as `photo`.
+ *
+ * One is enough, so a form posting neither is refused with the same message as before.
+ */
+const PHOTO_FIELDS = ["photo", "capture"] as const;
+
+/**
  * Reads the uploaded file.
  *
  * `form.get` returns `File | string | null`. Only a real `File` with content is accepted: a string
@@ -51,9 +69,15 @@ export const dynamic = "force-dynamic";
  * refused by the byte check with a vaguer message than "no photo was attached".
  */
 function readFile(form: FormData): File | null {
-  const entry = form.get("photo");
+  for (const field of PHOTO_FIELDS) {
+    const entry = form.get(field);
 
-  return entry instanceof File && entry.size > 0 ? entry : null;
+    if (entry instanceof File && entry.size > 0) {
+      return entry;
+    }
+  }
+
+  return null;
 }
 
 export async function POST(request: Request): Promise<NextResponse> {

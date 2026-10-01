@@ -18,6 +18,11 @@
  * check contrast or focus order, and it is not a substitute for looking at the page. What it
  * removes is the weaker claim: "the stylesheet looks like it should reflow".
  *
+ * Phase 8 added the PWA checks at the end: the manifest the browser actually parsed, the icons it
+ * found in it, and the service worker it registered with the scope the worker claims. Those are
+ * the parts of installability that a curl cannot show, because they are what *a browser* decided
+ * rather than what a server returned.
+ *
  * A browser is required. If none can be found the script fails loudly rather than reporting a
  * pass it did not earn.
  */
@@ -514,7 +519,136 @@ try {
     );
   }
 
-  page.close();
+  // ---------------------------------------------------------------------------
+  // Phase 8. The PWA, as a browser sees it rather than as a server returns it. The viewport has
+  // just been through three resizes, so this is the only place in the suite where a real browser
+  // has loaded the application; a manifest the browser rejects, an icon it cannot decode, and a
+  // worker that refuses to register all show up here and nowhere else.
+  await page.send("Emulation.setDeviceMetricsOverride", {
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 1,
+    mobile: true,
+  });
+  await page.send("Page.navigate", { url: `${base}/` });
+  await page.send("Runtime.evaluate", {
+    expression:
+      "new Promise((done) => document.readyState === 'complete' ? done(true) : addEventListener('load', () => done(true)))",
+    awaitPromise: true,
+  });
+
+  // Registration is asynchronous and only happens in a production build, which this is. Wait for
+  // it rather than sampling: a fixed sleep would pass or fail depending on the machine.
+  const registration = await page.evaluate(`(async () => {
+      const link = document.querySelector('link[rel="manifest"]');
+      let manifest = null;
+      let manifestError = null;
+      if (link !== null) {
+        try {
+          manifest = await (await fetch(link.getAttribute('href'))).json();
+        } catch (cause) {
+          manifestError = String(cause);
+        }
+      }
+      const registration = 'serviceWorker' in navigator
+        ? await navigator.serviceWorker.getRegistration()
+        : null;
+      return {
+        manifestHref: link === null ? null : link.getAttribute('href'),
+        manifest,
+        manifestError,
+        scope: registration === null ? null : registration.scope,
+        scriptURL: registration === null
+          ? null
+          : (registration.active ?? registration.installing ?? registration.waiting)?.scriptURL ?? null,
+        state: registration === null
+          ? null
+          : (registration.active ?? registration.installing ?? registration.waiting)?.state ?? null,
+      };
+    })()`);
+
+  assertEqual(
+    registration.manifestHref,
+    "/manifest.webmanifest",
+    "pwa: the document links a manifest, as the browser sees it",
+  );
+  assertEqual(
+    registration.manifest === null ? "not parsed" : "parsed",
+    "parsed",
+    "pwa: and the browser parses it as JSON rather than rejecting it",
+  );
+  assertEqual(
+    registration.manifest?.name,
+    "Hari OS",
+    "pwa: which names the application",
+  );
+  assert(
+    Array.isArray(registration.manifest?.icons) &&
+      registration.manifest.icons.length >= 2,
+    "pwa: and lists at least two icons",
+  );
+
+  for (const icon of registration.manifest?.icons ?? []) {
+    const response = await fetch(`${base}${icon.src}`);
+
+    assertEqual(
+      response.status,
+      200,
+      `pwa: ${icon.src} resolves to something the browser can fetch`,
+    );
+  }
+
+  assertEqual(
+    registration.scope,
+    `${base}/`,
+    "pwa: the service worker registered, with a scope of the whole origin",
+  );
+  assert(
+    registration.scriptURL !== null &&
+      new URL(registration.scriptURL).pathname === "/sw.js",
+    "pwa: and the script behind it is the one served from the root",
+  );
+  assertEqual(
+    registration.state,
+    "activated",
+    "pwa: and it reached the activated state rather than failing to install",
+  );
+
+  // The worker must not have changed anything about how the application is served, and the way to
+  // show that in a browser is to ask the browser's own storage: if anything had been cached, it
+  // would be in `caches` — including a page containing a diary note.
+  const caching = await page.evaluate(`(async () => {
+      const keys = await caches.keys();
+      const page = await fetch('/diary');
+      const body = await page.text();
+      return {
+        keys,
+        pageStatus: page.status,
+        noteVisible: body.includes('the blue towel is still in the wash'),
+        cachedDiary: (await caches.match('/diary')) !== undefined,
+      };
+    })()`);
+
+  assertEqual(
+    caching.keys.length,
+    0,
+    "pwa: the browser holds no cache at all, so no response of any kind was stored",
+  );
+  assertEqual(
+    caching.cachedDiary,
+    false,
+    "pwa: and nothing matching the diary was put into one",
+  );
+  assertEqual(
+    caching.pageStatus,
+    200,
+    "pwa: a page still reaches the server through the installed worker",
+  );
+  assertEqual(
+    caching.noteVisible,
+    true,
+    "pwa: and is the live one, not a stored copy: the note is in what the browser just received",
+  );
 } finally {
   // The diary image written above, removed before anything else is reported. Only files this run
   // created are touched: the user's own uploads are left exactly as they were found.

@@ -3,20 +3,34 @@
 **Authority for phase, micro-phase, and next action.** `ROADMAP.md` is the plan; this file is
 the state. Where they disagree, this file is correct.
 
-- **Current phase:** 8 — Photo and Diary. **Notes and the diary surface complete and verified.**
-  The PWA deliverables this phase document also lists — manifest, service worker, icons — are
-  **not** done and are not part of the work recorded below.
-- **Latest commit:** `961b4f4` — `feat(8): complete the photo diary`
+- **Current phase:** 8 — Photo and Diary. **Complete.** The diary, its notes, and the PWA half are
+  delivered and verified.
+- **Latest commit:** `961b4f4` — `feat(8): complete the photo diary` (the PWA half and the boundary
+  tightening are `pending commit` until they exist)
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none.
 
-## Phase 8 — Photo and Diary: the diary half complete
+## Phase 8 — Photo and Diary: complete
 
-`docs/phases/PHASE_08_PHOTO_DIARY.md` and `docs/sessions/2026-10-01-session-07.md` have the detail.
+`docs/phases/PHASE_08_PHOTO_DIARY.md` and the two 2026-10-01 session reports (07 and 08) have the
+detail.
 
 **What exists now.** A `/diary` page: every laundry photo newest first, with the user's own words
 beside each one, editable and clearable in place. The Habits upload takes an optional note in the
-same submission as the picture, so the thought and the photo are one moment.
+same submission as the picture, so the thought and the photo are one moment. The application
+installs: a generated manifest, five generated icons, a service worker that makes the application
+installable and intercepts nothing, and a camera input on the upload form.
+
+**No package was needed, and the phase document was wrong about that.** It said a PWA package was
+"likely required." The requirement is a manifest, icons, and a registered worker, all of which the
+platform provides, and the camera is an attribute on an input that already exists. The dependency was
+declined, and the worker deliberately caches nothing: a cached diary is a diary that can be wrong
+(ADR-059).
+
+**What the client component exposed.** Writing the first client component in this project showed that
+`src/app` refused `@/lib/db/connection` but not the `@/lib/db` directory, and refused the command
+executor nowhere. Both are now refused, with the command endpoint named as the one exception
+(ADR-060).
 
 **The question the phase document referred upward, answered.** A diary entry *is* the photo. One
 migration, `003_diary_note`, adds `habit_log.photo_note`; no table was created, because two tables
@@ -30,8 +44,9 @@ yourself" is a weaker guarantee than not routing the words through an interprete
 nothing to leak. A note requires a real photo. An entry's id stays with its entry, so a stale page
 cannot write a note onto another day's picture (ADR-058).
 
-**What this phase did not do.** The phase document's PWA items — installability, camera access, a
-service worker — are untouched. `docs/phases/PHASE_08_PHOTO_DIARY.md` still carries them.
+**What this phase did not do.** It did not add an offline mode, an install prompt inside the
+application, or a cache. Those are recorded decisions in ADR-059 rather than gaps, so a later phase
+does not read the absence as work left undone.
 
 ## Phase 7 — Skills and Habits: complete
 
@@ -128,18 +143,14 @@ cards state that they are unavailable. No skill, habit, photo, or log is fabrica
 | 5 — Dashboard | **Complete** | `a87210c` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
 | 6 — Routine + Sleep | **Complete** | `015aa38` | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
 | 7 — Skills + Habits | **Complete** | `16d51d2` | Full replacement list, neutral streaks, laundry photo proof, screen time, private log, Photo Diary |
-| 8 — Photo + Diary | **Partial** | `961b4f4` | Diary notes and the `/diary` timeline delivered; the phase document's PWA deliverables are not |
+| 8 — Photo + Diary | **Complete** | `961b4f4` | Diary notes and the `/diary` timeline, then installability with no new dependency and no cache (ADR-056–060) |
 | 9 — Hardening | Not started | — | |
 
 ## Next action
 
-Phase 8's remaining deliverables, if the user wants them: the PWA side of
-`docs/phases/PHASE_08_PHOTO_DIARY.md` — installability, camera or file-picker access through the
-installed app, a manifest, a service worker, and icons. That needs a package choice recorded as an
-ADR first (the phase document says so, and ADR-003 deliberately added no PWA package in Phase 0).
-Nothing in the note-and-timeline work depends on it.
-
-Phase 9 remains unstarted.
+Phase 8 is closed. The next step is Phase 9 (Hardening), and nothing in it has been started:
+`docs/phases/PHASE_09_HARDENING.md` is still the plan it was before this phase. Whether to begin it
+is the user's call.
 
 ## Open items carried forward
 
@@ -148,8 +159,11 @@ Phase 9 remains unstarted.
 - **Batch expense entry.** The PRD contradicts itself; Phase 2's one-sentence-one-command ADR
   stands.
 - **The baseline database fingerprint discrepancy** recorded in 1.5 remains unexplained.
-- **Phase 8's PWA half.** The diary and its notes are done; installability, camera access, a
-  manifest, and a service worker are not, and adding a PWA package requires an ADR (ADR-003).
+- **Installing the application on a real device was never exercised.** A headless machine cannot
+  raise `beforeinstallprompt`, and a camera cannot be opened in one. What is verified is everything
+  observable from outside a browser — manifest served and parsed, every icon resolving, the worker
+  served from the root, registering and activating with the origin's scope, and the `capture`
+  attribute on the form. The last mile is a phone test the user has not yet done (ADR-059).
 - **A diary entry for anything other than laundry.** `habit_log.photo_url` is still the only column
   that can hold a picture, so the V1 diary remains the timeline of laundry photos (ADR-056).
 - **PRD-versus-roadmap scope divergence** in `ROADMAP.md` is unresolved and is the user's call.

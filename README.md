@@ -110,21 +110,24 @@ tooling. V1 has no deployment, so there is nothing to point it at in production.
 | `npm run routine:test`   | The Routine slice                           |
 | `npm run skills:test`    | Skills, habits, the private log, and photos |
 | `npm run diary:test`     | The diary: notes, the timeline, and privacy |
+| `npm run pwa:test`       | The manifest, the icons, and the worker     |
 
 Four acceptance runs serve a production build over HTTP on a disposable database, so run
 `npm run build` first:
 
-| Script                     | Purpose                                       |
-| -------------------------- | --------------------------------------------- |
-| `npm run dashboard:accept` | The Dashboard over HTTP                       |
-| `npm run routine:accept`   | The Routine page over HTTP                    |
-| `npm run skills:accept`    | The Habits and Skills pages, and photo upload |
-| `npm run diary:accept`     | The diary page and the note path over HTTP    |
+| Script                     | Purpose                                        |
+| -------------------------- | ---------------------------------------------- |
+| `npm run dashboard:accept` | The Dashboard over HTTP                        |
+| `npm run routine:accept`   | The Routine page over HTTP                     |
+| `npm run skills:accept`    | The Habits and Skills pages, and photo upload  |
+| `npm run diary:accept`     | The diary page and the note path over HTTP     |
+| `npm run pwa:accept`       | The manifest, the icons, and the worker served |
 
 | Script                       | Purpose                                       |
 | ---------------------------- | --------------------------------------------- |
 | `npm run responsive:check`   | Navigation and layout at 320, 390, and 1440px |
 | `npm run architecture:probe` | The layer-boundary lint rules still fire      |
+| `npm run icons`              | Regenerate the five PWA icons from code       |
 
 ## Documentation
 
