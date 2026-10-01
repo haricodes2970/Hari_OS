@@ -6,7 +6,7 @@ the state. Where they disagree, this file is correct.
 - **Current phase:** 8 — Photo and Diary. **Notes and the diary surface complete and verified.**
   The PWA deliverables this phase document also lists — manifest, service worker, icons — are
   **not** done and are not part of the work recorded below.
-- **Latest commit:** `pending commit` — the Phase 8 implementation, once it exists
+- **Latest commit:** `961b4f4` — `feat(8): complete the photo diary`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none.
 
@@ -128,7 +128,7 @@ cards state that they are unavailable. No skill, habit, photo, or log is fabrica
 | 5 — Dashboard | **Complete** | `a87210c` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
 | 6 — Routine + Sleep | **Complete** | `015aa38` | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
 | 7 — Skills + Habits | **Complete** | `16d51d2` | Full replacement list, neutral streaks, laundry photo proof, screen time, private log, Photo Diary |
-| 8 — Photo + Diary | **Partial** | `pending commit` | Diary notes and the `/diary` timeline delivered; the phase document's PWA deliverables are not |
+| 8 — Photo + Diary | **Partial** | `961b4f4` | Diary notes and the `/diary` timeline delivered; the phase document's PWA deliverables are not |
 | 9 — Hardening | Not started | — | |
 
 ## Next action
