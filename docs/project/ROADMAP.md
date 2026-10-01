@@ -15,8 +15,8 @@ live state. If the two ever disagree, `PROJECT_STATUS.md` is correct.
 | 5 | Dashboard | **Complete** |
 | 6 | Routine + Sleep | **Complete** |
 | 7 | Skills + Habits | **Complete** |
-| 8 | Photo + Diary | **Partial** — diary delivered, PWA not |
-| 9 | Hardening | Planned |
+| 8 | Photo + Diary | **Partial** — diary delivered, installability delivered, never device-tested |
+| 9 | Hardening | **Complete** |
 
 ## Phase summaries
 
@@ -80,8 +80,15 @@ installable while intercepting nothing, and a camera input on the existing uploa
 The client component required to register that worker also exposed two boundary gaps in `src/app`,
 now closed (ADR-060).
 
-**Phase 9 — Hardening.** Reliability, correction paths, empty states, and test coverage
-appropriate to what was actually built. See
+**Phase 9 — Hardening (complete).** Eleven defects found by reading each module against the
+claim it was supposed to satisfy, all fixed and all covered: a return path a browser could
+leave the origin from, private diary text being serialised into command responses, a locked
+database reporting a raw SQLite error, an oversized upload body read before being refused,
+a lenient id parse in a correction path, a malformed note form that cleared the note, and
+four more. The private read boundary is now enforced in lint (ADR-061), and
+`regression:test` follows each fact through every layer it must cross — the one thing
+fourteen single-layer suites could not ask. One scope correction: the phase document asked
+for offline operation, which conflicts with ADR-059. ADR-059 wins. See
 [`phases/PHASE_09_HARDENING.md`](../phases/PHASE_09_HARDENING.md).
 
 ## Sequencing note

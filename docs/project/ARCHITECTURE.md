@@ -84,7 +84,7 @@ Concretely:
 
 ### What is enforced today
 
-Two rules cover this, both of which fail `npm run lint`:
+Six rules cover this, all of which fail `npm run lint`:
 
 - `hari-os/boundaries` applies to `src/domain` and `src/components`, and blocks imports of
   `@/lib/db`, `@/lib/storage`, and `@/commands` (section 4).
@@ -100,10 +100,25 @@ Two rules cover this, both of which fail `npm run lint`:
   `@/lib/db/migrations`, and `@/lib/db/schema`. It permits `src/domain` (section 4) and
   `@/lib/db/repositories`, so the executor can coordinate repositories without performing
   persistence (ADR-035).
+- **The private read boundary** applies to `src/app` and `src/features`, and blocks the
+  private-log and diary modules except for the pages that display them, the diary note
+  route, and the tests. The PRD requires a private entry to be neutral and unaggregated,
+  which is a property of what the application computes, so it is enforced the same way as
+  any other invariant here rather than left to review (ADR-061).
+- **The `src/app` server scope and the executor holder**, from ADR-060: `src/app` refuses
+  `@/lib/db` as a directory, and every file in it refuses `@/commands/executor` except
+  `src/app/api/commands/route.ts`, named explicitly.
 
-All four cost no extra dependency and turn the rules into build failures rather than code
+All six cost no extra dependency and turn the rules into build failures rather than code
 review comments. Each was verified with probe files that were then deleted: violations were
 reported, and legitimate imports from `app/`, `features/`, and `commands/` were not flagged.
+
+**One caveat that has already cost time.** ESLint's `no-restricted-imports` *replaces* its
+pattern list rather than merging it, so adding a second config object with only a new pattern
+would silently remove every existing rule from every file it matched. The `src/app` scopes
+therefore share one constant rather than repeating their patterns, so the two expressions
+cannot drift (ADR-060, ADR-061). ESLint 9.39 has no `overrides` key on that rule, so a
+merging approach is not available at all.
 
 ## 5. SQLite access
 
@@ -490,6 +505,7 @@ present means anything can use it yet.
 | `src/lib/db/schema.ts` | The expected V1 schema, declared independently of the migration SQL |
 | `scripts/db-check.mjs` | `npm run db:check` — applies migrations, then verifies the live schema |
 | `scripts/schema-test.mjs` | `npm run db:test` — isolated constraint and migration tests |
+| `scripts/regression-test.mjs` | `npm run regression:test` — each fact followed through every layer it must cross |
 
 `migrations.ts` holds SQL in TypeScript rather than in `.sql` files so migrations are part of
 the module graph instead of a runtime filesystem read. This keeps the mechanism working

@@ -1694,3 +1694,57 @@ than excluded by a broad pattern.
   and a probe now asserts each of those refusals for
   `src/app/service-worker-registration.tsx` — the file whose existence made the gap visible.
 - The command endpoint is unchanged: it still holds the executor, and `npm run lint` still passes.
+
+## ADR-061 — A read model that carries private text is a defect, and the lint rule is what makes it one
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 9
+
+**Context.** Phase 7 built three readers of the same tables: `readHabits` for the Habits page,
+`readDiary` for the photo diary, and `readPrivateLog` for the private log. Each was correct about
+the table it named. Together they were not correct about the project.
+
+**The habit row carried a diary note.** `TodayEntry` was assembled from the whole `habit_log` row,
+which has a `note` column, so the Habits read model returned a field nothing on that page renders.
+The command endpoint then returned the executor's full `HabitLog` value, note included, in the JSON
+response of every habit and private command. The note was never displayed, but it was serialised,
+serialisable, and present in a response a browser could log, a devtools panel could show, and any
+middlebox could cache. "We do not render it" is a claim about a page; the defect was in a type.
+
+**The boundary was a convention.** Five files could read private or diary text, and the list lived
+only in the head of the person who wrote them. Nothing failed when a sixth file joined it. The PRD
+requires a private entry to be neutral and unaggregated, which is a property of what the
+application *computes*, so it deserves the same enforcement as any other invariant in this project.
+
+**Alternatives considered.**
+
+- **Delete the note column from `habit_log`.** Rejected: ADR-057 and ADR-056 put the note there
+  deliberately, and a diary entry that is not a photo is still a diary entry. The column is right;
+  the projection was wrong.
+- **Rename the field to something clearly unused.** Rejected: it leaves the data in the response
+  and relies on the next reader knowing the convention. A type that has no field cannot leak one.
+- **Document the reader list.** Rejected on its own — it was tried, in effect, for two phases, and
+  the leak survived it. Documentation of an invariant that is mechanically checkable is worse than
+  the check, because it reads like one.
+- **Restrict every non-diary reader from the `note` column entirely.** Rejected: it would forbid
+  the note route from writing it, which is where it belongs.
+
+**Decision.** `HabitCommandView` is the only habit type the command layer returns, built by
+`habitCommandView()`, which cannot express a note. `TodayEntry` no longer has a note field, so
+there is nothing for the Habits page to leak even by accident.
+
+The read boundary is enforced in `eslint.config.mjs` as a shared constant applied to `src/app` and
+`src/features`: the private-log and diary modules may not be imported except by the page that
+displays them, the diary API route, and the tests. As ADR-060 records, `no-restricted-imports`
+replaces its pattern list rather than merging it, so a second config object carrying only the new
+pattern would have *removed* every existing rule. The patterns are extracted into one shared
+constant so the two expressions cannot drift. ESLint 9.39's rule schema has no `overrides` key, so
+a merging approach is not available at all.
+
+**Consequences.**
+
+- A habit or private command's response cannot contain a diary note, because the type returned has
+  no field to put one in.
+- Adding a sixth reader of private or diary text fails `npm run lint` rather than passing review.
+- The two lint scopes share one constant, so neither can lose rules the other has.
+- The private log remains free of any count, streak, or score, and the command contract still has
+  no field in which a model could state one.

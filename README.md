@@ -86,31 +86,32 @@ tooling. V1 has no deployment, so there is nothing to point it at in production.
 
 ## Scripts
 
-| Script                   | Purpose                                     |
-| ------------------------ | ------------------------------------------- |
-| `npm run dev`            | Start the development server                |
-| `npm run build`          | Production build                            |
-| `npm run start`          | Serve the production build                  |
-| `npm run lint`           | ESLint                                      |
-| `npm run typecheck`      | TypeScript check, no emit                   |
-| `npm run format`         | Format files with Prettier                  |
-| `npm run format:check`   | Verify formatting, no writes                |
-| `npm run db:check`       | Verify the local SQLite setup               |
-| `npm run db:setup`       | Create first-run accounts and example stock |
-| `npm run db:test`        | Schema tests on temporary databases         |
-| `npm run domain:test`    | Pure domain rules, in memory                |
-| `npm run contract:test`  | Command validation                          |
-| `npm run exec:test`      | Execution against real SQLite               |
-| `npm run app:test`       | Form translation through to persisted state |
-| `npm run parser:test`    | The parser prompt against real sentences    |
-| `npm run chat:test`      | Chat surface wording                        |
-| `npm run kitchen:test`   | The Kitchen slice                           |
-| `npm run expenses:test`  | The Expenses slice                          |
-| `npm run dashboard:test` | The Dashboard read model                    |
-| `npm run routine:test`   | The Routine slice                           |
-| `npm run skills:test`    | Skills, habits, the private log, and photos |
-| `npm run diary:test`     | The diary: notes, the timeline, and privacy |
-| `npm run pwa:test`       | The manifest, the icons, and the worker     |
+| Script                    | Purpose                                     |
+| ------------------------- | ------------------------------------------- |
+| `npm run dev`             | Start the development server                |
+| `npm run build`           | Production build                            |
+| `npm run start`           | Serve the production build                  |
+| `npm run lint`            | ESLint                                      |
+| `npm run typecheck`       | TypeScript check, no emit                   |
+| `npm run format`          | Format files with Prettier                  |
+| `npm run format:check`    | Verify formatting, no writes                |
+| `npm run db:check`        | Verify the local SQLite setup               |
+| `npm run db:setup`        | Create first-run accounts and example stock |
+| `npm run db:test`         | Schema tests on temporary databases         |
+| `npm run domain:test`     | Pure domain rules, in memory                |
+| `npm run contract:test`   | Command validation                          |
+| `npm run exec:test`       | Execution against real SQLite               |
+| `npm run app:test`        | Form translation through to persisted state |
+| `npm run parser:test`     | The parser prompt against real sentences    |
+| `npm run chat:test`       | Chat surface wording                        |
+| `npm run kitchen:test`    | The Kitchen slice                           |
+| `npm run expenses:test`   | The Expenses slice                          |
+| `npm run dashboard:test`  | The Dashboard read model                    |
+| `npm run routine:test`    | The Routine slice                           |
+| `npm run skills:test`     | Skills, habits, the private log, and photos |
+| `npm run diary:test`      | The diary: notes, the timeline, and privacy |
+| `npm run pwa:test`        | The manifest, the icons, and the worker     |
+| `npm run regression:test` | Each fact, through every layer it crosses   |
 
 Four acceptance runs serve a production build over HTTP on a disposable database, so run
 `npm run build` first:

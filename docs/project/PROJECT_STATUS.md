@@ -3,11 +3,36 @@
 **Authority for phase, micro-phase, and next action.** `ROADMAP.md` is the plan; this file is
 the state. Where they disagree, this file is correct.
 
-- **Current phase:** 8 — Photo and Diary. **Complete.** The diary, its notes, and the PWA half are
-  delivered and verified.
-- **Latest commit:** `865c015` — `feat(8): complete pwa photo diary`
+- **Current phase:** 9 — Hardening. **Complete.** Phases 1–8 are delivered; Phase 9 hardened the
+  paths between them and added the cross-module regression suite.
+- **Latest commit:** `237d464` — `test(9): follow each fact through every layer it must cross`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none.
+
+## Phase 9 — Hardening: complete
+
+`docs/phases/PHASE_09_HARDENING.md` and `docs/sessions/2026-10-01-session-09.md` have the full
+record. Eleven defects were found by reading each module against the claim it was supposed to
+satisfy; all eleven are fixed and each has a regression test.
+
+Three are worth naming here:
+
+- **Private diary text was being serialised.** The Habits read model carried a `note` field no page
+  renders, and the command endpoint returned it in every habit response. `HabitCommandView` now has
+  no field a note could occupy, and lint refuses a new reader of private or diary text (ADR-061).
+- **A locked database produced a raw SQLite error** rather than telling the user nothing was saved.
+  Now a 5s busy timeout and a human message that states what happened.
+- **`9e90b4d` did not typecheck from a clean checkout.** It committed three callers of
+  `outcomeRedirect` without the function. Fixed in `9467ac8`, confirmed by reverting the file and
+  watching `tsc` fail.
+
+One scope correction, made before any code: the phase document asked for offline operation, which
+conflicts with ADR-059. ADR-059 wins — offline is not product scope — and what was verified instead
+is that no code path reaches the network for anything it did not choose to.
+
+**1,879 assertions across fifteen suites, 0 failures.** The new `regression:test` suite is what was
+missing: fourteen suites each test one layer against the one below, and none asked whether a change
+made by one module is visible, and correct, in a module with no other way of knowing it happened.
 
 ## Phase 8 — Photo and Diary: complete
 
@@ -143,13 +168,20 @@ cards state that they are unavailable. No skill, habit, photo, or log is fabrica
 | 6 — Routine + Sleep | **Complete** | `015aa38` | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
 | 7 — Skills + Habits | **Complete** | `16d51d2` | Full replacement list, neutral streaks, laundry photo proof, screen time, private log, Photo Diary |
 | 8 — Photo + Diary | **Complete** | `961b4f4` | Diary notes and the `/diary` timeline, then installability with no new dependency and no cache (ADR-056–060) |
-| 9 — Hardening | Not started | — | |
+| 9 — Hardening | **Complete** | `237d464` | Eleven defects found and fixed across the module boundaries, the private read boundary enforced in lint (ADR-061), and a cross-module regression suite |
 
 ## Next action
 
-Phase 8 is closed. The next step is Phase 9 (Hardening), and nothing in it has been started:
-`docs/phases/PHASE_09_HARDENING.md` is still the plan it was before this phase. Whether to begin it
-is the user's call.
+Phases 1 through 9 are complete. There is no phase 10 in `ROADMAP.md`, and Phase 9 was the last
+item on it. What exists now is a complete, verified V1 running on localhost.
+
+The next step is the user's. The open items below each name a decision only they can make, and the
+one that blocks the most is the **PRD-versus-roadmap scope divergence**, which is unresolved.
+
+Two things Phase 9 explicitly did not do, and did not claim: a fresh clone was not installed,
+built, and run from scratch in a clean directory, and the application has still never been
+installed on a real device or made a live OpenRouter call. Both are noted in the session report
+rather than left implied.
 
 ## Open items carried forward
 
