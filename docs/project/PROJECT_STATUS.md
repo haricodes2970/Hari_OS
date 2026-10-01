@@ -50,7 +50,7 @@ database, and the repository audit. Nothing was added. Detail in
 | 1.3 — Validation and structured command contract | `5578457` | Complete | Yes |
 | 1.4 — Command execution foundation | `0d94aad` | Complete | Yes |
 | 1.5 — First real vertical slice | `6f95885` | Complete | Yes |
-| 1.6 — Phase 1 foundation verification and closeout | pending commit | Complete | Yes |
+| 1.6 — Phase 1 foundation verification and closeout | `946d807` | Complete | Yes |
 
 ## Active Work
 
@@ -238,7 +238,7 @@ infrastructure.
 
 ## Latest Commit
 
-`pending commit` — `docs(1.6): close phase 1 foundation`
+`946d807` — `docs(1.6): close phase 1 foundation`
 
 ## Next Action
 
