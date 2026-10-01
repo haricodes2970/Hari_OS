@@ -49,7 +49,7 @@ rather than building the missing modules to fill the screen.
 
 ## What was built
 
-Delivered as one unit in `pending commit` — `feat(5): complete dashboard`. Full detail in
+Delivered as one unit in `a87210c` — `feat(5): complete dashboard`. Full detail in
 `docs/sessions/2026-10-01-session-04.md`.
 
 ```

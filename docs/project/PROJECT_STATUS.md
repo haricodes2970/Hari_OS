@@ -4,7 +4,7 @@
 the state. Where they disagree, this file is correct.
 
 - **Current phase:** 5 — Dashboard. **Complete and verified.**
-- **Latest commit:** `pending commit`
+- **Latest commit:** `a87210c` — `feat(5): complete dashboard`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none. One documented discrepancy is open and is the user's call: `ARCHITECTURE.md`
   section 15 says a low-stock threshold of zero is refused; the code accepts it and flags the
@@ -46,7 +46,7 @@ warnings. The development database is byte-identical (SHA-256
 | 2 — Command engine | Complete | — | Parser, validator, executor pipeline, OpenRouter boundary, shared input |
 | 3 — Kitchen | Complete | `da9a89c` | Inventory, thresholds, history, correction/reversal, Dashboard integration |
 | 4 — Expenses | Complete | `71ac329` | Accounts, natural-language expense entry, daily bill, Dashboard integration |
-| 5 — Dashboard | **Complete** | `pending commit` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
+| 5 — Dashboard | **Complete** | `a87210c` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
 | 6 — Routine + Sleep | **Not started** | — | `plan_task` is read by the Dashboard; nothing writes it |
 | 7 — Skills + Habits | **Not started** | — | `skill` and `habit_log` are read; nothing writes them |
 | 8 — Photo + Diary | Not started | — | |
