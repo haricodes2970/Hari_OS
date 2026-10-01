@@ -139,7 +139,7 @@ const { readSkills } = await import("../src/features/skills/view.ts");
 const { readHabits } = await import("../src/features/habits/view.ts");
 const { readPrivateLog } =
   await import("../src/features/habits/private-log.ts");
-const { storeLaundryPhoto, loadPhoto, photoUrl } =
+const { storeLaundryPhoto, loadPhoto, photoUrl, bodyExceedsPhotoLimit } =
   await import("../src/features/habits/photos.ts");
 const { savePhoto, readPhoto, deletePhoto, photoPath } =
   await import("../src/lib/storage/photos.ts");
@@ -686,6 +686,28 @@ assertEqual(
   before + 2,
   "16. and no refused upload left a file behind",
 );
+
+// Phase 9: the same limit, refused from the declared body length. The rule above is applied to the
+// file's own bytes, which is the real one; this is what stops a body announcing itself as far too
+// large from being read into memory first. An absent or unparseable header is not decided here,
+// because a header is a claim and the real check still runs either way.
+assert(
+  bodyExceedsPhotoLimit(`${10 * 1024 * 1024 + 64 * 1024 + 1}`),
+  "16. a body declaring more than the limit plus form overhead is refused unread",
+);
+assert(
+  !bodyExceedsPhotoLimit(`${10 * 1024 * 1024 + 1024}`),
+  "16. a real upload's declared size is within the limit plus the overhead",
+);
+assert(
+  !bodyExceedsPhotoLimit("0"),
+  "16. an empty declaration is not treated as a large one",
+);
+assert(
+  !bodyExceedsPhotoLimit(null),
+  "16. and an absent length is not decided here, because the real check still runs",
+);
+assert(!bodyExceedsPhotoLimit("not a number"), "16. nor is an unparseable one");
 
 // --- storing a photo against a day ----------------------------------------
 

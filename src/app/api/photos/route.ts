@@ -40,7 +40,10 @@
 import { NextResponse } from "next/server";
 
 import { isDayReference, resolveDayReference } from "@/domain/routine";
-import { storeLaundryPhoto } from "@/features/habits/photos";
+import {
+  bodyExceedsPhotoLimit,
+  storeLaundryPhoto,
+} from "@/features/habits/photos";
 import { isSameOriginRequest } from "@/features/shared/same-origin";
 
 import { currentUtcDate } from "@/features/shared/command-runtime";
@@ -85,6 +88,19 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(
       { error: "Cross-origin submissions are not accepted." },
       { status: 403 },
+    );
+  }
+
+  // Refused from the declared length, before anything is buffered. The real limit is still enforced
+  // on the file's own bytes below; this only means a body that announces itself as far too large is
+  // not read into memory to be refused afterwards.
+  if (bodyExceedsPhotoLimit(request.headers.get("content-length"))) {
+    return NextResponse.json(
+      {
+        error: "That upload is over the 10 MB limit. Try a smaller one.",
+        token: "photo_too_large",
+      },
+      { status: 413 },
     );
   }
 
@@ -163,9 +179,20 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!stored.ok) {
     // A size refusal is 413 because that is what it is, and the page distinguishes "too large"
     // from "not an image" by status rather than by reading prose.
+    //
+    // `photo_required` from this function means the picture arrived and the row could not be
+    // written — a locked database, a failed write — so it is a 500 and not a 400. Reporting it as
+    // a bad request told the user to upload the photo they had just uploaded.
     return NextResponse.json(
       { error: stored.error.message, token: stored.error.code },
-      { status: stored.error.code === "photo_too_large" ? 413 : 400 },
+      {
+        status:
+          stored.error.code === "photo_too_large"
+            ? 413
+            : stored.error.code === "photo_required"
+              ? 500
+              : 400,
+      },
     );
   }
 

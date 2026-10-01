@@ -277,3 +277,36 @@ function contentTypeFor(filename: string): string {
 
 /** The size limit, exposed so the page can say it before an upload is attempted. */
 export const PHOTO_LIMIT_BYTES = MAX_PHOTO_BYTES;
+
+/**
+ * How much larger than the file limit a request body may be before it is refused unread.
+ *
+ * A `multipart/form-data` body carries the file plus a boundary, the field names, and the note, so
+ * its length is always a little more than the file's. The slack is generous enough that no real
+ * upload trips it and small enough to be worth having at all.
+ */
+export const UPLOAD_BODY_SLACK_BYTES = 64 * 1024;
+
+/**
+ * Whether a declared body length is already too large to read.
+ *
+ * Phase 9. The 10 MB rule was applied to the file *after* `formData()` had buffered the whole
+ * request, so a caller could put an arbitrarily large body in memory by declaring nothing about it
+ * and being refused afterwards. `Content-Length` is a claim, not a promise — a caller may lie or
+ * omit it — so this is a cheap refusal in front of the real check, not a replacement for it: an
+ * absent or unparseable header is not "allowed", it is simply not decided here, and the limit is
+ * still enforced on the bytes themselves.
+ */
+export function bodyExceedsPhotoLimit(contentLength: string | null): boolean {
+  if (contentLength === null) {
+    return false;
+  }
+
+  const declared = Number(contentLength);
+
+  if (!Number.isSafeInteger(declared) || declared < 0) {
+    return false;
+  }
+
+  return declared > MAX_PHOTO_BYTES + UPLOAD_BODY_SLACK_BYTES;
+}
