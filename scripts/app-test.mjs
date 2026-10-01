@@ -309,6 +309,34 @@ assertEqual(
   "an absent return path falls back to a safe default",
 );
 
+// Phase 9. The three cases below each start with a slash, so the previous rule — "starts with a
+// slash and is not protocol-relative" — accepted every one of them, and each resolves to another
+// site in a real browser. They are asserted by resolution rather than by pattern, because the
+// pattern is what was wrong: what matters is where the browser would send the user.
+for (const [candidate, description] of [
+  ["/\\evil.example/steal", "a backslash, which WHATWG treats as a slash"],
+  ["/\t/evil.example/steal", "a tab, which URL parsing strips"],
+  ["/\n//evil.example", "a newline, which joins two segments"],
+  ["/\u0000/evil.example", "a NUL byte"],
+]) {
+  const resolved = safeReturnPath(candidate);
+  const origin = new URL(resolved, "http://localhost:3111").origin;
+
+  assertEqual(
+    origin,
+    "http://localhost:3111",
+    `${description} cannot move the redirect off this origin (candidate ${JSON.stringify(
+      candidate,
+    )})`,
+  );
+}
+
+assertEqual(
+  safeReturnPath("/habits?err=invalid_quantity"),
+  "/habits?err=invalid_quantity",
+  "and a same-site path with a query is still kept, so the fix is not a blanket refusal",
+);
+
 // ---------------------------------------------------------------------------
 // The vertical slice, end to end
 // ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ import { NextResponse } from "next/server";
 import type { ChatResult } from "@/features/chat/presentation";
 import { describeChatResult } from "@/features/chat/presentation";
 import { getChatEngine } from "@/features/chat/runtime";
+import { safeReturnPath } from "@/features/shared/command-form";
 import { isSameOriginRequest } from "@/features/shared/same-origin";
 
 /** Per request; the engine holds a provider client, not request state. */
@@ -45,15 +46,6 @@ function text(form: FormData, name: string): string {
   const value = form.get(name);
 
   return typeof value === "string" ? value : "";
-}
-
-/**
- * Only same-site paths, for the same reason as the structured endpoint: a redirect that can be
- * pointed anywhere would turn this into a phishing primitive. One leading slash, never a
- * protocol-relative `//host`.
- */
-function safeReturnPath(candidate: string): string {
-  return /^\/(?!\/)/.test(candidate) ? candidate : DEFAULT_ORIGIN;
 }
 
 /**
@@ -125,7 +117,11 @@ async function readSentence(
     const sentence = typeof body.text === "string" ? body.text : "";
     const next = typeof body.next === "string" ? body.next : "";
 
-    return { sentence, returnTo: safeReturnPath(next), malformed: false };
+    return {
+      sentence,
+      returnTo: safeReturnPath(next, DEFAULT_ORIGIN),
+      malformed: false,
+    };
   }
 
   const form = await request.formData().catch(() => null);
@@ -136,7 +132,7 @@ async function readSentence(
 
   return {
     sentence: text(form, "text"),
-    returnTo: safeReturnPath(text(form, "next")),
+    returnTo: safeReturnPath(text(form, "next"), DEFAULT_ORIGIN),
     malformed: false,
   };
 }

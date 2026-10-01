@@ -178,12 +178,50 @@ export function formToCommand(form: FormData): Record<string, unknown> {
 export const DEFAULT_RETURN_PATH = "/kitchen";
 
 /**
+ * A base the candidate is resolved against, so the check is about what the browser would do
+ * rather than about what the string looks like. Nothing is ever fetched from it.
+ */
+const RETURN_PATH_BASE = "http://hari-os.invalid";
+
+/**
+ * Characters that change how a browser parses a `Location`, whatever the string looks like.
+ *
+ * A backslash is the one that matters: WHATWG URL treats `\` as `/` in a special scheme, so
+ * `/\evil.example` is a protocol-relative URL wearing a leading slash. A control character is the
+ * other: tabs and newlines are *stripped* during parsing, so `/\t/evil.example` collapses to
+ * `//evil.example`. Both defeat a check that only asks whether the first character is a slash.
+ */
+const UNSAFE_IN_A_PATH = /[\\\u0000-\u001f\u007f]/u;
+
+/**
  * Only same-site paths.
  *
  * An open redirect on an app that renders messages a user trusts would be a real, if modest,
- * phishing primitive, and the fix is one test: a single leading slash, never a
- * protocol-relative `//host`, and never an absolute URL.
+ * phishing primitive. The rule is therefore not "starts with a slash" — that was the previous rule,
+ * and Phase 9 found it defeatable — but the property that actually matters: **the candidate, resolved
+ * as a browser would resolve it, must still be on this site.**
+ *
+ * Reachability is limited and the limit is worth stating: every route that reads `next` is guarded
+ * by `isSameOriginRequest`, and no page puts a caller-supplied value into the field — `returnTo` is
+ * a literal on every form. So this is defence in depth rather than a live hole, and it is fixed
+ * because a security helper whose comment promises a guarantee it does not provide is worse than
+ * one that is absent.
  */
-export function safeReturnPath(candidate: string): string {
-  return /^\/(?!\/)/.test(candidate) ? candidate : DEFAULT_RETURN_PATH;
+export function safeReturnPath(
+  candidate: string,
+  fallback: string = DEFAULT_RETURN_PATH,
+): string {
+  if (!candidate.startsWith("/") || UNSAFE_IN_A_PATH.test(candidate)) {
+    return fallback;
+  }
+
+  let resolved: URL;
+
+  try {
+    resolved = new URL(candidate, RETURN_PATH_BASE);
+  } catch {
+    return fallback;
+  }
+
+  return resolved.origin === RETURN_PATH_BASE ? candidate : fallback;
 }
