@@ -66,11 +66,41 @@ export type PersistenceResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: PersistenceError };
 
+/**
+ * Maps a thrown storage error onto the failure the rest of the application reports.
+ *
+ * Most messages are passed through unchanged, because SQLite's own wording is precise and there
+ * is nothing to improve on it. One is not: a locked database says only `database is locked`, which
+ * tells a user nothing about whether their entry was saved and what to do next. Phase 9 names a
+ * locked file as a reliability case, and the honest answer is a sentence that says the change was
+ * **not** stored and why — the failure mode that matters here is a user believing a spend was
+ * recorded when it was not.
+ *
+ * No code changes: `persistence_failed` is still a persistence failure, and the classification the
+ * caller makes is unchanged.
+ */
 function persisted(cause: unknown): PersistenceError {
-  return {
-    code: "persistence_failed",
-    message: cause instanceof Error ? cause.message : String(cause),
-  };
+  const message = cause instanceof Error ? cause.message : String(cause);
+
+  if (isLockedOut(message)) {
+    return {
+      code: "persistence_failed",
+      message:
+        "The database is being used by another program, so nothing was saved. Close it and try again.",
+    };
+  }
+
+  return { code: "persistence_failed", message };
+}
+
+/** Whether this is SQLite refusing to write because another process holds the lock. */
+function isLockedOut(message: string): boolean {
+  return (
+    message.includes("SQLITE_BUSY") ||
+    message.includes("SQLITE_LOCKED") ||
+    message.includes("database is locked") ||
+    message.includes("database table is locked")
+  );
 }
 
 /**

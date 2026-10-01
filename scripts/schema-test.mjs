@@ -18,6 +18,8 @@ import Database from "better-sqlite3";
 
 import { migrate, getAppliedVersions } from "../src/lib/db/migrations.ts";
 import { EXPECTED_TABLE_NAMES } from "../src/lib/db/schema.ts";
+import { BUSY_TIMEOUT_MS } from "../src/lib/db/connection.ts";
+import { createRepositories } from "../src/lib/db/repositories.ts";
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -544,6 +546,111 @@ console.log("\nUnknown schema version");
   } else {
     bad(`unknown schema version was not refused (exit ${result.code})`);
   }
+}
+
+// --- a database another program is holding -----------------------------------
+//
+// Phase 9 names "a locked file" as a reliability case. Two things have to be true for this to be
+// trustworthy: the wait for a lock is this project's decision rather than a driver default that
+// could change, and a write that loses the race says the entry was not saved instead of leaking
+// SQLite's own four words.
+
+console.log("\n--- a locked database");
+
+{
+  const { database } = openFresh("locked");
+
+  const timeout = database.pragma("busy_timeout", { simple: true });
+
+  if (timeout === BUSY_TIMEOUT_MS) {
+    ok(
+      `the wait for a lock is the project's own value (${BUSY_TIMEOUT_MS}ms), not a driver default`,
+    );
+  } else {
+    bad(`busy_timeout is ${timeout}, not the project's ${BUSY_TIMEOUT_MS}`);
+  }
+  database.close();
+}
+
+{
+  const file = tempDatabase("busy");
+  const setup = new Database(file);
+  setup.pragma("journal_mode = WAL");
+  setup.pragma("foreign_keys = ON");
+  migrate(setup);
+  setup
+    .prepare(
+      "INSERT INTO account (id, name, balance) VALUES (1, 'cash', 50000)",
+    )
+    .run();
+  setup.close();
+
+  // A second program with the database open for writing: this is what an editor or a second
+  // `next start` looks like from the application's side.
+  const holder = new Database(file, { timeout: 50 });
+  holder.pragma("journal_mode = WAL");
+  holder.exec("BEGIN IMMEDIATE");
+  holder.prepare("UPDATE account SET balance = 40000 WHERE id = 1").run();
+
+  // A short timeout on this side so the test does not wait out the production one. The
+  // application's own value is asserted above; what is exercised here is the reporting.
+  const writer = new Database(file, { timeout: 50 });
+  writer.pragma("foreign_keys = ON");
+  const repositories = createRepositories(writer);
+  const refused = repositories.accounts.saveBalance(1, 30000);
+
+  if (!refused.ok && refused.error.message.includes("another program")) {
+    ok("a write that loses the race says plainly that nothing was saved");
+  } else {
+    bad(
+      `a locked write did not explain itself: ${
+        refused.ok ? "succeeded" : JSON.stringify(refused.error.message)
+      }`,
+    );
+  }
+
+  if (refused.error?.code === "persistence_failed") {
+    ok(
+      "and is still classified as a storage failure, so no domain rule is bypassed",
+    );
+  } else {
+    bad("a locked write was not classified as a persistence failure");
+  }
+
+  holder.exec("COMMIT");
+  holder.close();
+
+  const after = new Database(file);
+  const balance = after
+    .prepare("SELECT balance FROM account WHERE id = 1")
+    .get().balance;
+  after.close();
+
+  // 40000 is what the *holder* committed. The value this test watches for is 30000, the one the
+  // refused write tried to store: a lost race must leave no trace of the attempt at all.
+  if (balance === 40000) {
+    ok("the refused write left no trace, so no balance moved without a record");
+  } else {
+    bad(
+      `the refused write did take effect: balance is ${balance}, expected the holder's 40000`,
+    );
+  }
+
+  // And the same write succeeds once the lock is gone, so the refusal was the lock and nothing else.
+  const recovered = new Database(file, { timeout: 50 });
+  const retry = createRepositories(recovered);
+  const applied = retry.accounts.saveBalance(1, 30000);
+  const appliedBalance = applied.ok
+    ? retry.accounts.findByName("cash").value?.balance
+    : null;
+
+  if (applied.ok && appliedBalance === 30000) {
+    ok("and the same write succeeds once the lock is released");
+  } else {
+    bad("a write after the lock was released still failed");
+  }
+
+  recovered.close();
 }
 
 // --- cleanup -----------------------------------------------------------------

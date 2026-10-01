@@ -12,6 +12,15 @@ const DATABASE_FILE = "hari-os.db";
 const DATA_DIRECTORY = "data";
 
 /**
+ * How long a write waits for a lock held by another process before it fails.
+ *
+ * Long enough that a slow neighbour is waited out rather than turned into a failed save, short
+ * enough that a genuinely stuck lock surfaces as a message the user can act on instead of a page
+ * that appears to hang. Only writes block in WAL mode, and only against another writer.
+ */
+export const BUSY_TIMEOUT_MS = 5000;
+
+/**
  * Resolves the absolute path of the SQLite file.
  *
  * The path is derived from the project root, so it is never machine-specific.
@@ -34,7 +43,12 @@ function openDatabase(): DatabaseHandle {
   try {
     fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
-    const database = new Database(databasePath);
+    // The wait for a lock is this project's decision rather than the driver's default, because
+    // a second writer is a normal thing on a development machine — an editor with the database
+    // open, two `next start` processes, a script from this repository. The driver already waits
+    // five seconds; naming the number here means a driver upgrade cannot quietly change it, and
+    // `db:test` asserts the value rather than trusting it.
+    const database = new Database(databasePath, { timeout: BUSY_TIMEOUT_MS });
 
     database.pragma("journal_mode = WAL");
     database.pragma("foreign_keys = ON");
