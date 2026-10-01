@@ -4,7 +4,7 @@
 the state. Where they disagree, this file is correct.
 
 - **Current phase:** 7 — Skills and Habits. **Complete and verified.**
-- **Latest commit:** pending commit — `feat(7): complete skills, habits, private log, and photo diary`
+- **Latest commit:** `16d51d2` — `feat(7): complete skills, habits, private log, and photo diary`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none.
 
@@ -102,7 +102,7 @@ cards state that they are unavailable. No skill, habit, photo, or log is fabrica
 | 4 — Expenses | Complete | `71ac329` | Accounts, natural-language expense entry, daily bill, Dashboard integration |
 | 5 — Dashboard | **Complete** | `a87210c` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
 | 6 — Routine + Sleep | **Complete** | `015aa38` | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
-| 7 — Skills + Habits | **Complete** | pending commit | Full replacement list, neutral streaks, laundry photo proof, screen time, private log, Photo Diary |
+| 7 — Skills + Habits | **Complete** | `16d51d2` | Full replacement list, neutral streaks, laundry photo proof, screen time, private log, Photo Diary |
 | 8 — Photo + Diary | Not started | — | The photo path Phase 8 was assumed to own shipped in Phase 7 (ADR-051); what remains is scope the roadmap and PRD disagree on |
 | 9 — Hardening | Not started | — | |
 
