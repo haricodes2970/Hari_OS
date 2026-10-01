@@ -615,7 +615,7 @@ console.log("\n# an empty database");
   const database = new Database(path.join(dir, "empty.db"));
   migrate(database);
 
-  const { display } = createRepositories(database);
+  const { display, tasks } = createRepositories(database);
 
   assertEqual(
     display.listInventory().length,
@@ -637,8 +637,11 @@ console.log("\n# an empty database");
     0,
     "spending on an empty day is zero",
   );
+  // Phase 6: `plan_task` is read through the tasks repository, not the display read. ADR-047
+  // accepted an ad-hoc read only while no feature owned the table; Routine does now, so there
+  // is one reader of `plan_task` and this test asserts through it.
   assertEqual(
-    display.tasksForDate("2026-09-30").length,
+    tasks.listForDate("2026-09-30").length,
     0,
     "an empty day has no tasks",
   );

@@ -39,9 +39,11 @@
 import "server-only";
 
 import type { HabitType } from "@/domain/habits";
+import { selectTopTasks } from "@/domain/routine.ts";
 
 import { readDailyBill } from "../expenses/view.ts";
 import { listKitchenStock } from "../kitchen/view.ts";
+import { readRoutine } from "../routine/view.ts";
 import { currentUtcDate, getRepositories } from "../shared/command-runtime.ts";
 
 /**
@@ -50,8 +52,14 @@ import { currentUtcDate, getRepositories } from "../shared/command-runtime.ts";
  * The PRD's "top 3 tasks", written the night before. It is a cap on display, not a rule about
  * what the user may plan — if four rows exist for today, all four are counted and the fourth is
  * reported rather than silently dropped.
+ *
+ * Phase 6 moved the *selection* into `selectTopTasks`, in `src/domain/routine.ts`, because the
+ * Routine feature now owns `plan_task` and this limit has to be the same three tasks the
+ * morning opens on everywhere else. This constant remains only as the Dashboard's own
+ * re-export for the pages and tests that already import it from here; there is one rule, in one
+ * place.
  */
-export const TOP_TASK_LIMIT = 3;
+export { TOP_TASK_LIMIT } from "@/domain/routine.ts";
 
 /**
  * Whether the replacement-activity list exists yet.
@@ -119,6 +127,38 @@ export type DashboardModel = {
   readonly suggestedFirstAction: string | null;
   readonly habits: readonly DashboardHabitLine[];
   readonly skillsAvailable: boolean;
+  /**
+   * Last night's sleep, as far as it was recorded.
+   *
+   * Every field is nullable and the page renders the nulls as "not recorded". The morning view
+   * shows how long the night was so the user can judge their own day; it does not convert that
+   * into a target, a grade, or advice.
+   */
+  readonly sleep: DashboardSleep;
+  /**
+   * Consecutive days with a wake time inside the PRD's stated range.
+   *
+   * A record, never a comparison. Nothing here subtracts a missed day or changes colour with it.
+   */
+  readonly consistencyDays: number;
+  /**
+   * Whether tomorrow already has a plan.
+   *
+   * This is the PRD's visible next action working in the direction that matters: a morning that
+   * opens on tasks chosen last night. It is a fact about the rows, not a prompt to go and do
+   * something.
+   */
+  readonly tomorrowPlanned: boolean;
+};
+
+/** Last night's sleep, for the morning card. All of it optional, because all of it is optional. */
+export type DashboardSleep = {
+  readonly recorded: boolean;
+  readonly bedtime: string | null;
+  readonly sleepTime: string | null;
+  readonly wakeTime: string | null;
+  readonly inBed: string | null;
+  readonly asleep: string | null;
 };
 
 /**
@@ -131,10 +171,15 @@ export type DashboardModel = {
 export function readDashboard(date: string = currentUtcDate()): DashboardModel {
   const bill = readDailyBill(date);
   const stock = listKitchenStock();
-  const tasks = getRepositories().display.tasksForDate(date);
+  const routine = readRoutine(date);
   const habits = getRepositories().display.habitsForDate(date);
 
-  const undone = tasks.find((task) => !task.done);
+  // `readRoutine` returns every task for the day; the top three are the morning's, chosen by
+  // the domain rule rather than by slicing here.
+  const topTasks = selectTopTasks(routine.tasks);
+  const undone =
+    topTasks.find((task) => !task.done) ??
+    routine.tasks.find((task) => !task.done);
 
   return {
     date,
@@ -158,12 +203,12 @@ export function readDashboard(date: string = currentUtcDate()): DashboardModel {
       })),
     inventoryCount: stock.length,
     // The database orders by id, so this is the order the tasks were written in.
-    tasks: tasks.slice(0, TOP_TASK_LIMIT).map((task) => ({
+    tasks: topTasks.map((task) => ({
       id: task.id,
       title: task.title,
       done: task.done,
     })),
-    taskCount: tasks.length,
+    taskCount: routine.taskCount,
     suggestedFirstAction: undone === undefined ? null : undone.title,
     habits: habits.map((entry) => ({
       type: entry.type,
@@ -171,5 +216,15 @@ export function readDashboard(date: string = currentUtcDate()): DashboardModel {
       hasPhoto: entry.hasPhoto,
     })),
     skillsAvailable: SKILLS_AVAILABLE,
+    sleep: {
+      recorded: routine.night.recorded,
+      bedtime: routine.night.bedtime,
+      sleepTime: routine.night.sleepTime,
+      wakeTime: routine.night.wakeTime,
+      inBed: routine.night.inBed,
+      asleep: routine.night.asleep,
+    },
+    consistencyDays: routine.consistency.days,
+    tomorrowPlanned: routine.tomorrowTasks.length > 0,
   };
 }

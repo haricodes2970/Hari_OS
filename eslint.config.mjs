@@ -508,6 +508,39 @@ const enforcedBoundaries = [
     },
   },
   {
+    name: "hari-os/routine-boundaries-enforced",
+    files: ["src/features/routine/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: persistenceModules,
+              message:
+                "The Routine slice reaches storage through src/features/shared/command-runtime and may not open a database, touch the filesystem, or import a driver itself.",
+            },
+            {
+              group: providerModules,
+              message:
+                "Routine renders and writes what the user recorded. It must not know a language model exists, and it never asks one what to do.",
+            },
+            {
+              group: [
+                "@/commands/executor",
+                "@/features/kitchen/setup",
+                "@/features/kitchen/correction",
+                "@/features/expenses/write",
+              ],
+              message:
+                "A feature may not reach into another's write side. Every change on this application goes through the command endpoint or the feature's own route.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     name: "hari-os/application-boundaries-enforced",
     files: ["src/app/**/*.{ts,tsx}"],
     rules: {

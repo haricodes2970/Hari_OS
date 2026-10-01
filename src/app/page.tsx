@@ -2,27 +2,32 @@
  * The Dashboard: the day's command center.
  *
  * A Server Component. It renders what the application already knows and nothing else. Every value
- * on this page comes from `readDashboard`, which composes the Kitchen and Expenses read sides and
- * reads `plan_task` and `habit_log`; this file formats nothing, sums nothing, and compares
- * nothing, so the page cannot disagree with the Kitchen page, the Expenses page, or the bill.
+ * on this page comes from `readDashboard`, which composes the Kitchen, Expenses, and Routine read
+ * sides and reads `habit_log`; this file formats nothing, sums nothing, and compares nothing, so
+ * the page cannot disagree with the Kitchen page, the Expenses page, the bill, or the Routine
+ * page.
  *
  * ## The order on the screen is the order of the questions
  *
  * 1. **Say what happened** — the shared natural-language input, because in this application
  *    recording something is the first thing a person does.
  * 2. **What matters today** — the tasks written last night, and the first one not yet done.
- * 3. **What needs attention** — what is running low.
- * 4. **What changed** — today's spend, from the same rows the daily bill uses.
+ * 3. **How the night went** — the sleep actually recorded, so the morning starts from it.
+ * 4. **What needs attention** — what is running low.
+ * 5. **What changed** — today's spend, from the same rows the daily bill uses.
  *
  * ## What this page refuses to do
  *
  * - **It does not suggest a decision.** The "first action" is the first task the user wrote down
  *   that is not done. It is not ranked, scored, generated, or reordered, and no model is involved
  *   in producing any word on this page.
- * - **It does not fabricate a future module.** Routine, Sleep, Skills, Habits, and Photo Diary are
- *   later phases. Where the PRD's Dashboard expects one, this page says plainly that it is not
- *   available yet, rather than showing an empty list that would read as "you have no skills" or
- *   "your laundry is fine".
+ * - **It does not fabricate a future module.** Skills, Habits, and Photo Diary are later phases.
+ *   Where the PRD's Dashboard expects one, this page says plainly that it is not available yet,
+ *   rather than showing an empty list that would read as "you have no skills" or "your laundry is
+ *   fine".
+ * - **It does not judge the night.** The sleep card reports what was recorded and counts
+ *   consecutive days with a wake time in the PRD's range. It does not score sleep, grade it,
+ *   compare it to a target, or turn a missing entry into a failure.
  * - **It does not mutate anything.** There is no Dashboard endpoint. Every change on this
  *   application goes through `POST /api/commands` or `POST /api/kitchen`, and the Dashboard only
  *   sends you there.
@@ -30,6 +35,7 @@
 import { ChatInput } from "@/components/ChatInput";
 import { Nav } from "@/components/Nav";
 import { OutcomeBanner } from "@/components/OutcomeBanner";
+import { WAKE_WINDOW_END, WAKE_WINDOW_START } from "@/domain/sleep";
 import { parserAvailability } from "@/features/chat/runtime";
 import {
   readDashboard,
@@ -124,9 +130,10 @@ export default function DashboardPage({
       <h2>Today&apos;s top {dashboard.taskCount === 1 ? "task" : "tasks"}</h2>
       {dashboard.taskCount === 0 ? (
         <p className="empty">
-          Nothing is planned for today. Writing tomorrow&apos;s three tasks at
-          night is part of the Routine module, which is not built yet, so
-          nothing can create them here.
+          Nothing is planned for today. Write tomorrow&apos;s tasks on the{" "}
+          <a href="/routine">Routine page</a>, or say &quot;add buy milk
+          tomorrow&quot; here. This application does not choose tasks for you,
+          so an empty list stays empty until you write one.
         </p>
       ) : (
         <>
@@ -155,6 +162,58 @@ export default function DashboardPage({
           )
         ) : (
           dashboard.suggestedFirstAction
+        )}
+      </p>
+
+      <h2>Last night</h2>
+      {dashboard.sleep.recorded === false ? (
+        <p className="empty">
+          No sleep has been recorded for last night. Record it on the{" "}
+          <a href="/routine">Routine page</a>, or say &quot;I woke up at
+          07:10&quot;. A night that was not written down is not a bad night.
+        </p>
+      ) : (
+        <ul className="list">
+          <li>
+            Went to bed{" "}
+            {dashboard.sleep.bedtime ?? (
+              <span className="muted">not recorded</span>
+            )}
+          </li>
+          <li>
+            Woke up{" "}
+            {dashboard.sleep.wakeTime ?? (
+              <span className="muted">not recorded</span>
+            )}
+          </li>
+          <li>
+            In bed{" "}
+            {dashboard.sleep.inBed ?? (
+              <span className="muted">waiting on a wake time</span>
+            )}
+          </li>
+        </ul>
+      )}
+      {dashboard.consistencyDays > 0 ? (
+        <p className="muted">
+          {dashboard.consistencyDays} consecutive{" "}
+          {dashboard.consistencyDays === 1 ? "day" : "days"} with a wake time
+          between {WAKE_WINDOW_START} and {WAKE_WINDOW_END}. A record of what
+          happened, not a target and not a score.
+        </p>
+      ) : null}
+      <p className="muted">
+        {dashboard.tomorrowPlanned ? (
+          <>
+            Tomorrow already has a plan, written last night.{" "}
+            <a href="/routine">Change it</a> if the day moved.
+          </>
+        ) : (
+          <>
+            Tomorrow has no plan yet.{" "}
+            <a href="/routine">Write tonight&apos;s check-in</a> so tomorrow
+            morning opens on tasks you chose while writing them down.
+          </>
         )}
       </p>
 

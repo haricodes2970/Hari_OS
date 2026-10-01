@@ -252,10 +252,10 @@ console.log(
     "5. and its zero is shown as zero",
   );
 
-  // A threshold of zero is *stored* by the current code and flags an item only at zero.
-  // ARCHITECTURE.md section 15 claims a threshold of zero is refused; it is not, and that
-  // mismatch is recorded in the Phase 5 session report rather than papered over here. What
-  // matters to the Dashboard is the behaviour that actually exists, asserted below.
+  // A threshold of zero is stored, and under `quantity <= threshold` it flags an item only
+  // while the item is at zero. ADR-048 settled the Phase 5 discrepancy in favour of this
+  // behaviour; ARCHITECTURE.md section 15 now says the same thing. What matters to the
+  // Dashboard is that the behaviour is the domain's and is asserted here, not restated.
   setThreshold("onions", 0);
   assertEqual(
     readDashboard().lowStock.length,
@@ -534,15 +534,18 @@ console.log("\n# 11-14. empty states, and modules that do not exist");
   assertEqual(
     Object.keys(empty).sort().join(","),
     [
+      "consistencyDays",
       "date",
       "habits",
       "inventoryCount",
       "lowStock",
       "skillsAvailable",
+      "sleep",
       "spend",
       "suggestedFirstAction",
       "taskCount",
       "tasks",
+      "tomorrowPlanned",
     ].join(","),
     "14. the read model exposes no field the page does not need",
   );

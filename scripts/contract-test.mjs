@@ -273,11 +273,13 @@ const zeroAmount = expectValid(
 );
 assertEqual(zeroAmount.amount, 0, "zero money is accepted without becoming -0");
 
-// Every declared discriminator is reachable.
+// Every declared discriminator is reachable. Phase 6 added the routine and sleep families, so
+// the count is ten: the sample table below is the test that a new kind cannot be declared
+// without a minimal valid example.
 assertEqual(
   COMMAND_KINDS.length,
-  5,
-  "the contract declares five command kinds",
+  10,
+  "the contract declares ten command kinds",
 );
 for (const kind of COMMAND_KINDS) {
   const samples = {
@@ -291,6 +293,11 @@ for (const kind of COMMAND_KINDS) {
       unit: "piece",
     },
     "expense.record": { accountName: "cash", item: "x", amount: 1 },
+    "task.create": { title: "finish the report" },
+    "task.set_done": { title: "finish the report", done: true },
+    "sleep.record": { field: "bedtime", time: "23:00" },
+    "nap.start": { time: "14:00" },
+    "nap.end": { time: "14:45" },
   };
 
   expectValid(
@@ -298,6 +305,25 @@ for (const kind of COMMAND_KINDS) {
     `discriminator ${kind} is valid`,
   );
 }
+
+// The stated day a sentence named, and the fact that a *date* is never one of them.
+for (const day of ["today", "tomorrow", "yesterday"]) {
+  expectValid(
+    { version: COMMAND_VERSION, kind: "task.create", title: "x", day },
+    `a stated day reference (${day}) is valid`,
+  );
+}
+
+expectRejected(
+  {
+    version: COMMAND_VERSION,
+    kind: "task.create",
+    title: "x",
+    day: "2026-10-02",
+  },
+  "wrong_type",
+  "a computed calendar date is refused where a stated day is expected",
+);
 
 // ---------------------------------------------------------------------------
 console.log("\nUnknown and malformed commands");

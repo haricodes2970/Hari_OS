@@ -1,6 +1,6 @@
 # Phase 6 — Routine and Sleep
 
-**Status: Planned**
+**Status: Complete and verified.**
 
 Scope taken from `Hari_OS_V1_PRD.docx` section 6.2. This document does not expand it.
 
@@ -23,7 +23,7 @@ sleep consistency.
 - **Soft warnings**, not blocks: a warning when a nap exceeds 30 minutes, and a warning when
   a nap starts after 3 PM. The PRD is explicit that these are soft.
 - **A sleep consistency streak.** This is a neutral habit, so a streak is permitted
-  (PRD section 4).
+(PRD section 4).
 
 ## Dependencies
 
@@ -49,19 +49,96 @@ sleep consistency.
 - Nap duration computed in `src/domain`, not in the UI.
 - A night check-in view and a morning view.
 
+## What was built
+
+### No schema was written
+
+`plan_task`, `sleep_log`, and `nap_log` have existed in `db/schema.sql` since micro-phase 1.1,
+and `npm run db:check` asserts all three and their columns. Phase 6 added repositories, rules,
+and pages over them and **no DDL** — the first feature slice that needed nothing from
+`migrations/`. No migration, no version bump.
+
+### The domain, first
+
+| File | What it owns |
+| --- | --- |
+| `src/domain/calendar.ts` | `YYYY-MM-DD` parsing, UTC day arithmetic (`nextDate`, `previousDate`, `daysBetween`), round-trip rejection of impossible dates like `2026-02-30` |
+| `src/domain/routine.ts` | `PlanTask`, `createTask`, `setTaskDone`, `selectTopTasks`, `firstIncompleteTask`, `resolveDayReference`, `nightCheckInTitles` |
+| `src/domain/sleep.ts` | strict `HH:MM` parsing, `overnightMinutes`, `nightMinutes`, `asleepMinutes`, `napMinutes`, `formatDuration`, `summariseNap`, `wakeConsistencyStreak` |
+
+Pure functions, no I/O, no clock. `TOP_TASK_LIMIT` is `3` and there is no priority column
+anywhere: the order tasks are written in **is** the order they matter in, and `selectTopTasks`
+takes the first three rows while the read model keeps the true count.
+
+### Repositories
+
+`TaskRepository`, `SleepRepository`, and `NapRepository` were added to the existing
+`Repositories` object, and `transaction()` was exposed so a multi-row write is one unit. Task
+lists are ordered by ascending `id`. A sleep write updates exactly one time column, so
+recording a bedtime cannot disturb a wake time recorded earlier.
+
+### The night check-in is an operation, not a command
+
+ADR-049. It is four rows and it is useless if half of it lands, so it is one transaction in
+`src/features/routine/write.ts`, dispatched from `POST /api/routine` — a closed enum of one
+operation, the same origin guard as the other write routes, the same token-based outcome. The
+titles are validated by the same `createTask` the command path uses. Replacing a check-in clears
+tomorrow's **undone** tasks and leaves completed ones alone.
+
+Five new command kinds carry the rest: `task.create`, `task.set_done`, `sleep.record`,
+`nap.start`, `nap.end`. Each is one stated fact, and each carries `day` as the word the user
+said — never a computed date.
+
+### The pages
+
+- `/routine` — today's tasks with a next action, tomorrow's plan, tonight's night with its
+  lengths, naps with the PRD's warnings, and the check-in form.
+- `/` — a **Last night** card, the consistency count, and whether tomorrow already has a plan.
+  It composes `readRoutine` rather than reading `plan_task` itself (ADR-050).
+
+### What it deliberately does not do
+
+No score, no grade, no punishment, no progress bar, no percentage. No invented tasks: an empty
+day says so. No invented times: a night with no wake time has no length to report. A missing
+entry is "not recorded", never a failure. Nap warnings are the PRD's two, shown once, produced
+by the domain and rendered verbatim, and they block nothing.
+
 ## Verification
 
-- Baseline suite passes.
-- A night check-in stores 3 tasks and the phone confirmation, and the morning view shows
-  exactly those tasks.
-- Bedtime, sleep time, wake time, and nap start/end round-trip through a restart.
-- **Both soft warnings are demonstrated firing and not firing** — over 30 minutes, and after
-  3 PM — and are shown as warnings, never as a block or a failure state.
-- The sleep streak is demonstrated updating on a neutral habit, with a check that no score
-  or shaming language is rendered.
-- The pages render with no entries at all and do not crash.
-- `npm run db:check` passes with the expected tables.
+| Check | Result |
+| --- | --- |
+| Baseline: `format:check`, `typecheck`, `lint`, `build`, `db:check` | Pass — 0 errors, 0 warnings |
+| Eleven test suites | Pass — **1380 assertions, 0 failed** (1327 in the ten behavioural suites, 53 in `db:test`) |
+| `routine:test` (new) | Pass — 113 checks: atomicity, refusals, the read model, nap warnings, the streak, the HTTP route |
+| `routine:accept` (new, real HTTP, production build, disposable database) | Pass — 61 checks |
+| `dashboard:accept` | Pass — 57 checks |
+| `responsive:check` | Pass — 29 checks, after the nav was made to wrap |
+| `architecture:probe` | Pass — 47 checks, including the new `src/features/routine/**` scope |
+| A night check-in stores its tasks and the phone confirmation; the morning view shows exactly those tasks | Pass |
+| Bedtime, sleep time, wake time, and nap start/end round-trip through a restart | Pass — every write is read back through a fresh repository in the same suite |
+| Both soft warnings firing **and** not firing (over 30 min, after 15:00, and the exact boundaries) | Pass |
+| Warnings shown as warnings, never a block or failure state | Pass — the warned-about nap is asserted still stored, with its end time |
+| Streak updating, with no score or shaming language rendered | Pass — asserted in the acceptance run against rendered HTML, including no `<progress>` element and no percentage |
+| Both pages render with no entries at all | Pass |
+| `npm run db:check` | Pass — all 11 V1 tables, no unexpected tables |
+
+### Two real defects this phase found
+
+**The expenses tie-break test depended on the wall clock.** `scripts/expenses-test.mjs` pinned a
+hard-coded `2026-10-01T12:00:00.000Z` for its "same-millisecond entries" case and asserted those
+rows came back first. That was true only while the clock was before noon that day; at 12:00 UTC
+the three command-recorded rows became newer and the suite began failing on its own. The
+timestamp is now derived from the clock. This was a pre-existing bug in a Phase 4 test, found
+because the suite was run across a boundary.
+
+**A fourth navigation link broke every page at 320px.** Adding Routine to the nav made the four
+links wider than a 320px viewport. `body { overflow-x: hidden }` hid the symptom in a browser
+while `responsive:check` reported every element on the page as overflowing. `.nav` now wraps.
+The check itself was also asserting a link *count* of three, which is the assertion a navigator
+stops updating the moment a page is added; it now asserts the names.
 
 ## Status
 
-**Planned.** No routine or sleep code, no related schema, and no pages exist today.
+**Complete.** The routine and sleep slices exist, the pages exist, both soft warnings fire and do
+not fire on the boundaries, the streak is neutral, and everything above was run. Phase 7 —
+Skills and Habits — was not started.

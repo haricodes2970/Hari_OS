@@ -3,12 +3,46 @@
 **Authority for phase, micro-phase, and next action.** `ROADMAP.md` is the plan; this file is
 the state. Where they disagree, this file is correct.
 
-- **Current phase:** 5 — Dashboard. **Complete and verified.**
-- **Latest commit:** `a87210c` — `feat(5): complete dashboard`
+- **Current phase:** 6 — Routine and Sleep. **Complete and verified.**
+- **Latest commit:** pending — `feat(6): complete routine and sleep`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
-- **Blockers:** none. One documented discrepancy is open and is the user's call: `ARCHITECTURE.md`
-  section 15 says a low-stock threshold of zero is refused; the code accepts it and flags the
-  item only while its quantity is zero. Neither has been silently changed.
+- **Blockers:** none. The threshold-of-zero discrepancy Phase 5 recorded was resolved in Phase 6
+  (ADR-048): the code's behaviour was kept and `ARCHITECTURE.md` section 15 was corrected, because
+  `quantity <= threshold` means a zero threshold flags an item only at zero, which is not the bug
+  the old wording described.
+
+## Phase 6 — Routine and Sleep: complete
+
+Delivered as one unit. `docs/phases/PHASE_06_ROUTINE_SLEEP.md` and
+`docs/sessions/2026-10-01-session-05.md` have the detail.
+
+**What exists now.** The night check-in writes tomorrow's top three tasks and the phone
+confirmation as one transaction. Bedtime, sleep time, and wake time are logged by hand. Naps have
+start, end, a computed length, and the PRD's two soft warnings — shown once, blocking nothing. A
+neutral streak counts consecutive days with a wake time inside 06:15–07:30. `/routine` is the new
+page; the Dashboard gained a **Last night** card and says whether tomorrow already has a plan.
+
+**No schema was written.** `plan_task`, `sleep_log`, and `nap_log` have been in the schema since
+micro-phase 1.1. Phase 6 added repositories and rules over them, and no DDL.
+
+**The boundaries that mattered.** The check-in is an *operation*, not a command, because it is four
+rows that must land together (ADR-049) — so `POST /api/routine` has a closed enum of one operation
+with the same origin guard and token-based outcome as the other write routes. Five new command
+kinds (`task.create`, `task.set_done`, `sleep.record`, `nap.start`, `nap.end`) carry everything
+else, each one stated fact with `day` as the word the user said and never a computed date.
+`plan_task` has a single reader: ADR-047's ad-hoc display read was retired once Routine owned the
+table, and the Dashboard now composes `readRoutine` (ADR-050).
+
+**Verification.** 11 test suites, 1380 assertions, 0 failures. 47 architecture probes, up from 39
+— the new ones cover `src/features/routine/**`. A 61-check HTTP acceptance run against a
+production build on a disposable database, a 57-check Dashboard acceptance run, and a 29-check
+responsive run at 320, 390, and 1440px all pass. `format:check`, `typecheck`, `lint`, `build`, and
+`db:check` pass with 0 errors and 0 warnings. The development database is byte-identical (SHA-256
+`5e95474b50cedb4d1f88854d77a664382faae2d9946b481f02cbe460e21ab841`) with no WAL/SHM sidecars.
+
+**Two defects were found and fixed here, one of them from an earlier phase.** A Phase 4 test
+depended on the wall clock and began failing on its own at 12:00 UTC. Adding a fourth navigation
+link overflowed every page at 320px, which `body { overflow-x: hidden }` had been hiding.
 
 ## Phase 5 — Dashboard: complete
 
@@ -21,21 +55,12 @@ user's own first undone task, low stock from Kitchen, and today's spend taken fr
 the daily bill uses.
 
 **The read boundary.** `src/features/dashboard/view.ts` is the only thing the page reads. It
-composes the Kitchen and Expenses read sides and two focused repository reads (`plan_task`,
-`habit_log`), and it contains no comparison, no sum, and no clock. `readDashboardSummary` moved
-out of `src/features/shared/queries.ts` so there is one definition of what the Dashboard shows
-(ADR-047).
+composes the Kitchen, Expenses, and Routine read sides and one focused repository read
+(`habit_log`), and it contains no comparison, no sum, and no clock (ADR-047, extended by ADR-050).
 
-**What is deliberately not implemented.** Routine, Sleep, Skills, Habits, and Photo Diary are
-Phases 6–8. Their cards state that they are unavailable. No task, skill, habit, photo, or log is
-fabricated, and `plan_task` and `habit_log` are read but never written by anything in `src/`.
-
-**Verification.** 10 test suites, 1253 assertions, 0 failures, up from 9 and 1177. 39 architecture
-probes, up from 27 — the new ones cover the Dashboard and `src/app` boundary scopes. A 57-check
-HTTP acceptance run and a 29-check headless-browser responsive run at 320, 390, and 1440px both
-pass. `format:check`, `typecheck`, `lint`, `build`, and `db:check` pass with 0 errors and 0
-warnings. The development database is byte-identical (SHA-256
-`5e95474b50cedb4d1f88854d77a664382faae2d9946b481f02cbe460e21ab841`) with no WAL/SHM sidecars.
+**What is deliberately not implemented.** Skills, Habits, and Photo Diary are Phases 7–8. Their
+cards state that they are unavailable. No skill, habit, photo, or log is fabricated, and
+`habit_log` is read but never written by anything in `src/`.
 
 ## Phase history
 
@@ -47,23 +72,23 @@ warnings. The development database is byte-identical (SHA-256
 | 3 — Kitchen | Complete | `da9a89c` | Inventory, thresholds, history, correction/reversal, Dashboard integration |
 | 4 — Expenses | Complete | `71ac329` | Accounts, natural-language expense entry, daily bill, Dashboard integration |
 | 5 — Dashboard | **Complete** | `a87210c` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
-| 6 — Routine + Sleep | **Not started** | — | `plan_task` is read by the Dashboard; nothing writes it |
+| 6 — Routine + Sleep | **Complete** | pending | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
 | 7 — Skills + Habits | **Not started** | — | `skill` and `habit_log` are read; nothing writes them |
 | 8 — Photo + Diary | Not started | — | |
 | 9 — Hardening | Not started | — | |
 
 ## Next action
 
-Phase 6, Routine + Sleep, when the user asks for it. Its first task is defined by what Phase 5
-left behind: `plan_task` rows exist in the schema and are already displayed, and nothing creates
-them. Routine's entry point should write them through the existing command path rather than
-around it, and the Dashboard's task card and first-action line should keep working unchanged.
+Phase 7, Skills + Habits, when the user asks for it. `docs/phases/PHASE_07_SKILLS_HABITS.md` is
+the plan. What Phase 6 leaves behind: `habit_log` rows are read by the Dashboard and nothing writes
+them, and the Dashboard's skills card is still a truthful unavailable state with `SKILLS_AVAILABLE
+= false`. The user picks from the full skill list — nothing is auto-selected — and the PRD's
+prohibition on shame-based streaks applies to private behaviours.
 
-Phase 6 was **not** started in this run.
+Phase 7 was **not** started in this run.
 
 ## Open items carried forward
 
-- **The threshold-of-zero discrepancy** described at the top of this file. Recorded, not fixed.
 - **Expense correction and refund.** Deferred by decision in Phase 4: `expense` has
   `CHECK (amount >= 0)` and no `source_text`, so a reversal has nowhere to live.
 - **Batch expense entry.** The PRD contradicts itself; Phase 2's one-sentence-one-command ADR

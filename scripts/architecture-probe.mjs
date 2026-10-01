@@ -131,6 +131,40 @@ const CASES = [
     "@/commands/executor",
   ],
 
+  // src/features/routine — the slice that owns plan_task, sleep_log, and nap_log. It composes
+  // through the runtime like every other feature, and it may not execute a command directly or
+  // borrow another feature's write side.
+  [
+    "src/features/routine/__probe.ts",
+    "src/features/routine/view.ts",
+    "@/lib/db/connection",
+  ],
+  [
+    "src/features/routine/__probe.ts",
+    "src/features/routine/write.ts",
+    "better-sqlite3",
+  ],
+  [
+    "src/features/routine/__probe.ts",
+    "src/features/routine/view.ts",
+    "node:fs",
+  ],
+  [
+    "src/features/routine/__probe.ts",
+    "src/features/routine/write.ts",
+    "@/commands/executor",
+  ],
+  [
+    "src/features/routine/__probe.ts",
+    "src/features/routine/write.ts",
+    "@/features/kitchen/setup",
+  ],
+  [
+    "src/features/routine/__probe.ts",
+    "src/features/routine/view.ts",
+    "@/features/chat/openrouter",
+  ],
+
   // src/app — routing only. The page that aggregates everything must not be able to reach a
   // driver or the filesystem, because "no SQL in the page component" is a claim worth proving.
   ["src/app/__probe.ts", "src/app/page.tsx", "@/lib/db/connection"],
@@ -177,6 +211,16 @@ const ALLOWED = [
     "src/app/__probe_allowed.ts",
     "src/app/page.tsx",
     "@/features/dashboard/view",
+  ],
+  [
+    "src/features/routine/__probe_allowed.ts",
+    "src/features/routine/view.ts",
+    "@/features/shared/command-runtime",
+  ],
+  [
+    "src/features/routine/__probe_allowed.ts",
+    "src/features/routine/write.ts",
+    "@/domain/sleep",
   ],
 ];
 

@@ -127,6 +127,12 @@ const TEXT_FIELDS = [
   "unit",
   "accountName",
   "category",
+  // Phase 6. `title` is the task as the user said it; `day` is the word they used ("tomorrow"),
+  // never a date. `field` and `time` are the two stated facts of a sleep or nap sentence.
+  "title",
+  "day",
+  "field",
+  "time",
 ] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -224,6 +230,15 @@ function candidateToCommand(
     }
   }
 
+  if (kind === "task.set_done") {
+    // A completion is a fact the user stated. Only a real boolean is copied; a string, a
+    // number, or a probability is forwarded unchanged so validation refuses it by name rather
+    // than this layer guessing what was meant.
+    if (typeof proposal.done === "boolean") {
+      command.done = proposal.done;
+    }
+  }
+
   if (kind === "expense.record") {
     const amount = asMinorUnits(proposal.amountRupees);
     if (amount !== undefined) {
@@ -245,6 +260,18 @@ function candidateToCommand(
     const quantity = asNumber(proposal.quantity);
     if (quantity !== undefined) {
       command.quantity = quantity;
+    }
+  } else if (
+    kind === "sleep.record" ||
+    kind === "nap.start" ||
+    kind === "nap.end"
+  ) {
+    // The stated wall-clock time, as the user wrote it. `clockTime` is not a field the
+    // candidate may contribute, and a duration is not a field either: both would be the model
+    // doing arithmetic this application owns.
+    const time = asString(proposal.time);
+    if (time !== undefined) {
+      command.time = time;
     }
   } else {
     // consume and restock both take a quantity in the item's own unit, as `amount`.

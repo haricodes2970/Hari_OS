@@ -58,6 +58,11 @@ ALLOWED COMMAND KINDS
 - "inventory.set_quantity" : the user stated what remains right now
 - "inventory.recount_after_use" : the user stated a count AND then a use in one sentence
 - "expense.record"     : the user spent money
+- "task.create"        : the user stated a task and, optionally, the day it is for
+- "task.set_done"      : the user said a planned task is done, or is not done
+- "sleep.record"       : the user stated their bedtime, the time they fell asleep, or their wake time
+- "nap.start"          : the user stated the time a nap started
+- "nap.end"            : the user stated the time a nap ended
 
 ABSOLUTE CONSTRAINTS
 - Extract only facts the sentence explicitly states. Never infer a fact that is not present.
@@ -65,13 +70,19 @@ ABSOLUTE CONSTRAINTS
 - Never output a database id, row id, or primary key.
 - Never output a date or timestamp. The application records the time.
 - Never output a field named "balance", "after", "before", "id", "timestamp", or "confidence".
+- Never output a duration, a length of sleep, or a nap length. Report the times; the application does the subtraction.
+- Never output a priority, a rank, or an ordering. The order tasks are written in is the order they matter in, and choosing it is not yours to do.
 - Never invent a missing account, quantity, item, price, or unit. If it is not stated, report it as missing.
-- Never choose a command kind outside the five listed above.
+- Never choose a command kind outside the ten listed above.
 - Return only the JSON object. No prose, no explanation, no markdown, no code fences.
 
 FIELDS
 - "status": one of "interpreted", "needs_clarification", "unsupported".
-- "kind": one of the five command kinds. Required when status is "interpreted".
+
+TIMES
+A stated clock time is 24-hour "HH:MM". Report it as the user said it, in that form. Never
+report how long anything lasted, and never do the subtraction yourself.
+- "kind": one of the ten command kinds. Required when status is "interpreted".
 - "itemName": the tracked kitchen item, exactly as the user said it. For inventory commands.
 - "unit": the unit the user said, e.g. "pieces", "kg". For consume and restock.
 - "amount": how much was used or added, as a number. For consume and restock only.
@@ -82,6 +93,11 @@ FIELDS
 - "amountRupees": the amount in rupees as the user said it, e.g. 10 for "10 rupees". For expenses. Do not convert it to paise.
 - "accountName": "cash", "bank1", or "bank2", only if the user said it. For expenses.
 - "category": an optional short category word the user gave. Omit otherwise.
+- "title": the task, as the user said it. For task.create and task.set_done. Never a priority or a number.
+- "done": true or false. For task.set_done only, and only when the user actually said it is finished or unfinished.
+- "day": "today", "tomorrow", or "yesterday" — the day the user named, as a word. Never a date like "2026-10-02"; the application knows what day it is. Omit when the user did not name one, and the application uses today.
+- "field": "bedtime", "sleep_time", or "wake_time". For sleep.record only.
+- "time": the clock time the user said, in 24-hour "HH:MM" form, e.g. "23:30" for half past eleven. For sleep.record, nap.start, and nap.end. Report the time only; never its length.
 - "missing": when status is "needs_clarification", a list naming which facts were absent, drawn from "itemName", "item", "quantity", "unit", "amount", "accountName".
 
 TWO-FACT SENTENCES
@@ -136,6 +152,37 @@ Sentence: set it to 5
 No identifiable item.
 {"status":"needs_clarification","missing":["itemName"]}
 
+Sentence: tomorrow I need to finish the report
+{"status":"interpreted","kind":"task.create","title":"finish the report","day":"tomorrow"}
+
+Sentence: I have to call the landlord today
+{"status":"interpreted","kind":"task.create","title":"call the landlord","day":"today"}
+
+Sentence: finished the report
+{"status":"interpreted","kind":"task.set_done","title":"finish the report","done":true}
+
+Sentence: I did not finish the report
+{"status":"interpreted","kind":"task.set_done","title":"finish the report","done":false}
+
+Sentence: went to bed at 11
+{"status":"interpreted","kind":"sleep.record","field":"bedtime","time":"23:00"}
+
+Sentence: fell asleep around 11:30
+{"status":"interpreted","kind":"sleep.record","field":"sleep_time","time":"23:30"}
+
+Sentence: woke up at 6:45
+{"status":"interpreted","kind":"sleep.record","field":"wake_time","time":"06:45"}
+
+Sentence: took a nap from 2 to 3
+Two stated times, and the application cannot represent that in one command.
+{"status":"unsupported"}
+
+Sentence: started a nap at 2 pm
+{"status":"interpreted","kind":"nap.start","time":"14:00"}
+
+Sentence: woke from my nap at 2:45
+{"status":"interpreted","kind":"nap.end","time":"14:45"}
+
 Sentence: did laundry
 The application has no command for this.
 {"status":"unsupported"}
@@ -178,6 +225,11 @@ export const PARSER_RESPONSE_SCHEMA = {
         "inventory.set_quantity",
         "inventory.recount_after_use",
         "expense.record",
+        "task.create",
+        "task.set_done",
+        "sleep.record",
+        "nap.start",
+        "nap.end",
       ],
     },
     countedQuantity: { type: "number" },
@@ -190,6 +242,15 @@ export const PARSER_RESPONSE_SCHEMA = {
     amountRupees: { type: "number" },
     accountName: { type: "string", enum: ["cash", "bank1", "bank2"] },
     category: { type: "string" },
+    title: { type: "string" },
+    done: { type: "boolean" },
+    // A word the user used, never a date. The application resolves it against its own clock.
+    day: { type: "string", enum: ["today", "tomorrow", "yesterday"] },
+    field: {
+      type: "string",
+      enum: ["bedtime", "sleep_time", "wake_time"],
+    },
+    time: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
     missing: {
       type: "array",
       items: {

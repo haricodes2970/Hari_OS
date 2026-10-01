@@ -1060,3 +1060,145 @@ rather than to be a feature.
 
 **Origin:** Phase 5, from the finding that the Dashboard's missing parts are five later phases,
 not one screen.
+
+---
+
+## ADR-048 — A low-stock threshold of zero is allowed, and the documentation was wrong
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 6
+
+**Context.** Phase 5 found a live mismatch and recorded it rather than fixing it, because
+choosing between the two sides would change Kitchen behaviour and that was not Phase 5's call.
+`ARCHITECTURE.md` section 15 stated: "A threshold of zero is refused. It would flag every item
+forever, which is a bug that looks like a feature." The code does not refuse it.
+`setLowStockThreshold` accepts zero, and `isLowStock` compares `quantity <= threshold`, so a
+threshold of zero flags an item only while its quantity is zero. `scripts/dashboard-test.mjs`
+and `scripts/domain-test.mjs` both assert that behaviour, because that is what exists.
+
+Phase 6 was asked to resolve it. The PRD, which is the authority on product behaviour, says only
+this: "Low-stock threshold per item; items at or below it appear as flags on the Dashboard (in-app
+only in V1)." It does not mention zero, and it does not forbid it. The schema stores
+`low_threshold REAL` with no constraint, so there is no storage-level answer either.
+
+**Alternatives considered.**
+
+- **Refuse zero, and change the code.** Rejected. It removes a capability the user can
+  reasonably want — "tell me when I am out" — and the only way to express it afterwards would be
+  to leave the field empty, which *disables* the flag. A refusal here makes the request
+  unreachable rather than approximate. The stated reason for refusing it is also false: under
+  `quantity <= threshold`, a zero threshold flags zero-quantity items, not every item. A rule
+  defended by a bug the code does not have is not a rule worth enforcing.
+- **Leave both as they are and keep the discrepancy open.** Rejected. Phase 5's reason for not
+  resolving it was scope, not uncertainty; the uncertainty was settled by the PRD and the
+  comparison. Leaving a documented rule that the code contradicts is how a later reader stops
+  trusting the document.
+- **Normalise zero to `NULL` silently.** Rejected outright: the user asked for something, the
+  application would store something else, and the stored value would not be what they said.
+  `NULL` is a distinct, explicit "no alert", and the two must stay distinguishable.
+
+**Decision.** A threshold of zero is a threshold. No threshold is `NULL`, and `NULL` is the only
+value that turns the flag off. No code changes; the documentation was corrected, and the note
+recording the discrepancy was replaced with a dated record of the resolution.
+
+**Consequences.**
+
+- The Kitchen, the Dashboard, and the documentation now say the same thing about zero.
+- `quantity <= threshold` remains the only place the comparison exists, and it is unchanged.
+- The general lesson is recorded in `AGENTS.md` §2 and was followed here: the mismatch was
+  investigated, the authority was consulted, and the *documentation* was changed — explicitly,
+  with a dated note and a test that already asserted the surviving behaviour, rather than
+  silently.
+
+**Origin:** Phase 6, from the discrepancy Phase 5 recorded and was told to resolve.
+
+---
+
+## ADR-049 — The night check-in is an operation, not a command
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 6
+
+**Context.** The PRD's night check-in is one deliberate act with two halves: write tomorrow's
+three tasks, and confirm the phone is charging outside the bedroom. ADR-021 established that a
+command is "one statement the user made, about one fact, containing no ids and no timestamps",
+validated by `parseCommand`, executed by the executor, and the only shape the natural-language
+parser may emit.
+
+The check-in is a transaction over four rows — clear tomorrow's undone tasks, insert up to three,
+ensure the night exists, record the phone answer — and it is useless if half of it lands.
+
+**Alternatives considered.**
+
+- **A `night.check_in` command carrying a list of titles and a boolean.** Rejected. It would be
+  the first multi-fact command in the system, and it would drag four new problems behind it: a
+  list field in the contract, list validation with a length rule and a per-item title rule,
+  another executor branch with its own transaction, and parser support for a shape no single
+  sentence produces. All of that to say something three `task.create` commands already say.
+- **Three separate command posts from the form.** Rejected for the reason that decided it: three
+  HTTP requests can half-succeed. A plan where two of three tasks were written and the third was
+  not is worse than no plan, because the screen would show it as the user's decision.
+- **Make the check-in a command and drop the form.** Rejected: the PRD's ritual is a deliberate
+  end-of-day act, and typing three tasks into a sentence box is not it.
+
+**Decision.** `runNightCheckIn` in `src/features/routine/write.ts` is an **operation**, dispatched
+from `POST /api/routine` with a closed enum of one operation, the same origin guard as the other
+write routes (ADR-042/045), and the same token-based outcome as the Kitchen operations (ADR-043).
+Every write runs inside one transaction: if any of them fails, nothing changes. The titles
+themselves are validated by the same `createTask` the command path uses, and a title the chat
+would refuse cannot be submitted through the form.
+
+A task can still be planned one at a time from chat (`task.create`), and tomorrow's plan is
+read by the Dashboard. This is the second door to the same operations, not a second
+implementation of them.
+
+**Consequences.**
+
+- `/api/routine` exists and is deliberately small: one operation, no GET, no commands. Adding a
+  second operation means editing the enum, which is the point.
+- The check-in's refusals are testable without HTTP, because the dispatch is a pure function of
+  the submitted fields.
+- A partial plan is not representable.
+
+**Origin:** Phase 6, from the tension between a four-row ritual and a one-fact command contract.
+
+---
+
+## ADR-050 — `plan_task` has one reader: the Routine feature, not the Dashboard
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 6
+
+**Context.** ADR-047 added `display.tasksForDate` to the display repository, and justified it
+explicitly: an ad-hoc repository read was accepted for `plan_task` and `habit_log` "which have no
+owning feature yet". The Dashboard then applied the PRD's top-three cap itself with
+`tasks.slice(0, TOP_TASK_LIMIT)`.
+
+Phase 6 gives `plan_task` an owning feature. `src/features/routine/view.ts` now reads it through
+`TaskRepository.listForDate` and selects the top three through the domain's `selectTopTasks`. If
+the Dashboard had kept its own read, `plan_task` would have two readers whose only difference is
+which one applies the cap — and ADR-047's own reasoning about "two ways to total a day" applies
+exactly.
+
+**Alternatives considered.**
+
+- **Keep both reads.** Rejected: two definitions of "today's top three", able to disagree, for a
+  table with one owner.
+- **Keep `display.tasksForDate` but have the Dashboard call `selectTopTasks` on it.** Rejected: it
+  fixes the cap and leaves the duplication, which is the part that had no owner.
+- **Move the cap into the display repository.** Rejected: a display cap is a display rule, and the
+  domain is where rules live.
+
+**Decision.** The Dashboard composes `readRoutine`, exactly as it already composes the Kitchen and
+Expenses read sides, and `display.tasksForDate` is deleted along with the prepared statement
+behind it. `TOP_TASK_LIMIT` is re-exported from `src/domain/routine.ts` so existing importers keep
+working and there is still one constant. `display.habitsForDate` stays: `habit_log` still has no
+owning feature, and Habits is Phase 7.
+
+**Consequences.**
+
+- `plan_task` has one reader. The Dashboard cannot disagree with the Routine page about which
+  three tasks the morning opens on, because it asks the same reader the same question.
+- The Dashboard gained the sleep card, the consistency count, and the "tomorrow is planned" fact
+  as a consequence of composing the Routine read model rather than reaching past it.
+- `scripts/app-test.mjs` asserts the empty-day case through `tasks.listForDate` now, which is
+  where the assertion belongs.
+
+**Origin:** Phase 6, from ADR-047's stated precondition having come true.

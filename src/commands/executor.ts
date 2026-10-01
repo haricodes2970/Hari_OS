@@ -30,6 +30,13 @@ import "server-only";
 
 import type { AccountChange, ExpenseChange } from "@/domain/accounts";
 import { applyExpense } from "../domain/accounts.ts";
+import { calendarDateOf } from "../domain/calendar.ts";
+import type { TaskChange } from "../domain/routine";
+import {
+  createTask,
+  resolveDayReference,
+  setTaskDone,
+} from "../domain/routine.ts";
 import type {
   InventoryChange,
   InventoryItem,
@@ -42,7 +49,9 @@ import {
   setInventoryQuantity,
   stampInventoryChange,
 } from "../domain/inventory.ts";
-import type { DomainError } from "@/domain/result";
+import type { DomainError, Result } from "@/domain/result";
+import type { NapLog, SleepChange } from "@/domain/sleep";
+import { endNap, recordNightTime, startNap } from "../domain/sleep.ts";
 
 import type { Repositories } from "../lib/db/repositories.ts";
 import { parseCommand } from "../lib/validation/command.ts";
@@ -96,7 +105,9 @@ export type ExecutionError =
 /** What a successful execution did, in terms the caller can act on. */
 export type ExecutionOutcome =
   | { readonly kind: "inventory"; readonly change: InventoryChange }
-  | { readonly kind: "expense"; readonly change: AccountChange };
+  | { readonly kind: "expense"; readonly change: AccountChange }
+  | { readonly kind: "task"; readonly change: TaskChange }
+  | { readonly kind: "sleep"; readonly change: SleepChange };
 
 export type ExecutionResult =
   | { readonly ok: true; readonly value: ExecutionOutcome }
@@ -212,6 +223,26 @@ export function executeCommand(
   const command = parsed.value;
   const { repositories, now } = dependencies;
 
+  if (command.kind === "task.create") {
+    return executeTaskCreate(command, dependencies);
+  }
+
+  if (command.kind === "task.set_done") {
+    return executeTaskSetDone(command, dependencies);
+  }
+
+  if (command.kind === "sleep.record") {
+    return executeSleepRecord(command, dependencies);
+  }
+
+  if (command.kind === "nap.start") {
+    return executeNapStart(command, dependencies);
+  }
+
+  if (command.kind === "nap.end") {
+    return executeNapEnd(command, dependencies);
+  }
+
   if (command.kind === "expense.record") {
     const account = repositories.accounts.findByName(command.accountName);
 
@@ -261,6 +292,315 @@ export function executeCommand(
     repositories,
     stampInventoryChange(computed.value, now(), command.sourceText ?? null),
   );
+}
+
+/**
+ * The calendar day this execution is happening on.
+ *
+ * Derived from the same clock that stamps inventory events, so a task written at 23:50 and an
+ * expense recorded at 23:50 cannot be filed on different days by two different readings of
+ * "now". The command never supplied a date, and neither does this: the stated `day` reference
+ * and this timestamp are the only two things that can decide it.
+ */
+function todayFrom(dependencies: ExecutionDependencies): Result<string> {
+  return calendarDateOf(dependencies.now());
+}
+
+/**
+ * Plans a task.
+ *
+ * A duplicate is refused by asking the repository first rather than by catching the schema's
+ * UNIQUE violation, so the user hears "that is already on tomorrow's list" instead of a
+ * constraint message. Both refuse the write, which is the part that matters.
+ */
+function executeTaskCreate(
+  command: Extract<Command, { kind: "task.create" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories } = dependencies;
+  const today = todayFrom(dependencies);
+
+  if (!today.ok) {
+    return domainFailure(today.error);
+  }
+
+  const date = resolveDayReference(command.day ?? null, today.value);
+
+  if (!date.ok) {
+    return domainFailure(date.error);
+  }
+
+  const created = createTask({ date: date.value, title: command.title });
+
+  if (!created.ok) {
+    return domainFailure(created.error);
+  }
+
+  const existing = repositories.tasks.findByDateAndTitle(
+    created.value.date,
+    created.value.title,
+  );
+
+  if (existing.ok) {
+    return domainFailure({
+      code: "duplicate_task",
+      message: `"${created.value.title}" is already planned for ${created.value.date}.`,
+      detail: { title: created.value.title, date: created.value.date },
+    });
+  }
+
+  try {
+    const id = repositories.transaction(() => {
+      const stored = repositories.tasks.insertTask(created.value);
+
+      if (!stored.ok) {
+        throw new Error(stored.error.message);
+      }
+
+      return stored.value;
+    });
+
+    return succeed({
+      kind: "task",
+      change: {
+        kind: "task",
+        task: {
+          id,
+          date: created.value.date,
+          title: created.value.title,
+          done: false,
+        },
+        after: false,
+      },
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+}
+
+/** Marks a planned task done or not done. The row is found by title and day, never by id. */
+function executeTaskSetDone(
+  command: Extract<Command, { kind: "task.set_done" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories } = dependencies;
+  const today = todayFrom(dependencies);
+
+  if (!today.ok) {
+    return domainFailure(today.error);
+  }
+
+  const date = resolveDayReference(command.day ?? null, today.value);
+
+  if (!date.ok) {
+    return domainFailure(date.error);
+  }
+
+  const task = repositories.tasks.findByDateAndTitle(date.value, command.title);
+
+  if (!task.ok) {
+    return domainFailure(task.error);
+  }
+
+  const change = setTaskDone(task.value, command.done);
+
+  if (!change.ok) {
+    return domainFailure(change.error);
+  }
+
+  try {
+    repositories.transaction(() => {
+      const saved = repositories.tasks.saveTaskDone(
+        task.value.id,
+        change.value.after,
+      );
+
+      if (!saved.ok) {
+        throw new Error(saved.error.message);
+      }
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+
+  return succeed({ kind: "task", change: change.value });
+}
+
+/**
+ * Records one stated time of a night.
+ *
+ * Creating the row and setting the field are one transaction, so a night can never be left
+ * existing with nothing in it — the state that would make "has the user logged a bedtime?"
+ * ambiguous.
+ */
+function executeSleepRecord(
+  command: Extract<Command, { kind: "sleep.record" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories } = dependencies;
+  const today = todayFrom(dependencies);
+
+  if (!today.ok) {
+    return domainFailure(today.error);
+  }
+
+  const date = resolveDayReference(command.day ?? null, today.value);
+
+  if (!date.ok) {
+    return domainFailure(date.error);
+  }
+
+  const existing = repositories.sleep.findNight(date.value) ?? {
+    date: date.value,
+    bedtime: null,
+    sleepTime: null,
+    wakeTime: null,
+    phoneOutside: false,
+  };
+  const change = recordNightTime(existing, command.field, command.time);
+
+  if (!change.ok) {
+    return domainFailure(change.error);
+  }
+
+  try {
+    repositories.transaction(() => {
+      const created = repositories.sleep.ensureNight(date.value);
+
+      if (!created.ok) {
+        throw new Error(created.error.message);
+      }
+
+      // The parsed time comes from the domain, not from a lookup back through the night, and
+      // it cannot be absent: `recordNightTime` refuses a time it cannot parse.
+      const parsed = change.value.kind === "night" ? change.value.time : null;
+
+      if (parsed === null) {
+        throw new Error("The night change carried no time to store.");
+      }
+
+      const saved = repositories.sleep.saveNightTime(
+        date.value,
+        command.field,
+        parsed,
+      );
+
+      if (!saved.ok) {
+        throw new Error(saved.error.message);
+      }
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+
+  return succeed({ kind: "sleep", change: change.value });
+}
+
+function executeNapStart(
+  command: Extract<Command, { kind: "nap.start" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories } = dependencies;
+  const today = todayFrom(dependencies);
+
+  if (!today.ok) {
+    return domainFailure(today.error);
+  }
+
+  const date = resolveDayReference(command.day ?? null, today.value);
+
+  if (!date.ok) {
+    return domainFailure(date.error);
+  }
+
+  // The most recent nap for that day, and only that one, is what makes "there is already a nap
+  // running" answerable without inventing a status column.
+  const last = repositories.naps.lastNapForDate(date.value);
+  const change = startNap(last !== null && last.end === null ? last : null, {
+    date: date.value,
+    start: command.time,
+  });
+
+  if (!change.ok) {
+    return domainFailure(change.error);
+  }
+
+  try {
+    const id = repositories.transaction(() => {
+      const stored = repositories.naps.insertNap(date.value, command.time);
+
+      if (!stored.ok) {
+        throw new Error(stored.error.message);
+      }
+
+      return stored.value;
+    });
+
+    return succeed({
+      kind: "sleep",
+      change: {
+        kind: "nap",
+        nap: { id, date: date.value, start: command.time, end: null },
+      },
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+}
+
+function executeNapEnd(
+  command: Extract<Command, { kind: "nap.end" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories } = dependencies;
+  const today = todayFrom(dependencies);
+
+  if (!today.ok) {
+    return domainFailure(today.error);
+  }
+
+  const date = resolveDayReference(command.day ?? null, today.value);
+
+  if (!date.ok) {
+    return domainFailure(date.error);
+  }
+
+  const last = repositories.naps.lastNapForDate(date.value);
+  const change = endNap(last, command.time);
+
+  if (!change.ok) {
+    return domainFailure(change.error);
+  }
+
+  try {
+    repositories.transaction(() => {
+      const closed = last as NapLog;
+      const saved = repositories.naps.saveNapEnd(closed.id, command.time);
+
+      if (!saved.ok) {
+        throw new Error(saved.error.message);
+      }
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+
+  return succeed({ kind: "sleep", change: change.value });
 }
 
 // Narrow, typed wrappers. The command union discriminates on `kind`, and routing through the

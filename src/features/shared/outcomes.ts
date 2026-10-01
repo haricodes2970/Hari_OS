@@ -30,6 +30,14 @@ export type OutcomeToken =
   | "invalid_unit"
   | "invalid_quantity"
   | "invalid_money"
+  | "invalid_time"
+  | "invalid_time_order"
+  | "invalid_date"
+  | "unknown_task"
+  | "duplicate_task"
+  | "unknown_nap"
+  | "nap_already_ended"
+  | "invalid_task_selection"
   | "persistence_failed";
 
 /** The first thing a person needs to know, in their own terms. */
@@ -51,6 +59,18 @@ const DOMAIN_MESSAGES: Record<string, string> = {
   invalid_quantity: "The quantity must be a number of zero or more.",
   invalid_money:
     "The amount must be a whole number of rupees and paise, zero or more.",
+  // Phase 6. Each of these is about a stated time or a stated task, and each says what to
+  // change rather than merely that something was wrong.
+  invalid_time: "Write the time on a 24-hour clock, like 23:30.",
+  invalid_time_order:
+    "Those two times cannot both be true. Check the start and the end.",
+  invalid_date: "That day is not a real calendar date.",
+  unknown_task: "That task is not on the list for that day.",
+  duplicate_task: "That task is already on the list for that day.",
+  unknown_nap: "There is no nap to end on that day.",
+  nap_already_ended: "That nap already has an end time.",
+  invalid_task_selection:
+    "The check-in takes one to three task titles, each one a line of text.",
 };
 
 function isDomainMessage(code: string): code is keyof typeof DOMAIN_MESSAGES {

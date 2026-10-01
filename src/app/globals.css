@@ -73,6 +73,15 @@ h2 {
 
 .nav {
   display: flex;
+  /*
+   * Wraps rather than scrolling.
+   *
+   * Phase 6 added a fourth page, and four links no longer fit on one 320px line. Without this
+   * the whole document grew wider than the viewport and every element on the page was reported
+   * as overflowing — a navigation change turning into a page-wide layout failure. `flex-wrap`
+   * is the whole fix: the nav takes a second line, and nothing else on the page moves.
+   */
+  flex-wrap: wrap;
   gap: 0.25rem;
   border-bottom: 1px solid #e5e5e5;
   padding-bottom: 0.5rem;
@@ -82,6 +91,7 @@ h2 {
   padding: 0.3rem 0.7rem;
   border-radius: 999px;
   color: #525252;
+  white-space: nowrap;
 }
 
 .nav-link-active {

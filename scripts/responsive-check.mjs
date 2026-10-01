@@ -398,10 +398,12 @@ try {
       measurement.inputDisabled,
       `${viewport.label}: the input reports honestly that parsing is unavailable (no API key here)`,
     );
+    // Named, not counted. Phase 6 added the Routine page, and a count is the assertion a
+    // navigator stops updating the moment a page is added.
     assertEqual(
-      measurement.navLinks.length,
-      3,
-      `${viewport.label}: navigation to all three pages is present`,
+      measurement.navLinks.join(","),
+      "Dashboard,Kitchen,Expenses,Routine",
+      `${viewport.label}: navigation reaches every page`,
     );
     assert(
       measurement.bodyText.includes("onions"),

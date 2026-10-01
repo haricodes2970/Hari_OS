@@ -39,6 +39,8 @@ import {
   findInventoryItemById,
 } from "../../domain/inventory.ts";
 import { isHabitType, type HabitType } from "../../domain/habits.ts";
+import type { PlanTask } from "@/domain/routine";
+import type { NapLog, SleepLog } from "../../domain/sleep.ts";
 import type { Quantity } from "@/domain/quantity";
 import type { MinorUnits } from "@/domain/money";
 import type { Result } from "@/domain/result";
@@ -119,6 +121,86 @@ export type ExpenseRepository = {
 };
 
 /**
+ * The daily plan: `plan_task`, unchanged since micro-phase 1.1.
+ *
+ * Phase 6 adds no column. The ordering rule is `id` ascending — the order rows were written —
+ * so there is no priority field to keep in step, and no number a model could be asked to
+ * choose. See `src/domain/routine.ts`.
+ */
+export type TaskRepository = {
+  /** An unused id. The schema owns identity, so it is asked for here rather than invented. */
+  nextTaskId(): number;
+  /**
+   * The task with this title on this day, or the domain's `unknown_task` failure.
+   *
+   * Title plus day rather than an id, because a command carries the words the user said. A
+   * model cannot know a row id, and asking one to invent one would be asking it to fabricate
+   * a fact.
+   */
+  findByDateAndTitle(date: string, title: string): Result<PlanTask>;
+  /** Every task on a day, in writing order. */
+  listForDate(date: string): PlanTask[];
+  /** Stores a validated task and returns the id the schema assigned. */
+  insertTask(task: {
+    readonly date: string;
+    readonly title: string;
+  }): PersistenceResult<number>;
+  /** Stores a completion the domain has already decided. */
+  saveTaskDone(id: number, done: boolean): PersistenceResult<void>;
+  /**
+   * Removes a day's *undone* tasks.
+   *
+   * Used only by a night check-in replacing its own earlier list. Done tasks are never
+   * touched: a completed task is a record that something happened, and a check-in submitted
+   * twice must not erase the fact that yesterday's plan was carried out.
+   */
+  deleteUndoneForDate(date: string): PersistenceResult<void>;
+};
+
+/**
+ * Nights: `sleep_log`, unchanged since micro-phase 1.1.
+ *
+ * `date` is the day the night *began*, so bedtime 23:30 on the 1st and wake 06:45 on the 2nd
+ * are one row dated the 1st. That choice is what lets the schema's `UNIQUE (date)` mean
+ * "one night per day" instead of "one row per wake-up", and it is the reason durations wrap
+ * past midnight in `src/domain/sleep.ts` rather than being negative.
+ */
+export type SleepRepository = {
+  /** The night that began on this day, or `null` when nothing has been recorded. */
+  findNight(date: string): SleepLog | null;
+  /** Creates the row with every time unset. Idempotent. */
+  ensureNight(date: string): PersistenceResult<void>;
+  /**
+   * Stores one stated time, leaving the other two alone.
+   *
+   * Fields are written one at a time because that is how the fact arrives: "went to bed at
+   * 11" says nothing about when the user woke, and writing a placeholder for it would invent
+   * a time they never gave.
+   */
+  saveNightTime(
+    date: string,
+    field: "bedtime" | "sleep_time" | "wake_time",
+    time: string,
+  ): PersistenceResult<void>;
+  /** Stores the night check-in's phone confirmation. */
+  savePhoneOutside(date: string, outside: boolean): PersistenceResult<void>;
+  /** Nights newest first, for the consistency streak. */
+  listNights(limit: number): SleepLog[];
+};
+
+/** Naps: `nap_log`, unchanged since micro-phase 1.1. */
+export type NapRepository = {
+  /** Opens a nap. The end stays `null` until it is closed. */
+  insertNap(date: string, start: string): PersistenceResult<number>;
+  /** Closes a nap with a stated end time. */
+  saveNapEnd(id: number, end: string): PersistenceResult<void>;
+  /** The most recent nap on a day, whether open or closed. */
+  lastNapForDate(date: string): NapLog | null;
+  /** Every nap on a day, in the order they started. */
+  listNapsForDate(date: string): NapLog[];
+};
+
+/**
  * Read-only queries the pages need to display persisted state.
  *
  * Kept separate from the command surface above, and for a real reason: those six methods
@@ -138,8 +220,12 @@ export type DisplayQueries = {
   expensesForDate(date: string): RecentExpense[];
   /** Spend for one UTC calendar day, plus how many entries it came from. */
   spendForDate(date: string): { total: MinorUnits; count: number };
-  /** The plan for one calendar day, for the dashboard. Read-only; nothing creates these yet. */
-  tasksForDate(date: string): PlanTask[];
+  /**
+   * The plan for one calendar day, in the order the rows were written.
+   *
+   * `ORDER BY id` is the ordering rule the morning view depends on: the first task written
+   * is the first one to do. See `src/domain/routine.ts`.
+   */
   /**
    * The habit entries recorded on one calendar day.
    *
@@ -169,13 +255,6 @@ export type RecentExpense = {
   readonly category: string | null;
 };
 
-/** A single day's plan task, read-only. */
-export type PlanTask = {
-  readonly id: number;
-  readonly title: string;
-  readonly done: boolean;
-};
-
 /** One `habit_log` row, read-only, with the photo reduced to whether one is attached. */
 export type HabitEntry = {
   readonly type: HabitType;
@@ -189,6 +268,9 @@ export type Repositories = {
   readonly inventory: InventoryRepository;
   readonly accounts: AccountRepository;
   readonly expenses: ExpenseRepository;
+  readonly tasks: TaskRepository;
+  readonly sleep: SleepRepository;
+  readonly naps: NapRepository;
   /**
    * Runs `work` inside a single transaction, committing on return and rolling back on throw.
    *
@@ -295,7 +377,202 @@ export function createRepositories(database: DatabaseHandle): Repositories {
     "INSERT INTO expense (timestamp, item, amount, account, category) VALUES (?, ?, ?, ?, ?)",
   );
 
+  const nextTaskIdRows = database.prepare(
+    "SELECT COALESCE(MAX(id), 0) + 1 AS next FROM plan_task",
+  );
+  const taskByDateAndTitleRows = database.prepare(
+    "SELECT id, date, title, done FROM plan_task WHERE date = ? AND title = ?",
+  );
+  const tasksForDateListRows = database.prepare(
+    "SELECT id, date, title, done FROM plan_task WHERE date = ? ORDER BY id",
+  );
+  const insertTaskRows = database.prepare(
+    "INSERT INTO plan_task (id, date, title, done) VALUES (?, ?, ?, 0)",
+  );
+  const saveTaskDoneRows = database.prepare(
+    "UPDATE plan_task SET done = ? WHERE id = ?",
+  );
+  const deleteUndoneRows = database.prepare(
+    "DELETE FROM plan_task WHERE date = ? AND done = 0",
+  );
+  const findNightRows = database.prepare(
+    "SELECT date, bedtime, sleep_time, wake_time, phone_outside FROM sleep_log WHERE date = ?",
+  );
+  const ensureNightRows = database.prepare(
+    "INSERT OR IGNORE INTO sleep_log (date) VALUES (?)",
+  );
+  const saveNightTimeRows = database.prepare(
+    "UPDATE sleep_log SET bedtime = ? WHERE date = ?",
+  );
+  const saveSleepTimeRows = database.prepare(
+    "UPDATE sleep_log SET sleep_time = ? WHERE date = ?",
+  );
+  const saveWakeTimeRows = database.prepare(
+    "UPDATE sleep_log SET wake_time = ? WHERE date = ?",
+  );
+  const savePhoneOutsideRows = database.prepare(
+    "UPDATE sleep_log SET phone_outside = ? WHERE date = ?",
+  );
+  const listNightsRows = database.prepare(
+    "SELECT date, bedtime, sleep_time, wake_time, phone_outside FROM sleep_log ORDER BY date DESC LIMIT ?",
+  );
+  const insertNapRows = database.prepare(
+    "INSERT INTO nap_log (date, start) VALUES (?, ?)",
+  );
+  const saveNapEndRows = database.prepare(
+    "UPDATE nap_log SET end = ? WHERE id = ?",
+  );
+  const lastNapRows = database.prepare(
+    "SELECT id, date, start, end FROM nap_log WHERE date = ? ORDER BY id DESC LIMIT 1",
+  );
+  const listNapsRows = database.prepare(
+    "SELECT id, date, start, end FROM nap_log WHERE date = ? ORDER BY id",
+  );
+
   return {
+    tasks: {
+      nextTaskId() {
+        return (nextTaskIdRows.get() as { next: number }).next;
+      },
+
+      findByDateAndTitle(date, title) {
+        const row = taskByDateAndTitleRows.get(date, title) as
+          TaskRow | undefined;
+
+        if (row === undefined) {
+          return {
+            ok: false,
+            error: {
+              code: "unknown_task",
+              message: `No task named "${title}" is planned for ${date}.`,
+              detail: { title, date },
+            },
+          };
+        }
+
+        return { ok: true, value: toTask(row) };
+      },
+
+      listForDate(date) {
+        return toTasks(tasksForDateListRows.all(date) as TaskRow[]);
+      },
+
+      insertTask(task) {
+        try {
+          const { next } = nextTaskIdRows.get() as { next: number };
+
+          insertTaskRows.run(next, task.date, task.title);
+
+          return { ok: true, value: next };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      saveTaskDone(id, done) {
+        try {
+          saveTaskDoneRows.run(done ? 1 : 0, id);
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      deleteUndoneForDate(date) {
+        try {
+          deleteUndoneRows.run(date);
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+    },
+
+    sleep: {
+      findNight(date) {
+        const row = findNightRows.get(date) as NightRow | undefined;
+
+        return row === undefined ? null : toNight(row);
+      },
+
+      ensureNight(date) {
+        try {
+          ensureNightRows.run(date);
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      // One field per statement, so a recorded bedtime can never overwrite a recorded wake
+      // time and no caller has to remember to preserve the other two columns.
+      saveNightTime(date, field, time) {
+        try {
+          const statement =
+            field === "bedtime"
+              ? saveNightTimeRows
+              : field === "sleep_time"
+                ? saveSleepTimeRows
+                : saveWakeTimeRows;
+
+          statement.run(time, date);
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      savePhoneOutside(date, outside) {
+        try {
+          savePhoneOutsideRows.run(outside ? 1 : 0, date);
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      listNights(limit) {
+        return (listNightsRows.all(limit) as NightRow[]).map(toNight);
+      },
+    },
+
+    naps: {
+      insertNap(date, start) {
+        try {
+          const result = insertNapRows.run(date, start);
+
+          return { ok: true, value: Number(result.lastInsertRowid) };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      saveNapEnd(id, end) {
+        try {
+          saveNapEndRows.run(end, id);
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      lastNapForDate(date) {
+        const row = lastNapRows.get(date) as NapRow | undefined;
+
+        return row === undefined ? null : toNap(row);
+      },
+
+      listNapsForDate(date) {
+        return (listNapsRows.all(date) as NapRow[]).map(toNap);
+      },
+    },
+
     display: buildDisplayQueries(database),
 
     inventory: {
@@ -494,6 +771,53 @@ function toRecentExpense(row: JoinedExpenseRow): RecentExpense {
   };
 }
 
+/** One `plan_task` row. */
+type TaskRow = {
+  id: number;
+  date: string;
+  title: string;
+  done: number;
+};
+
+/** One `sleep_log` row. */
+type NightRow = {
+  date: string;
+  bedtime: string | null;
+  sleep_time: string | null;
+  wake_time: string | null;
+  phone_outside: number;
+};
+
+/** One `nap_log` row. */
+type NapRow = {
+  id: number;
+  date: string;
+  start: string;
+  end: string | null;
+};
+
+function toTask(row: TaskRow): PlanTask {
+  return { id: row.id, date: row.date, title: row.title, done: row.done === 1 };
+}
+
+function toTasks(rows: readonly TaskRow[]): PlanTask[] {
+  return rows.map(toTask);
+}
+
+function toNight(row: NightRow): SleepLog {
+  return {
+    date: row.date,
+    bedtime: row.bedtime,
+    sleepTime: row.sleep_time,
+    wakeTime: row.wake_time,
+    phoneOutside: row.phone_outside === 1,
+  };
+}
+
+function toNap(row: NapRow): NapLog {
+  return { id: row.id, date: row.date, start: row.start, end: row.end };
+}
+
 function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
   const listInventoryRows = database.prepare(
     "SELECT id, name, quantity, unit, low_threshold FROM inventory_item ORDER BY name COLLATE NOCASE",
@@ -517,9 +841,6 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
      JOIN account a ON a.id = e.account
      WHERE substr(e.timestamp, 1, 10) = ?
      ORDER BY e.timestamp DESC, e.id DESC`,
-  );
-  const tasksForDateRows = database.prepare(
-    "SELECT id, title, done FROM plan_task WHERE date = ? ORDER BY id",
   );
   const habitsForDateRows = database.prepare(
     "SELECT type, done, photo_url FROM habit_log WHERE date = ? ORDER BY id",
@@ -566,14 +887,6 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
       };
 
       return { total: row.total, count: row.count };
-    },
-
-    tasksForDate(date) {
-      return (
-        tasksForDateRows.all(date) as (Omit<PlanTask, "done"> & {
-          done: number;
-        })[]
-      ).map((row) => ({ id: row.id, title: row.title, done: row.done === 1 }));
     },
 
     habitsForDate(date) {

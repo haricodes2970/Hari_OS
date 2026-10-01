@@ -27,6 +27,19 @@
  * - `insufficient_inventory` — consuming more than the recorded stock.
  * - `unknown_item` — no inventory item matched the requested name.
  * - `missing_account` — no account matched the requested name.
+ * - `invalid_time` — a clock time that is not `HH:MM` on a 24-hour clock. Phase 6.
+ * - `invalid_time_order` — two stated times that cannot both be true of the same event: a
+ *   nap that ends before it starts, or a night at least a full day long. Phase 6.
+ * - `invalid_date` — a calendar date that is not a real `YYYY-MM-DD` day. Phase 6.
+ * - `unknown_task` — no planned task matched the requested title and day. Phase 6.
+ * - `duplicate_task` — that title is already planned for that day. Phase 6.
+ * - `unknown_nap` — there is no nap to end on that day. Phase 6.
+ * - `nap_already_ended` — the last nap on that day already has an end time. Phase 6.
+ * - `invalid_task_selection` — a night check-in with no tasks, or with more than the
+ *   three the PRD asks for. Phase 6.
+ *
+ * Every code here is a refusal the *user* can act on. None of them is an infrastructure
+ * problem: a database failure surfaces at the layer that owns it, never as a `DomainError`.
  */
 export type DomainErrorCode =
   | "invalid_quantity"
@@ -35,7 +48,15 @@ export type DomainErrorCode =
   | "invalid_unit"
   | "insufficient_inventory"
   | "unknown_item"
-  | "missing_account";
+  | "missing_account"
+  | "invalid_time"
+  | "invalid_time_order"
+  | "invalid_date"
+  | "unknown_task"
+  | "duplicate_task"
+  | "unknown_nap"
+  | "nap_already_ended"
+  | "invalid_task_selection";
 
 /** Extra machine-readable context, for assertions and for showing the user what was wrong. */
 export type DomainErrorDetail = Readonly<Record<string, string | number>>;

@@ -33,6 +33,8 @@
 import type { AccountName } from "@/domain/accounts";
 import type { MinorUnits } from "@/domain/money";
 import type { Quantity } from "@/domain/quantity";
+import type { DayReference } from "@/domain/routine";
+import type { SleepField } from "@/domain/sleep";
 
 /**
  * The only contract version that exists.
@@ -157,14 +159,90 @@ export type InventoryCommand =
 export type ExpenseCommand = ExpenseRecordCommand;
 
 /**
+ * Plans a task for a day: the PRD's "tomorrow I need to finish the report".
+ *
+ * `day` is the one field here that looks like a time and is not. It is a **stated** day
+ * reference — "tomorrow", "today", "yesterday" — not a date. A date is a conclusion drawn
+ * from that word and a clock, and only the application may draw it, so the model reports the
+ * word and `src/domain/routine.ts` resolves it against the server's current day. This is the
+ * smallest representation that lets a sentence place a task on the right day without the
+ * model ever emitting a timestamp.
+ *
+ * `title` is what the user said the task is. It is not a priority, a rank, or an ordering
+ * instruction: the order tasks are written in is the order they matter in.
+ */
+export type TaskCreateCommand = CommandBase & {
+  readonly kind: "task.create";
+  readonly title: string;
+  /** Absent means today, which is a documented default rather than an inference. */
+  readonly day?: DayReference | null;
+};
+
+/** Marks a planned task done or not done. */
+export type TaskSetDoneCommand = CommandBase & {
+  readonly kind: "task.set_done";
+  readonly title: string;
+  /** The completion the user stated. Both values are facts; neither is a decision. */
+  readonly done: boolean;
+  readonly day?: DayReference | null;
+};
+
+/**
+ * Records one stated time of a night: bedtime, the time sleep began, or the wake time.
+ *
+ * `time` is a wall-clock `HH:MM` the user said. It is **not** the moment the command was
+ * received: "went to bed at 11" and "posted at 23:04" are different facts, and conflating
+ * them would let a check-in written at 1 AM book a wake time an hour before bedtime. The
+ * execution timestamp stays where it has always been — the server's clock, never this
+ * command's — and the duration between two stated times is computed in `src/domain/sleep.ts`.
+ *
+ * `day` selects **the night**, meaning the day the night began.
+ */
+export type SleepRecordCommand = CommandBase & {
+  readonly kind: "sleep.record";
+  readonly field: SleepField;
+  readonly time: string;
+  readonly day?: DayReference | null;
+};
+
+/** Opens a nap. The end time is a separate command, because it arrives separately. */
+export type NapStartCommand = CommandBase & {
+  readonly kind: "nap.start";
+  readonly time: string;
+  readonly day?: DayReference | null;
+};
+
+/**
+ * Closes the most recent nap on that day.
+ *
+ * No id: the model cannot know one, and the row is found by being the last nap. Ending a
+ * nap that is not open is a domain refusal, not a guess about which one was meant.
+ */
+export type NapEndCommand = CommandBase & {
+  readonly kind: "nap.end";
+  readonly time: string;
+  readonly day?: DayReference | null;
+};
+
+export type RoutineCommand =
+  | TaskCreateCommand
+  | TaskSetDoneCommand
+  | SleepRecordCommand
+  | NapStartCommand
+  | NapEndCommand;
+
+export type SleepCommand = SleepRecordCommand | NapStartCommand | NapEndCommand;
+
+/**
  * Every command the application can act on.
  *
- * Only the two families with a deterministic domain operation and a real user sentence
- * behind them are modelled. Routine, sleep, skills, and habits are absent on purpose: no
- * domain operation exists for them, so a command type would have no execution path and would
- * be a promise the code cannot keep.
+ * The families added in Phase 6 carry the same discipline as the first two: a stated time is
+ * a fact the user gave, a duration is never a field, a priority is never a field, and no
+ * field names a result. What the model may extract is *which* time the user said and *what*
+ * the task is. Everything else is computed by `src/domain`.
  */
-export type Command = InventoryCommand | ExpenseCommand;
+export type Command =
+  InventoryCommand | ExpenseCommand | RoutineCommand | SleepCommand;
 
 export type CommandKind = Command["kind"];
 
@@ -175,6 +253,11 @@ export const COMMAND_KINDS: readonly CommandKind[] = [
   "inventory.set_quantity",
   "inventory.recount_after_use",
   "expense.record",
+  "task.create",
+  "task.set_done",
+  "sleep.record",
+  "nap.start",
+  "nap.end",
 ];
 
 /** Narrows an untrusted value's `kind` without validating the rest of the object. */

@@ -33,6 +33,8 @@
 import { isAccountName, type AccountName } from "../../domain/accounts.ts";
 import { isMoneyAmount } from "../../domain/money.ts";
 import { isQuantity } from "../../domain/quantity.ts";
+import { isDayReference, type DayReference } from "../../domain/routine.ts";
+import { isSleepField, type SleepField } from "../../domain/sleep.ts";
 import {
   COMMAND_KINDS,
   COMMAND_VERSION,
@@ -63,6 +65,13 @@ const KEYS_BY_KIND = {
     "unit",
   ],
   "expense.record": [...BASE_KEYS, "accountName", "item", "amount", "category"],
+  // Phase 6. `day` is a stated reference ("today" / "tomorrow" / "yesterday"), never a
+  // date: the application resolves it, so a model cannot name a calendar day it computed.
+  "task.create": [...BASE_KEYS, "title", "day"],
+  "task.set_done": [...BASE_KEYS, "title", "done", "day"],
+  "sleep.record": [...BASE_KEYS, "field", "time", "day"],
+  "nap.start": [...BASE_KEYS, "time", "day"],
+  "nap.end": [...BASE_KEYS, "time", "day"],
 } as const satisfies Record<string, readonly string[]>;
 
 const MISSING = Symbol("missing");
@@ -327,6 +336,112 @@ function readAccountName(
 }
 
 /**
+ * Reads a stated day reference, an absent one becoming `today`.
+ *
+ * The default is documented rather than inferred, and it is the same treatment `category`
+ * gets on `expense.record`. A *date* is never accepted here: `2026-10-02` is a value only
+ * the application can produce, and letting one through would mean a sentence could pin a
+ * task to a day the user never named.
+ */
+function readDayReference(
+  value: unknown,
+  issues: ValidationIssue[],
+): DayReference | null {
+  if (value === MISSING || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    issues.push({
+      path: "day",
+      code: "wrong_type",
+      message: `\`day\` must be a string or null, received ${typeof value}.`,
+    });
+    return null;
+  }
+
+  if (!isDayReference(value)) {
+    issues.push({
+      path: "day",
+      code: "wrong_type",
+      message: `\`day\` must be "today", "tomorrow", or "yesterday"; received "${value}".`,
+    });
+    return null;
+  }
+
+  return value;
+}
+
+/** Reads which of the night's three times this command records. */
+function readSleepField(
+  value: unknown,
+  issues: ValidationIssue[],
+): SleepField | null {
+  if (value === MISSING || value === undefined) {
+    issues.push({
+      path: "field",
+      code: "missing_field",
+      message: "`field` is required.",
+    });
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    issues.push({
+      path: "field",
+      code: "wrong_type",
+      message: `\`field\` must be a string, received ${typeof value}.`,
+    });
+    return null;
+  }
+
+  if (!isSleepField(value)) {
+    issues.push({
+      path: "field",
+      code: "wrong_type",
+      message: `\`field\` must be "bedtime", "sleep_time", or "wake_time"; received "${value}".`,
+    });
+    return null;
+  }
+
+  return value;
+}
+
+/**
+ * Reads a boolean.
+ *
+ * Only a real boolean is accepted — `"true"` and `1` are failures, not coercions. The value
+ * decides whether a task reads as finished, and a form checkbox's string arriving as a
+ * truthy value would be exactly the kind of "repaired" input this boundary exists to refuse.
+ * `formToCommand` converts the checkbox's text into a real boolean before it gets here.
+ */
+function readBoolean(
+  path: string,
+  value: unknown,
+  issues: ValidationIssue[],
+): boolean | null {
+  if (value === MISSING || value === null) {
+    issues.push({
+      path,
+      code: "missing_field",
+      message: `\`${path}\` is required.`,
+    });
+    return null;
+  }
+
+  if (typeof value !== "boolean") {
+    issues.push({
+      path,
+      code: "wrong_type",
+      message: `\`${path}\` must be true or false, received ${typeof value}.`,
+    });
+    return null;
+  }
+
+  return value;
+}
+
+/**
  * Validates an untrusted value into a command, or explains every problem with it.
  *
  * Returns a value or a list of issues. It never throws, and it never touches the clock, the
@@ -501,7 +616,7 @@ function readCommand(
         quantity: quantity as number,
       } as Command;
     }
-  } else {
+  } else if (kind === "expense.record") {
     const accountName = readAccountName(input, issues);
     const item = readString("item", ownValue(input, "item"), issues);
     const amount = readMoney("amount", ownValue(input, "amount"), issues);
@@ -520,6 +635,63 @@ function readCommand(
         item: item as string,
         amount: amount as number,
         category,
+      };
+    }
+  } else if (kind === "task.create") {
+    const title = readString("title", ownValue(input, "title"), issues);
+    const day = readDayReference(ownValue(input, "day"), issues);
+
+    if (title !== MISSING) {
+      command = {
+        version,
+        kind: "task.create",
+        sourceText,
+        title: title as string,
+        day,
+      };
+    }
+  } else if (kind === "task.set_done") {
+    const title = readString("title", ownValue(input, "title"), issues);
+    const done = readBoolean("done", ownValue(input, "done"), issues);
+    const day = readDayReference(ownValue(input, "day"), issues);
+
+    if (title !== MISSING && done !== null) {
+      command = {
+        version,
+        kind: "task.set_done",
+        sourceText,
+        title: title as string,
+        done,
+        day,
+      };
+    }
+  } else if (kind === "sleep.record") {
+    const field = readSleepField(ownValue(input, "field"), issues);
+    const time = readString("time", ownValue(input, "time"), issues);
+    const day = readDayReference(ownValue(input, "day"), issues);
+
+    if (field !== null && time !== MISSING) {
+      command = {
+        version,
+        kind: "sleep.record",
+        sourceText,
+        field,
+        time: time as string,
+        day,
+      };
+    }
+  } else {
+    // nap.start and nap.end share their shape; only the kind differs.
+    const time = readString("time", ownValue(input, "time"), issues);
+    const day = readDayReference(ownValue(input, "day"), issues);
+
+    if (time !== MISSING) {
+      command = {
+        version,
+        kind: kind as "nap.start" | "nap.end",
+        sourceText,
+        time: time as string,
+        day,
       };
     }
   }

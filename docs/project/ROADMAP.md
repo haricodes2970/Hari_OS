@@ -13,7 +13,7 @@ live state. If the two ever disagree, `PROJECT_STATUS.md` is correct.
 | 3 | Kitchen | **Complete** |
 | 4 | Expenses | **Complete** |
 | 5 | Dashboard | **Complete** |
-| 6 | Routine + Sleep | Planned |
+| 6 | Routine + Sleep | **Complete** |
 | 7 | Skills + Habits | Planned |
 | 8 | Photo + Diary | Planned |
 | 9 | Hardening | Planned |
@@ -62,7 +62,9 @@ whose modules do not exist yet say so rather than showing an empty list. See
 **Phases 6–8 — Product areas.** Routine + Sleep, Skills + Habits, Photo + Diary, one per document
 under [`phases/`](../phases/). Phase 5 deliberately did not start any of them, and it left the
 Dashboard's task, skill, and habit cards pointed at real, empty tables so those phases plug into
-a screen that already works.
+a screen that already works. Phase 6 is complete: `plan_task` is written by the night check-in and
+by five new command kinds, `sleep_log` and `nap_log` are written by hand, and the Dashboard gained
+its sleep card by composing the Routine read model rather than reading the tables itself.
 
 **Phase 9 — Hardening.** Reliability, correction paths, empty states, and test coverage
 appropriate to what was actually built. See

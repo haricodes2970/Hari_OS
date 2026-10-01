@@ -51,6 +51,16 @@ export type CommandFormProps = {
   readonly fields: readonly CommandField[];
   readonly submitLabel: string;
   readonly heading?: string;
+  /**
+   * Contract fields sent without an input of their own.
+   *
+   * Some commands act on a row the user is already looking at — marking today's third task
+   * done, closing a nap listed above the form. Those commands carry the row's id, which comes
+   * from the row rather than from anything the user types, so it has no visible input. It
+   * travels as a hidden field named exactly as the contract names it, and validation still
+   * checks it like any other field.
+   */
+  readonly hidden?: Readonly<Record<string, string>>;
 };
 
 /** The single endpoint every command is posted to. */
@@ -62,6 +72,7 @@ export function CommandForm({
   fields,
   submitLabel,
   heading,
+  hidden = {},
 }: CommandFormProps) {
   return (
     <form className="command-form" method="post" action={ENDPOINT}>
@@ -69,6 +80,10 @@ export function CommandForm({
       {/* Where to land afterwards. The endpoint treats this as untrusted and refuses
           anything that is not a same-site path. */}
       <input type="hidden" name="next" value={returnTo} />
+
+      {Object.entries(hidden).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
 
       {heading === undefined ? null : (
         <h2 className="form-heading">{heading}</h2>

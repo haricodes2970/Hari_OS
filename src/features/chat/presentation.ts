@@ -69,6 +69,45 @@ export type TrustedOutcome =
           readonly category: string | null;
         };
       };
+    }
+  | {
+      /** Phase 6. The task that was stored, and the completion it now carries. */
+      readonly kind: "task";
+      readonly change: {
+        readonly kind: "task";
+        readonly after: boolean;
+        readonly task: {
+          readonly id: number;
+          readonly date: string;
+          readonly title: string;
+          readonly done: boolean;
+        };
+      };
+    }
+  | {
+      /** Phase 6. A night, or a nap. */
+      readonly kind: "sleep";
+      readonly change:
+        | {
+            readonly kind: "night";
+            readonly field: string;
+            readonly night: {
+              readonly date: string;
+              readonly bedtime: string | null;
+              readonly sleepTime: string | null;
+              readonly wakeTime: string | null;
+              readonly phoneOutside: boolean;
+            };
+          }
+        | {
+            readonly kind: "nap";
+            readonly nap: {
+              readonly id: number;
+              readonly date: string;
+              readonly start: string;
+              readonly end: string | null;
+            };
+          };
     };
 
 /** The kind of command that was run, used only to choose the wording. */
@@ -77,7 +116,23 @@ export type AppliedKind =
   | "inventory.restock"
   | "inventory.set_quantity"
   | "inventory.recount_after_use"
-  | "expense.record";
+  | "expense.record"
+  | "task.create"
+  | "task.set_done"
+  | "sleep.record"
+  | "nap.start"
+  | "nap.end";
+
+/** A stated `HH:MM` as a person says it, for a sentence. */
+function clockLabel(time: string): string {
+  const [hours, minutes] = time.split(":").map(Number);
+  const suffix = hours < 12 ? "am" : "pm";
+  const hour = hours % 12 === 0 ? 12 : hours % 12;
+
+  return minutes === 0
+    ? `${hour} ${suffix}`
+    : `${hour}:${String(minutes).padStart(2, "0")} ${suffix}`;
+}
 
 /**
  * Everything the chat surface can be told, in terms it can render.
@@ -143,6 +198,45 @@ export function describeApplied(
     return `Bought ${what} for ${formatMinorUnits(
       expense?.amount ?? 0,
     )} using ${label}. ${label} balance: ${formatMinorUnits(after)}.`;
+  }
+
+  if (outcome.kind === "task") {
+    const { task, after } = outcome.change;
+
+    return kind === "task.create"
+      ? `Added "${task.title}" to ${task.date}.`
+      : `Marked "${task.title}" as ${after ? "done" : "not done"}.`;
+  }
+
+  if (outcome.kind === "sleep") {
+    if (outcome.change.kind === "nap") {
+      const { start, end } = outcome.change.nap;
+
+      return end === null
+        ? `Nap started at ${clockLabel(start)}. It is still running.`
+        : `Nap ended at ${clockLabel(end)}.`;
+    }
+
+    const { night, field } = outcome.change;
+
+    if (
+      field === "bedtime" ||
+      field === "sleep_time" ||
+      field === "wake_time"
+    ) {
+      const said =
+        field === "bedtime"
+          ? night.bedtime
+          : field === "sleep_time"
+            ? night.sleepTime
+            : night.wakeTime;
+
+      return said === null
+        ? "Saved."
+        : `Recorded ${field === "sleep_time" ? "sleep time" : field} as ${clockLabel(said)}.`;
+    }
+
+    return "Saved.";
   }
 
   const change = outcome.kind === "inventory" ? outcome.change : null;

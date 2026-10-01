@@ -44,6 +44,13 @@ const TEXT_FIELDS = [
   "unit",
   "accountName",
   "category",
+  // Phase 6. A task's title, a stated clock time, the stated day, and which of the night's
+  // three times a sentence is about. All four are words the user chose, copied without
+  // interpretation.
+  "title",
+  "time",
+  "day",
+  "field",
 ] as const;
 
 function text(form: FormData, name: string): string {
@@ -61,6 +68,26 @@ function numberField(raw: string): number | string {
   const parsed = Number(raw);
 
   return Number.isFinite(parsed) ? parsed : raw;
+}
+
+/** The two words a checkbox can produce, and nothing else. */
+const BOOLEAN_WORDS = new Set(["true", "false"]);
+
+/**
+ * A checkbox's text into a real boolean.
+ *
+ * A form has no boolean type: `<input type="hidden" value="true">` arrives as the *string*
+ * `"true"`, and validation refuses a string where it wants a boolean. So the conversion
+ * happens here, in the one module that turns form fields into contract fields, and it happens
+ * for exactly two words. Anything else is forwarded untouched and rejected by name, rather
+ * than being read as truthy — a task marked "1" or "yes" is not a task marked done.
+ */
+function booleanField(raw: string): boolean | string {
+  if (!BOOLEAN_WORDS.has(raw)) {
+    return raw;
+  }
+
+  return raw === "true";
 }
 
 /**
@@ -114,6 +141,12 @@ export function formToCommand(form: FormData): Record<string, unknown> {
   if (amount !== "") {
     command.amount =
       kind === "expense.record" ? amountField(amount) : numberField(amount);
+  }
+
+  // Same reasoning as `amount`, one field earlier: the wire format has no boolean.
+  const done = text(form, "done");
+  if (done !== "") {
+    command.done = booleanField(done);
   }
 
   return command;

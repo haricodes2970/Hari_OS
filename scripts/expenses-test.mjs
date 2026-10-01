@@ -581,8 +581,15 @@ reset();
   );
 
   // Same-millisecond entries must still come back in insertion order.
-  insertExpense("2026-10-01T12:00:00.000Z", "tie-a", 100, 1);
-  insertExpense("2026-10-01T12:00:00.000Z", "tie-b", 100, 1);
+  //
+  // The timestamp is derived from the clock rather than written out. This test used to pin
+  // `2026-10-01T12:00:00.000Z`, which was only "the newest entry" while the wall clock was
+  // before noon that day; at 12:00 UTC the three command-recorded rows (stamped by the real
+  // clock) became newer and the assertion started failing on its own. A test that depends on
+  // what time it is when it runs is a test that will fail on someone else's machine.
+  const tie = new Date().toISOString();
+  insertExpense(tie, "tie-a", 100, 1);
+  insertExpense(tie, "tie-b", 100, 1);
   const tied = repositories.display
     .recentExpenses(2)
     .map((expense) => expense.item);

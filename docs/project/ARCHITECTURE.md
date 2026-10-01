@@ -604,14 +604,15 @@ SELECT SUM(delta) FROM inventory_event WHERE item_id = ?   -- == inventory_item.
 
 - **A unit cannot change while stock is non-zero.** 8 pieces is not 8 kg, and this application
   does not convert between units. The rule is in `src/domain`, so no caller can skip it.
-- **A threshold of zero is refused.** It would flag every item forever, which is a bug that
-  looks like a feature. No threshold is `NULL` and is distinct from zero.
-  - **Discrepancy recorded in Phase 5, not fixed here.** This claim does not match the code.
-    `setLowStockThreshold` in `src/domain/inventory.ts` accepts zero, and
-    `scripts/dashboard-test.mjs` asserts the behaviour that actually exists: a threshold of zero
-    flags an item only while its quantity is zero, and one piece above that it is not low. The
-    documentation is not being silently corrected and the code is not being silently changed; the
-    mismatch is the user's call. See `docs/sessions/2026-10-01-session-04.md`.
+- **A threshold of zero is a threshold, and no threshold is `NULL`.** The rule is
+  `quantity <= threshold`, so a threshold of zero flags an item only while its quantity is
+  zero — "tell me when I am out" — and one piece above that it is not low. No threshold at all
+  is `NULL`, which is the only value that disables the flag.
+  - Phase 5 recorded a discrepancy here: this section used to claim a zero threshold was
+    refused, which the code does not do. Phase 6 resolved it in favour of the code's behaviour
+    and corrected the documentation, because the reason the old rule gave — "it would flag
+    every item forever" — is not true of `quantity <= threshold`. ADR-048 records the decision
+    and the alternative.
 - **A recount that also reports a use refuses a use larger than the count.** "I had 10 onions,
   used 2" is a count of 10 and a use of 2, and the difference of 8 is computed here — the model
   reports the two numbers the user actually said and never the difference. A use of 3 against a
@@ -689,9 +690,13 @@ src/app/page.tsx                 the screen: render, and nothing else
 ```
 DashboardPage → readDashboard(date) → listKitchenStock()      (Kitchen view, isLowStock)
                                 └→ readDailyBill(date)       (Expenses view, summariseDay)
-                                └→ display.tasksForDate(date) (plan_task)
+                                └→ readRoutine(date)          (Routine view, selectTopTasks)
                                 └→ display.habitsForDate(date)(habit_log)
 ```
+
+Phase 6 replaced `display.tasksForDate` with `readRoutine`. ADR-047 had accepted that ad-hoc read
+only while no feature owned `plan_task`; now one does, and ADR-050 retires it so the table has a
+single reader.
 
 `readDashboardSummary` used to live in `src/features/shared/queries.ts` and it moved. That file
 holds the Kitchen page's inventory projection; a Dashboard that aggregates three features is not
@@ -730,3 +735,92 @@ about the data rather than a verdict about the user's day.
 `next/server` is exempt from the `src/app` rule: every route handler imports it, and a framework
 import is not storage access. The rule exists because "no SQL in the page component" is a claim
 that was, until Phase 5, made only in prose.
+
+---
+
+## 18. The routine and sleep slice (added in Phase 6)
+
+```
+src/domain/calendar.ts            YYYY-MM-DD parsing, UTC day arithmetic      pure
+src/domain/routine.ts             tasks, the top three, the night check-in     pure
+src/domain/sleep.ts               clock times, night and nap lengths, streak   pure
+src/lib/db/repositories.ts        TaskRepository, SleepRepository, NapRepository
+src/features/routine/write.ts     the night check-in: one transaction          server-only
+src/features/routine/view.ts      the read model the Routine page and the Dashboard share
+src/app/api/routine/route.ts      POST only: the one non-command operation
+src/app/routine/page.tsx          the Routine page
+src/components/RoutineForm.tsx    the check-in form (Server Component, no client JS)
+```
+
+### The schema already existed, so this phase wrote no migration
+
+`plan_task`, `sleep_log`, and `nap_log` have been in `db/schema.sql` since micro-phase 1.1, and
+`db:check` asserts all three tables and their columns. Phase 6 added repositories and rules over
+them and **no SQL DDL**, which is the first time a feature slice has needed nothing from
+`migrations/`.
+
+### What "a night" means
+
+A night is stored under **the day it began**. Bedtime 23:30 on the 1st and a wake-up at 07:10 on
+the 2nd are one row dated the 1st. That is what lets `UNIQUE (date)` mean "one night per day"
+instead of "one row per wake-up", and it is why durations wrap past midnight rather than going
+negative — the wrap lives in `overnightMinutes`, and nothing else in `src/` subtracts two clock
+times.
+
+Three times are recorded, and all three are optional: `bedtime`, `sleep_time`, and `wake_time`.
+A night with a bedtime and no wake time has **no length to report**, and the read model returns
+`null` for it rather than counting to midnight. A night is allowed to be incomplete because
+"I went to bed at 23:30" says nothing about when the user woke, and inventing a placeholder would
+be inventing a fact.
+
+Two of the three times being equal is refused at write time, in the domain. A sleep time equal to
+the bedtime means no time passed between lying down and sleeping; a wake time equal to either
+means the night is either zero-length or a full day. The same ambiguity `overnightMinutes` refuses
+to resolve, caught before it reaches the database.
+
+### Day references, never computed dates
+
+A command carries `day: "today" | "tomorrow" | "yesterday"` — the words the user said. The date is
+resolved by `resolveDayReference` in `src/domain/routine.ts` against the date the executor's
+injected clock produced, in UTC, because every stored timestamp is a UTC instant. No command
+contains a date, an id, a duration, a priority, or a timestamp, and the parser is instructed not
+to emit one. Adding a computed date to the contract would make the model responsible for knowing
+what day it is.
+
+### Task order is the priority, and there is no priority column
+
+Tasks are stored and read in ascending `id`, so the order they were written is the order they
+matter in. `selectTopTasks` takes the first three; `taskCount` keeps the true number so a day with
+five tasks reports five rather than silently showing three. Nothing in `src/` ranks, scores, or
+reorders a task, and there is no column in which a rank could be stored.
+
+### The check-in is an operation, not a command
+
+See ADR-049. `POST /api/routine` has a closed enum of one operation, the same origin guard as the
+other write routes, and the same token-based outcome. All four of its writes share one
+transaction. Adding a second operation means editing the enum.
+
+### What the streak is, and what it is not
+
+`wakeConsistencyStreak` counts consecutive days with a wake time inside the domain's
+`WAKE_WINDOW_START`–`WAKE_WINDOW_END` (06:15–07:30, the two times the PRD reports). It is a
+neutral habit counter and it is rendered as a record: no score, no grade, no progress bar, no
+punishment, and no wording that compares a day to a target. A missing entry is "not recorded",
+never a failure.
+
+### Nap warnings are the PRD's, and they are soft
+
+A nap over 30 minutes warns, and a nap starting after 15:00 warns. The boundaries are exact — 30
+minutes does not warn, 15:00 does not — and both messages are produced by the domain and rendered
+verbatim. They are shown once, beside the nap, and they block nothing. A nap's length is `null`
+while it is still running rather than counting to the current time, because the application does
+not know when a nap will end.
+
+### One reader per table, and the enforced scopes are unchanged
+
+`plan_task`, `sleep_log`, and `nap_log` each have exactly one reader, owned by this slice
+(ADR-050). The Dashboard composes `readRoutine` rather than reaching past it, which is how it
+gained the sleep card without a second definition of "today's tasks". No new enforced boundary
+scope was added: the existing rules already forbid `src/app/**` from touching storage and
+`src/domain/**` and `src/components/**` from importing it, and `src/features/routine/**` is
+covered by the feature rule that existed since Phase 3.

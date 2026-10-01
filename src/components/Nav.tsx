@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/kitchen", label: "Kitchen" },
   { href: "/expenses", label: "Expenses" },
+  { href: "/routine", label: "Routine" },
 ] as const;
 
 export function Nav({ currentPath }: NavProps) {
