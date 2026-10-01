@@ -405,15 +405,20 @@ None of the following exist, and their absence is intentional:
   be created from the page, but only through the Kitchen setup route (ADR-043), never as a
   parsed sentence
 - A correcting entry for the expense ledger, which holds non-negative spends only. Inventory
-  corrections exist; this one needs a migration
+  corrections exist; this one needs a migration. Phase 4 assessed it and deferred it (ADR-045,
+  ADR-046 are unrelated; the deferral is recorded in `phases/PHASE_04_EXPENSES.md`)
+- Batch expense entry from one sentence. The PRD contradicts itself on it, and Phase 2's
+  one-sentence-one-command ADR holds
 - A "what can I cook with current stock" view. The PRD lists it as later work and Phase 3
   deliberately did not build it
 - Filesystem upload handling
 - Authentication
 - Deployment configuration
 - PWA manifest, service service worker, or offline support
-- A general test framework. The tests are eight scripts: `db:test`, `domain:test`,
-  `contract:test`, `exec:test`, `app:test`, `parser:test`, `chat:test`, and `kitchen:test`
+- A general test framework. The tests are nine scripts: `db:test`, `domain:test`,
+  `contract:test`, `exec:test`, `app:test`, `parser:test`, `chat:test`, `kitchen:test`, and
+  `expenses:test`. A tenth, `architecture:probe`, is not a test suite but a check that the
+  layer-boundary lint rules still fire (ADR-046)
 
 Do not assume a directory is functional because it exists, and do not assume a table being
 present means anything can use it yet.
@@ -605,3 +610,59 @@ SELECT SUM(delta) FROM inventory_event WHERE item_id = ?   -- == inventory_item.
   used 2" is a count of 10 and a use of 2, and the difference of 8 is computed here — the model
   reports the two numbers the user actually said and never the difference. A use of 3 against a
   count of 2 is impossible, and is rejected rather than normalised to zero.
+
+## 16. The expenses slice (added in Phase 4)
+
+The daily bill is the only new machinery. Money, accounts, and execution were already correct
+from Phases 1 and 2, so Phase 4 verified them rather than rebuilding them — including the account
+lookup, which is the one place a bug would spend the wrong money.
+
+```
+src/domain/expenses.ts                the daily bill: total and both breakdowns   pure
+src/features/expenses/view.ts         read side: accounts, the day's rows, the bill server-only
+src/features/expenses/bill.ts         the bill as deterministic text               pure
+src/app/expenses/daily-bill/route.ts  GET /expenses/daily-bill -> text/plain
+```
+
+### A day's spend is aggregated in the domain, not in SQL
+
+`summariseDay` reads the day's rows and computes the total, the breakdown by item, and the
+breakdown by payment method. `SUM(amount)` would have been the obvious way to do this and is the
+wrong one: it would be a second implementation of the same rule, so the bill's total and the
+Dashboard's figure could come to disagree — which is the one thing a money screen must never do.
+
+Three properties make the bill checkable rather than merely plausible:
+
+- **The breakdown reconciles with the total by construction.** Both breakdowns are partitions of
+  the same entries, so each sums to the total.
+- **Every sum goes through `addMinorUnits`,** which refuses an addition past the exact integer
+  range. `SUM` would return a float and lose a paisa quietly.
+- **The order is total.** Lines sort by amount then label, grouping is case-insensitive, and the
+  displayed spelling is the alphabetically first one present — so the same ledger produces
+  byte-identical text regardless of the order rows arrived in. This is a bill to send to somebody.
+
+### The bill is a document, not a generated sentence
+
+Every character of the shareable text comes from persisted rows through `formatMinorUnits`. No
+model writes any of it. A summary whose wording came from a model is a summary whose numbers can
+be influenced by a sentence typed an hour earlier.
+
+It is served as `text/plain` from a `GET` route rather than produced by a copy button. This
+application has no client-side JavaScript (ADR-037); a copy button would have been the project's
+first client component, to save three keystrokes. A plain-text document can be selected, copied,
+saved, or opened in a mail app, with scripting disabled. It is a read, so it needs no origin
+guard — ADR-042 protects writes.
+
+### Spending and balances are different numbers
+
+A balance is what an account holds now, across every day. A day's spend is only what was spent
+that day. They are shown separately, neither is derived from the other, and a negative balance is
+shown as it is: ADR-021 allows being overdrawn, and no affordability rule was invented.
+
+### The boundary rules are now real (ADR-046)
+
+Until Phase 4, the layer boundaries in `AGENTS.md` were documented but not enforced: `src/domain`
+could import `@/lib/db` and `npm run lint` passed. Later ESLint configs silently replaced earlier
+ones for the same rule, and only the provider patterns were ever in effect. The rules are fixed
+and `npm run architecture:probe` asserts each one fires — including that the imports the
+architecture *permits* still pass.

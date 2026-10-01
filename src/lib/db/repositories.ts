@@ -133,6 +133,8 @@ export type DisplayQueries = {
   listAccounts(): Account[];
   /** The most recent expenses, newest first, with the account name resolved. */
   recentExpenses(limit: number): RecentExpense[];
+  /** Every expense on one UTC calendar day, newest first, for the daily bill's breakdown. */
+  expensesForDate(date: string): RecentExpense[];
   /** Spend for one UTC calendar day, plus how many entries it came from. */
   spendForDate(date: string): { total: MinorUnits; count: number };
   /** The plan for one calendar day, for the dashboard. Read-only; nothing creates these yet. */
@@ -440,6 +442,40 @@ type DisplayDatabase = {
   prepare: DatabaseHandle["prepare"];
 };
 
+/**
+ * An `expense` row joined with the name of the account it was paid from.
+ *
+ * The join exists so history and the daily bill both show a payment method without a second
+ * lookup per row. The internal account id travels with it because the row is an internal value;
+ * no view renders it.
+ */
+type JoinedExpenseRow = {
+  timestamp: string;
+  item: string;
+  amount: number;
+  account: number;
+  category: string | null;
+  account_name: string;
+};
+
+/**
+ * One joined row, as `RecentExpense`.
+ *
+ * `account_name` comes from the stored row and is checked against the closed set. A stored name
+ * that is somehow not one of the three cannot happen while the schema's CHECK holds, and the
+ * fallback keeps an impossible row from producing `undefined` in a money field.
+ */
+function toRecentExpense(row: JoinedExpenseRow): RecentExpense {
+  return {
+    timestamp: row.timestamp,
+    item: row.item,
+    amount: row.amount,
+    accountId: row.account,
+    accountName: isAccountName(row.account_name) ? row.account_name : "cash",
+    category: row.category,
+  };
+}
+
 function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
   const listInventoryRows = database.prepare(
     "SELECT id, name, quantity, unit, low_threshold FROM inventory_item ORDER BY name COLLATE NOCASE",
@@ -456,6 +492,13 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
   );
   const spendForDateRows = database.prepare(
     "SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count FROM expense WHERE substr(timestamp, 1, 10) = ?",
+  );
+  const expensesForDateRows = database.prepare(
+    `SELECT e.timestamp, e.item, e.amount, e.account, e.category, a.name AS account_name
+     FROM expense e
+     JOIN account a ON a.id = e.account
+     WHERE substr(e.timestamp, 1, 10) = ?
+     ORDER BY e.timestamp DESC, e.id DESC`,
   );
   const tasksForDateRows = database.prepare(
     "SELECT id, title, done FROM plan_task WHERE date = ? ORDER BY id",
@@ -484,26 +527,14 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
     },
 
     recentExpenses(limit) {
-      type JoinedExpenseRow = {
-        timestamp: string;
-        item: string;
-        amount: number;
-        account: number;
-        category: string | null;
-        account_name: string;
-      };
-
       return (recentExpenseRows.all(limit) as JoinedExpenseRow[]).map(
-        (row) => ({
-          timestamp: row.timestamp,
-          item: row.item,
-          amount: row.amount,
-          accountId: row.account,
-          accountName: isAccountName(row.account_name)
-            ? row.account_name
-            : "cash",
-          category: row.category,
-        }),
+        toRecentExpense,
+      );
+    },
+
+    expensesForDate(date) {
+      return (expensesForDateRows.all(date) as JoinedExpenseRow[]).map(
+        toRecentExpense,
       );
     },
 

@@ -11,7 +11,7 @@ live state. If the two ever disagree, `PROJECT_STATUS.md` is correct.
 | 1 | Application foundation | **Complete** (1.1–1.6) |
 | 2 | Command engine | **Complete** |
 | 3 | Kitchen | **Complete** |
-| 4 | Expenses | Planned |
+| 4 | Expenses | **Complete** |
 | 5 | Dashboard | Planned |
 | 6 | Routine + Sleep | Planned |
 | 7 | Skills + Habits | Planned |
@@ -45,8 +45,16 @@ every change, low-stock thresholds surfaced on the Dashboard, and a correction p
 reverses rather than deletes. See
 [`phases/PHASE_03_KITCHEN.md`](../phases/PHASE_03_KITCHEN.md).
 
-**Phases 4–8 — Product areas.** Expenses, Dashboard, Routine + Sleep, Skills + Habits, Photo +
-Diary, one per document under [`phases/`](../phases/).
+**Phase 4 — Expenses (complete).** The PRD's daily bill: a day's total with a breakdown by item
+and by payment method, as deterministic shareable text. Accounts resolve exactly, a refused
+expense provably mutates nothing, and a negative balance stays a valid state. See
+[`phases/PHASE_04_EXPENSES.md`](../phases/PHASE_04_EXPENSES.md).
+
+Expense correction/refund and batch entry were both assessed and **deferred** by explicit
+decision; the phase document records why.
+
+**Phases 5–8 — Product areas.** Dashboard, Routine + Sleep, Skills + Habits, Photo + Diary, one
+per document under [`phases/`](../phases/).
 
 **Phase 9 — Hardening.** Reliability, correction paths, empty states, and test coverage
 appropriate to what was actually built. See

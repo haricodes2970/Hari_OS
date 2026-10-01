@@ -330,6 +330,141 @@ const chatBoundary = {
   },
 };
 
+/**
+ * One enforcing config per scope, carrying every pattern that scope is meant to enforce
+ * (ADR-046).
+ *
+ * ## Why this block exists at all
+ *
+ * In ESLint flat config, two config objects that set the **same rule** for the **same files** do
+ * not merge. The later object replaces the earlier one wholesale — including the parts of it that
+ * were never meant to be overridden. `src/domain` was covered by `hari-os/boundaries`,
+ * `hari-os/domain-purity`, *and* `hari-os/provider-boundary`; `provider-boundary` came last, so its
+ * three provider patterns were all that `src/domain` actually enforced.
+ *
+ * The effect was that this repository reported architecture rules it was not providing.
+ * `src/domain/accounts.ts` could import `@/lib/db` or `node:fs` and `npm run lint` would pass,
+ * while `AGENTS.md` stated that a violation fails the build. A probe confirmed it: only the
+ * provider patterns fired anywhere, and `src/features/chat` — the one scope with a single config
+ * covering it — was the only scope fully enforced. `no-restricted-properties` was unaffected,
+ * because it is a differently named rule, which is why `Date.now()` in the domain was correctly
+ * caught while `better-sqlite3` in the same file was not.
+ *
+ * ## The fix
+ *
+ * These objects are placed **last**, so for each scope they are the winning configuration, and
+ * each carries the union of every pattern its scope was originally meant to enforce. Nothing that
+ * was meant to be forbidden becomes allowed: each group below already existed in this file, and
+ * each is the exact group the earlier, shadowed config specified.
+ *
+ * The earlier configs are left in place rather than deleted. They remain the documented statement
+ * of intent, they still carry rules with other names (`no-restricted-properties`), and deleting
+ * them would be a larger diff to shared infrastructure than the defect warrants. What they no
+ * longer do is *depend* on winning, which is what made this fail silently.
+ *
+ * `scripts/architecture-probe.mjs` probes every combination in this block and fails if any of
+ * them stops firing, so a future config added above these cannot quietly disarm them again.
+ */
+const enforcedBoundaries = [
+  {
+    name: "hari-os/domain-boundaries-enforced",
+    files: ["src/domain/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: impureModules,
+              message:
+                "Domain code must stay pure: no filesystem, network, process, database, or framework access. Pass the value in instead.",
+            },
+            {
+              group: infrastructure,
+              message:
+                "Domain and components must stay free of infrastructure. Move the rule to src/domain, or call it through a feature.",
+            },
+            {
+              group: providerModules,
+              message:
+                "The language model is an untrusted parser behind a port. The domain must not know a provider exists.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: "hari-os/validation-boundaries-enforced",
+    files: ["src/lib/validation/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: impureModules,
+              message:
+                "Validation must stay pure: its verdict has to depend on the input alone, never on the clock, the filesystem, or a database.",
+            },
+            {
+              group: providerModules,
+              message:
+                "Validation must not know a provider exists. It gates every untrusted input, including a model's.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: "hari-os/command-boundaries-enforced",
+    files: ["src/commands/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: persistenceModules,
+              message:
+                "The command layer proposes and validates; it does not persist. Hand the validated intent to a feature, which owns the database.",
+            },
+            {
+              group: providerModules,
+              message:
+                "The command layer must not reach a provider. The parser is the only module that knows one exists.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: "hari-os/component-boundaries-enforced",
+    files: ["src/components/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: infrastructure,
+              message:
+                "Components must stay free of infrastructure. Receive the value as a prop, or read it through a feature.",
+            },
+            {
+              group: providerModules,
+              message:
+                "A client component must not import the parser, its provider, or its configuration. Render the outcome the server produced instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -340,6 +475,8 @@ const eslintConfig = defineConfig([
   providerBoundary,
   providerPurity,
   chatBoundary,
+  // Last, so these win for the scopes they cover. See ADR-046 before moving anything above.
+  ...enforcedBoundaries,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

@@ -43,6 +43,7 @@ import {
   safeReturnPath,
 } from "@/features/shared/command-form";
 import { fieldForError, tokenForError } from "@/features/shared/outcomes";
+import { isSameOriginRequest } from "@/features/shared/same-origin";
 
 import { runCommand } from "@/features/shared/command-runtime";
 
@@ -114,6 +115,17 @@ function wantsJson(request: Request): boolean {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  // Same rule, same shared implementation, as the parse route and the Kitchen route (ADR-042).
+  // This handler executes commands — including spending the user's money — and V1 has no session,
+  // so without this check any page the user happened to have open could post a form here and
+  // cause an expense to be recorded. Phase 4 found the guard missing here; see ADR-045.
+  if (!isSameOriginRequest(request)) {
+    return NextResponse.json(
+      { error: "Cross-origin submissions are not accepted." },
+      { status: 403 },
+    );
+  }
+
   const { command, returnTo } = await readBody(request);
 
   const result = runCommand(command);

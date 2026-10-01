@@ -906,3 +906,83 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
     same transaction, same event table. Nothing about it is special except that its source text
     says so.
 - **Origin:** Phase 3.
+
+## ADR-045 — The command endpoint gets the origin check ADR-042 intended
+
+- **Status:** Accepted
+- **Date:** 2026-10-01
+- **Context:** ADR-042 added an origin check so that a page on another site could not submit a
+  command to this application. Phase 3 reused the guard for `POST /api/kitchen`. What was missed,
+  and found in Phase 4, is that `POST /api/commands` — the endpoint ADR-036 named as the *only*
+  way a command enters the application — never received it. `features/shared/same-origin.ts` was
+  imported by exactly two routes: the parse route and the Kitchen route.
+- **Decision:** `POST /api/commands` applies the same shared guard, returning `403` for a
+  cross-origin request before any body is read.
+- **Consequences:**
+  - Before this, any page the user happened to have open could `POST` an `expense.record` to
+    `localhost` and record a spend against a real account. V1 has no session and no cookie, so
+    nothing about the request identifies it as the user's own. The response was a redirect the
+    victim's browser would follow, so the failure was silent as well as unauthorised.
+  - **Phase 4 made this materially worse, which is why it was found here.** Before this phase
+    `/api/commands` could spend ₹10 at a time and the Kitchen page was a demo. From Phase 4 it
+    is the endpoint that moves the user's money. A guard whose absence nobody noticed for three
+    phases is not a guard to rely on now.
+  - The check runs before `readBody`, so a cross-origin request never reaches the validator, the
+    domain, or the database. It is refused at the cheapest point in the pipeline.
+  - A missing `Origin` is still allowed. ADR-042 rejected rejecting it, because `curl` and
+    server-side callers legitimately send none, and the risk of that being a *security* control
+    outweights the convenience. V1 binds to localhost only.
+  - All three write routes now share one implementation, so a fourth cannot forget it, and
+    `scripts/expenses-test.mjs` asserts `403` on both `/api/commands` and `/api/kitchen` with a
+    foreign `Origin`.
+- **Origin:** Phase 4, found by testing the CSRF behaviour of the endpoint that spends money.
+
+## ADR-046 — The architecture rules were being reported without being enforced
+
+- **Status:** Accepted
+- **Date:** 2026-10-01
+- **Context:** `AGENTS.md` states that the layer boundaries are "enforced, not merely
+  documented", that `src/domain` and `src/components` may not import `@/lib/db`, and that a
+  violation fails `npm run lint`. Phase 4's architecture audit probed each of those claims by
+  writing a temporary file that imports the forbidden module and running ESLint on it.
+- **They did not fire.** `src/domain/accounts.ts` could import `@/lib/db`, `better-sqlite3`, or
+  `node:fs` and lint passed. So could `src/lib/validation`, `src/commands`, and `src/components`.
+- **The cause is how ESLint flat config resolves overlapping rules.** `no-restricted-imports` is
+  a single rule. When two config objects set it for the same files, the **later object replaces
+  the earlier one wholesale** — including the patterns it never meant to override. This file had
+  four overlapping configurations:
+
+  | Scope | Configs covering it | Winner | What actually fired |
+  | --- | --- | --- | --- |
+  | `src/domain` | boundaries, domain-purity, provider-boundary | provider-boundary | provider only |
+  | `src/lib/validation` | validation-purity, provider-boundary | provider-boundary | provider only |
+  | `src/commands` | command-boundary, provider-boundary | provider-boundary | provider only |
+  | `src/components` | boundaries, chat-boundary | chat-boundary | provider only |
+  | `src/features/chat` | provider-purity | provider-purity | **all of it** |
+
+  So `src/features/chat` was the only scope whose rules were fully in effect, and it was the only
+  scope with a single config. `no-restricted-properties` was unaffected — it is a differently
+  named rule — which is why `Date.now()` in the domain *was* correctly caught while
+  `better-sqlite3` in the same file was not.
+- **Decision:** Append one consolidated config per scope at the **end** of the config array, each
+  carrying the union of every pattern its scope was originally meant to enforce. The earlier
+  configs stay, as the documented statement of intent and as the home of rules with other names,
+  but nothing now depends on them winning.
+- **Consequences:**
+  - Nothing that was meant to be forbidden becomes permitted. Every group in the new configs
+    already existed in this file; the fix only stops it being discarded.
+  - **The codebase turned out to comply already.** `npm run lint` passed the moment the rules were
+    armed, which is the answer worth having: the architecture was being upheld by discipline
+    rather than by tooling. That is a real risk that has now been removed, and it also means this
+    fix introduced no errors and needed no source changes.
+  - The failure was invisible because **every test in the project happened to obey the boundary
+    that was not being enforced.** Compliance and enforcement are indistinguishable until
+    something tries to break a rule, and nothing did.
+  - `scripts/architecture-probe.mjs` (`npm run architecture:probe`) now asserts each rule fires,
+    and also asserts the imports the architecture *permits* still pass — a rule that rejected
+    everything would otherwise satisfy this file. It runs in the verification set so a future
+    config added above these cannot quietly disarm them again.
+  - The general lesson is recorded rather than the fix: **in flat config, several rules for one
+    scope must be expressed as one rule, or the earlier ones are decorative.** `src/features/chat`
+    had it right by accident, and the scopes with two or more configs were the broken ones.
+- **Origin:** Phase 4, found by probing every architecture claim rather than trusting it.
