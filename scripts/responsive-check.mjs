@@ -246,6 +246,17 @@ class DevTools {
   }
 }
 
+/** A real, decodable 1x1 PNG — signature, IHDR, IDAT, and IEND. */
+const ONE_PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+const uploadDirectory = path.join(projectRoot, "data", "uploads");
+const uploadsBefore = fs.existsSync(uploadDirectory)
+  ? new Set(fs.readdirSync(uploadDirectory))
+  : new Set();
+
 const VIEWPORTS = [
   { label: "mobile (320x568)", width: 320, height: 568, deviceScaleFactor: 1 },
   { label: "phone (390x844)", width: 390, height: 844, deviceScaleFactor: 1 },
@@ -289,6 +300,28 @@ try {
 
   const database = new Database(scratchFile);
   const today = new Date().toISOString().slice(0, 10);
+
+  // Phase 8. A diary entry needs a real image on disk, because the claim being checked is that a
+  // picture does not push the page sideways — a broken image would not prove anything. The file is
+  // written where the running application looks for uploads and removed in the `finally` below,
+  // alongside the database, because it is this script's artefact and not the user's.
+  const diaryFilename = "responsive-check.png";
+  const diaryFile = path.join(uploadDirectory, diaryFilename);
+  fs.mkdirSync(uploadDirectory, { recursive: true });
+  // A complete 1x1 PNG. The other suites use a signature stub, which is enough for a byte check
+  // and useless to a browser: a truncated file leaves the image element permanently unfinished, so
+  // the measurement would be of an image that never loaded.
+  fs.writeFileSync(diaryFile, ONE_PIXEL_PNG);
+  database
+    .prepare(
+      "INSERT INTO habit_log (date, type, done, photo_url, photo_note) VALUES (?, 'laundry', 1, ?, ?)",
+    )
+    .run(
+      today,
+      `/api/photos/1/${diaryFilename}`,
+      "the blue towel is still in the wash",
+    );
+
   database
     .prepare("UPDATE inventory_item SET quantity = 2 WHERE name = 'onions'")
     .run();
@@ -402,17 +435,97 @@ try {
     // navigator stops updating the moment a page is added.
     assertEqual(
       measurement.navLinks.join(","),
-      "Dashboard,Kitchen,Expenses,Routine,Habits,Skills",
+      "Dashboard,Kitchen,Expenses,Routine,Habits,Skills,Diary",
       `${viewport.label}: navigation reaches every page`,
     );
     assert(
       measurement.bodyText.includes("onions"),
       `${viewport.label}: the low-stock line is readable`,
     );
+
+    // The diary, measured the same way. Phase 7 used a class with no rule behind it, so a photo
+    // rendered at its own width; this is the check that it does not.
+    await page.send("Page.navigate", { url: `${base}/diary` });
+    await page.send("Runtime.evaluate", {
+      expression:
+        "new Promise((done) => document.readyState === 'complete' ? done(true) : addEventListener('load', () => done(true)))",
+      awaitPromise: true,
+    });
+
+    // The picture is `loading="lazy"`, so the browser deliberately does not fetch it until it is
+    // near the viewport. Scrolling it into view is what makes the browser do the thing the page
+    // asks of it; measuring without this would report an image that has not been asked for yet.
+    await page.evaluate(`(async () => {
+        const photo = document.querySelector('.diary-photo');
+        if (photo !== null) {
+          photo.scrollIntoView();
+        }
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          if (photo !== null && photo.complete) {
+            return true;
+          }
+          await new Promise((done) => setTimeout(done, 50));
+        }
+        return false;
+      })()`);
+
+    const diary = await page.evaluate(`(() => {
+        const documentElement = document.documentElement;
+        const overflowing = [...document.querySelectorAll('*')]
+          .filter((node) => node.getBoundingClientRect().right > documentElement.clientWidth + 1)
+          .map((node) => node.tagName + (node.className ? '.' + String(node.className).split(' ')[0] : ''));
+        const photo = document.querySelector('.diary-photo');
+        const note = document.querySelector('textarea.diary-note');
+        return {
+          scrollWidth: documentElement.scrollWidth,
+          clientWidth: documentElement.clientWidth,
+          overflowing: [...new Set(overflowing)],
+          photoWidth: photo === null ? -1 : photo.getBoundingClientRect().width,
+          photoComplete: photo !== null && photo.complete,
+          noteVisible: note !== null && note.getBoundingClientRect().width > 0,
+          bodyText: document.body.innerText,
+        };
+      })()`);
+
+    assert(
+      diary.scrollWidth <= diary.clientWidth,
+      `${viewport.label}: the diary does not scroll sideways (${diary.scrollWidth} <= ${diary.clientWidth})`,
+    );
+    assertEqual(
+      diary.overflowing.join(","),
+      "",
+      `${viewport.label}: and no element on the diary extends past the viewport`,
+    );
+    assert(
+      diary.photoComplete,
+      `${viewport.label}: the diary's picture loads through its stored URL`,
+    );
+    assert(
+      diary.photoWidth > 0 && diary.photoWidth <= diary.clientWidth,
+      `${viewport.label}: and is fitted to the screen rather than its own size`,
+    );
+    assert(
+      diary.noteVisible,
+      `${viewport.label}: the note box is on screen and usable`,
+    );
+    assert(
+      diary.bodyText.includes("the blue towel is still in the wash"),
+      `${viewport.label}: the note is readable on the diary`,
+    );
   }
 
   page.close();
 } finally {
+  // The diary image written above, removed before anything else is reported. Only files this run
+  // created are touched: the user's own uploads are left exactly as they were found.
+  for (const name of fs.existsSync(uploadDirectory)
+    ? fs
+        .readdirSync(uploadDirectory)
+        .filter((entry) => !uploadsBefore.has(entry))
+    : []) {
+    fs.rmSync(path.join(uploadDirectory, name), { force: true });
+  }
+
   chrome.kill("SIGKILL");
   app.kill("SIGTERM");
   await new Promise((resolve) => setTimeout(resolve, 500));

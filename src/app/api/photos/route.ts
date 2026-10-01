@@ -14,6 +14,10 @@
  * "tomorrow", "yesterday" — never a date, matching every other write path in the application, so
  * no client can name a calendar day it worked out for itself. Absent means today.
  *
+ * An optional `note` is the user's own words about the picture, written at the moment they upload
+ * it. It is validated before anything is written — see `storeLaundryPhoto` — so a note that cannot
+ * be stored does not cost the user the photo they just chose.
+ *
  * ## Three answers, and why each is specific
  *
  * - **403** for a cross-origin post, the same guard every write route uses (ADR-042/045). With
@@ -123,8 +127,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  // Optional, and optional for a real reason: a photo and the words about it are one moment, and
+  // asking for both in one submission means the note cannot be lost between the two. Empty means
+  // "no note", which is the domain's own meaning and not this route's.
+  const noteField = form.get("note");
+  const note = typeof noteField === "string" ? noteField : null;
+
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const stored = await storeLaundryPhoto(bytes, resolved.value);
+  const stored = await storeLaundryPhoto(bytes, resolved.value, note);
 
   if (!stored.ok) {
     // A size refusal is 413 because that is what it is, and the page distinguishes "too large"

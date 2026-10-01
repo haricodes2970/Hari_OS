@@ -173,9 +173,47 @@ CREATE INDEX idx_habit_log_date ON habit_log (date);
 PRAGMA foreign_keys = ON;
 `;
 
+/**
+ * Migration 003 — a note on a diary entry.
+ *
+ * ## Why this migration exists
+ *
+ * PRD 6.6: "Digital diary: the laundry photo and daily notes form a visual timeline." Phase 7
+ * delivered the photo half and left the notes with nowhere to live: `habit_log.photo_url` is the
+ * only column in the schema that can hold a picture, and there was no dated note anywhere.
+ *
+ * ## Why a column and not a table
+ *
+ * The instruction for this phase was to reuse the existing photo metadata and make the smallest
+ * necessary change, and the reasoning agrees: a diary entry *is* the photo. The row that owns
+ * `photo_url` is the entry, so the note belongs on that row.
+ *
+ * A separate `diary_entry` table was rejected because it would have to carry the photo reference
+ * too — and two tables holding a photo's location is two answers to "which picture is this" the
+ * day they disagree. With a column, the required invariant is structural: a row cannot have a
+ * note and no photo unless a writer put it there, and the single writer refuses.
+ *
+ * ## Why this is an `ALTER TABLE`, not another rebuild
+ *
+ * There is no constraint to widen, so there is nothing that needs the four-step table dance
+ * migration 002 used. `ADD COLUMN` on a nullable column with no default is a metadata-only change
+ * in SQLite: existing rows are untouched, no table is copied, and the operation is deterministic —
+ * the same input database always produces the same output.
+ *
+ * ## What is not added
+ *
+ * No caption column, no tag column, no `JSON`, no mood or sentiment field, no created/updated
+ * timestamps. The note is one string the user typed, and a note with metadata around it is a note
+ * a machine is being asked to interpret.
+ */
+const DIARY_NOTE_MIGRATION = `
+ALTER TABLE habit_log ADD COLUMN photo_note TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: "001_initial", sql: INITIAL_SCHEMA },
   { version: "002_screen_time", sql: SCREEN_TIME_MIGRATION },
+  { version: "003_diary_note", sql: DIARY_NOTE_MIGRATION },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `

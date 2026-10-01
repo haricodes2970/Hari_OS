@@ -191,6 +191,33 @@ Two rules about who may call it, both enforced in `eslint.config.mjs` and both p
 What is stored is an application URL, never a path: `habit_log.photo_url` holds
 `/api/photos/<id>/<filename>`, and a read requires both parts to match the row (ADR-051).
 
+## 6.1 The Photo Diary (added in Phase 8)
+
+A diary entry **is** the photo: the `habit_log` row that owns `photo_url` also owns `photo_note`,
+the user's own words about it (ADR-056). There is no diary table, so nothing has to reconcile two
+records of one picture.
+
+```
+src/domain/diary.ts              the note's rules: trim, 500 characters, no control characters  pure
+src/features/habits/diary.ts     the only reader and writer of photo_note                server-only
+src/app/api/photos/[id]/note/route.ts   POST: write, change, or clear one note
+src/app/diary/page.tsx           the timeline, and the editor for each entry
+```
+
+Three rules about it, all enforced rather than documented:
+
+- **A note is read in one place.** `readDiary` is the only reader. `readHabits` returns `TodayEntry`,
+  a projection with no note field to leak, and `src/features/dashboard/view.ts` does not import the
+  diary module at all — the same structural boundary ADR-052 built for the private log.
+- **A note requires a photo.** `writeNote` reads the row and refuses with `unknown_photo` when
+  `photo_url` is null. The check is in the feature rather than in a SQL `WHERE` clause, because a
+  clause would turn "no photo here" into an apparently successful write that stored nothing.
+- **An entry's id stays with its entry.** Both habit write paths `UPDATE` rather than
+  delete-and-reinsert (ADR-058), which is what makes it safe to address a note to a row id.
+
+Notes are written by forms only, never by a sentence: `POST /api/photos` takes an optional `note`
+with the file, and the note route clears by posting the same field empty (ADR-057).
+
 ## 7. Validation
 
 `src/lib/validation/`. Shared so that a form, a route handler, and the command engine
@@ -410,10 +437,15 @@ recognisably a number is forwarded as raw text so validation rejects it and name
 
 None of the following exist, and their absence is intentional:
 
-- Anything beyond the six pages that exist: Dashboard, Kitchen, Expenses, Routine, Habits, Skills
+- Anything beyond the seven pages that exist: Dashboard, Kitchen, Expenses, Routine, Habits, Skills,
+  Diary
 - A photo diary of anything other than laundry. `habit_log.photo_url` is the only column that can
   hold a picture, so the V1 diary is the timeline of laundry photos and any other kind of picture
   has nowhere to be stored (ADR-051)
+- A note without a photograph, and any machine-written text beside a picture: no caption column, no
+  tags, no generated summary. The note's only source is the user (ADR-056, ADR-057)
+- A chat command for a diary note. It would have to guess which photo a sentence means, and would
+  put the user's own words through the parser (ADR-057)
 - Any private-log figure. `private_log` has one reader, and nothing in the codebase turns entries
   into a count, a streak, or a percentage (ADR-052)
 - A command to set an opening balance for an account. First-run rows come from `npm run
@@ -853,16 +885,31 @@ src/lib/db/migrations.ts         002_screen_time: habit_log gains minutes       
 src/lib/db/repositories.ts       SkillRepository, HabitRepository, PrivateLogRepository
 src/lib/storage/photos.ts        byte checks, server naming, read, write, delete     server-only
 src/features/skills/view.ts      the read model: the full list, unfiltered
-src/features/habits/view.ts      the read model: today's habits, streaks, the diary
+src/features/habits/view.ts      the read model: today's habits, streaks, a photo preview
 src/features/habits/private-log.ts  the only reader of private_log                    server-only
-src/features/habits/photos.ts    store a laundry photo; read one back                  server-only
+src/features/habits/photos.ts    store a laundry photo, with an optional note; read one back
 src/app/api/photos/route.ts      POST only: validate the request, then delegate
 src/app/api/photos/[id]/[file]/route.ts   GET: serve the bytes, or 404
 src/app/skills/page.tsx          the full replacement list
-src/app/habits/page.tsx          habits, laundry target, screen time, private log, diary
+src/app/habits/page.tsx          habits, laundry target, screen time, private log, a preview
 ```
 
-### One migration, and only because of screen time
+Phase 8 added the other half of the diary to the same slice — `src/domain/diary.ts`,
+`src/features/habits/diary.ts`, `POST /api/photos/[id]/note`, and `/diary` — described in section
+6.1, and migration `003_diary_note`, which adds `habit_log.photo_note` with one `ALTER TABLE`:
+
+```
+src/domain/diary.ts              the note's rules, and the timeline's order            pure
+src/features/habits/diary.ts     the only reader and writer of photo_note            server-only
+src/app/api/photos/[id]/note/route.ts   POST: write, change, or clear one note
+src/app/diary/page.tsx           the visual timeline, and an editor per entry
+```
+
+The third page is separate from `/habits` because the note is a piece of writing rather than a
+record: the Habits page keeps a preview and links here, so there is one place notes are read and
+edited rather than two that could disagree.
+
+### Two migrations, and the first one is the only rebuild
 
 `skill`, `skill_log`, `habit_log`, and `private_log` all existed since micro-phase 1.1.
 `002_screen_time` rebuilds `habit_log` to accept a fourth type and a `minutes` column with a
@@ -870,8 +917,9 @@ validated `CHECK`, because the PRD asks for manually entered screen time and the
 constraint allowed only cooking, dishes, and laundry.
 
 `habit_log` has **no unique constraint** on `(date, type)` — it came that way from 1.1 — so "one
-row per type per day" is maintained by the executor, which deletes and inserts inside one
-transaction. `findForDay` is the read that decides whether it needs to.
+row per type per day" is maintained by the writer: `updateHabitForDay` rewrites the existing row and
+`insertHabit` runs only when `findForDay` found none, both inside one transaction. Phase 7 deleted
+and reinserted instead, which cost a diary note and recycled the row id; see ADR-058.
 
 ### The rules that are refusals, and what each one is protecting
 

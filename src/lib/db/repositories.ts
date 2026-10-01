@@ -262,12 +262,40 @@ export type HabitRepository = {
    * for a day or a window, which is what a page wants and what this repository was shaped for.
    */
   findById(id: number): HabitLog | null;
-  /** Removes one type's row for one day. Used only inside the executor's transaction. */
-  deleteForDay(
+  /**
+   * Rewrites one day's row for one type, keeping its id, and returns the row.
+   *
+   * ## Why this exists instead of delete-then-insert
+   *
+   * Both write paths used to remove the row and insert a new one. That is invisible for a habit,
+   * and it is not invisible for a diary entry:
+   *
+   * - **The words were lost.** `habit_log` carries `photo_note` (ADR-056), so replacing a row
+   *   replaced the note too. Re-recording a habit from chat, or re-photographing a day, silently
+   *   deleted what the user had written about that day.
+   * - **The id was recycled.** SQLite assigns a rowid of `max(rowid) + 1`, so after the only row
+   *   is deleted the next insert takes its number again. A diary page the user had open, naming
+   *   entry 3, could then post a note to a row that was a *different day's* new photo. The note
+   *   would be stored on the wrong picture, and nothing would say so.
+   *
+   * An `UPDATE` makes an entry's id stable for its lifetime, which is what makes it safe to
+   * address a note to one. Matched by `(date, type)` rather than by id, because a day is the thing
+   * the caller has; the id comes back with the row.
+   *
+   * `PersistenceFailed` when the day has no row: there is nothing to rewrite, and the caller
+   * inserts instead rather than getting an empty success.
+   */
+  updateHabitForDay(
     date: CalendarDate,
     type: LoggableHabitType,
-  ): PersistenceResult<void>;
-  /** Writes one row. */
+    change: {
+      readonly done: boolean;
+      readonly photoUrl: string | null;
+      readonly photoNote: string | null;
+      readonly minutes: number | null;
+    },
+  ): PersistenceResult<HabitLog>;
+  /** Writes one row. Used when a day has no entry for that type yet. */
   insertHabit(habit: HabitLog): PersistenceResult<HabitLog>;
   /**
    * Sets the photo URL on one day's row for one type, and returns the row.
@@ -284,6 +312,21 @@ export type HabitRepository = {
     type: LoggableHabitType,
     photoUrl: string,
   ): PersistenceResult<HabitLog>;
+  /**
+   * Writes the note on one row, or clears it with `null`.
+   *
+   * One statement, matched by row id rather than by `(date, type)`, because the diary addresses
+   * an entry the user is looking at. Clearing and adding are the same statement: a note is
+   * nullable, so `null` is what "no note" is, and there is no second method to drift from this
+   * one.
+   *
+   * The caller is responsible for the invariant "a note belongs to a row that has a photo" — this
+   * statement would happily write one onto a photo-less row, which is why
+   * `src/features/habits/diary.ts` checks the row before calling it. The check lives there rather
+   * than in a `WHERE photo_url IS NOT NULL` clause because a miss here would otherwise look like
+   * a successful write that stored nothing.
+   */
+  saveDiaryNote(id: number, note: string | null): PersistenceResult<HabitLog>;
   /** Every entry on one day, in the order the rows were written. */
   listForDate(date: CalendarDate): HabitLog[];
   /**
@@ -295,6 +338,15 @@ export type HabitRepository = {
   listBetween(from: CalendarDate, to: CalendarDate): HabitLog[];
   /** The most recent entries that have a photo attached, newest first: the photo timeline. */
   listWithPhotos(limit: number): HabitLog[];
+  /**
+   * Every entry that has a photo, newest first and unbounded.
+   *
+   * The diary is a history the user reads through, so it is not capped the way the habits view's
+   * timeline is — a limit on a diary would silently hide the past, and the page would claim to be
+   * showing a history it had truncated. Ordering is `date DESC, id DESC`, which is a total order:
+   * a day that was re-photographed keeps the later entry first.
+   */
+  listDiary(): HabitLog[];
 };
 
 /**
@@ -563,39 +615,49 @@ export function createRepositories(database: DatabaseHandle): Repositories {
      LIMIT ?`,
   );
   const selectHabitsForDate = database.prepare(
-    `SELECT id, date, type, done, photo_url, minutes
+    `SELECT ${HABIT_COLUMNS}
      FROM habit_log WHERE date = ? ORDER BY id`,
   );
   const selectHabitsBetween = database.prepare(
-    `SELECT id, date, type, done, photo_url, minutes
+    `SELECT ${HABIT_COLUMNS}
      FROM habit_log WHERE date BETWEEN ? AND ? ORDER BY date, id`,
   );
   const selectHabitsWithPhotos = database.prepare(
-    `SELECT id, date, type, done, photo_url, minutes
+    `SELECT ${HABIT_COLUMNS}
      FROM habit_log
      WHERE photo_url IS NOT NULL
      ORDER BY date DESC, id DESC
      LIMIT ?`,
   );
+  const selectDiaryEntries = database.prepare(
+    `SELECT ${HABIT_COLUMNS}
+     FROM habit_log
+     WHERE photo_url IS NOT NULL
+     ORDER BY date DESC, id DESC`,
+  );
   const selectHabitById = database.prepare(
-    `SELECT id, date, type, done, photo_url, minutes
-     FROM habit_log WHERE id = ?`,
+    `SELECT ${HABIT_COLUMNS} FROM habit_log WHERE id = ?`,
   );
   const selectHabitForDay = database.prepare(
-    `SELECT id, date, type, done, photo_url, minutes
+    `SELECT ${HABIT_COLUMNS}
      FROM habit_log WHERE date = ? AND type = ?`,
   );
-  const deleteHabitForDay = database.prepare(
-    "DELETE FROM habit_log WHERE date = ? AND type = ?",
-  );
   const insertHabitRow = database.prepare(
-    `INSERT INTO habit_log (date, type, done, photo_url, minutes)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO habit_log (date, type, done, photo_url, photo_note, minutes)
+     VALUES (?, ?, ?, ?, ?, ?)`,
   );
   const attachHabitPhotoRow = database.prepare(
     `UPDATE habit_log SET photo_url = ?
      WHERE date = ? AND type = ?
-     RETURNING id, date, type, done, photo_url, minutes`,
+     RETURNING ${HABIT_COLUMNS}`,
+  );
+  const saveDiaryNoteRow = database.prepare(
+    `UPDATE habit_log SET photo_note = ? WHERE id = ? RETURNING ${HABIT_COLUMNS}`,
+  );
+  const updateHabitForDayRow = database.prepare(
+    `UPDATE habit_log SET done = ?, photo_url = ?, photo_note = ?, minutes = ?
+     WHERE date = ? AND type = ?
+     RETURNING ${HABIT_COLUMNS}`,
   );
   const selectPrivateForDay = database.prepare(
     "SELECT id, date, type, note FROM private_log WHERE date = ? AND type = ?",
@@ -823,16 +885,6 @@ export function createRepositories(database: DatabaseHandle): Repositories {
         return row === undefined ? null : toHabitLog(row);
       },
 
-      deleteForDay(date, type) {
-        try {
-          deleteHabitForDay.run(date, type);
-
-          return { ok: true, value: undefined };
-        } catch (cause) {
-          return { ok: false, error: persisted(cause) };
-        }
-      },
-
       insertHabit(habit) {
         try {
           const result = insertHabitRow.run(
@@ -840,6 +892,7 @@ export function createRepositories(database: DatabaseHandle): Repositories {
             habit.type,
             habit.done ? 1 : 0,
             habit.photoUrl,
+            habit.photoNote,
             habit.minutes,
           );
 
@@ -847,6 +900,33 @@ export function createRepositories(database: DatabaseHandle): Repositories {
             ok: true,
             value: { ...habit, id: Number(result.lastInsertRowid) },
           };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      updateHabitForDay(date, type, change) {
+        try {
+          const row = updateHabitForDayRow.get(
+            change.done ? 1 : 0,
+            change.photoUrl,
+            change.photoNote,
+            change.minutes,
+            date,
+            type,
+          ) as HabitLogRow | undefined;
+
+          if (row === undefined) {
+            return {
+              ok: false,
+              error: {
+                code: "persistence_failed",
+                message: `No ${type} entry exists for ${date}, so there was nothing to update.`,
+              },
+            };
+          }
+
+          return { ok: true, value: toHabitLog(row) };
         } catch (cause) {
           return { ok: false, error: persisted(cause) };
         }
@@ -883,6 +963,29 @@ export function createRepositories(database: DatabaseHandle): Repositories {
         return row === undefined ? null : toHabitLog(row);
       },
 
+      saveDiaryNote(id, note) {
+        try {
+          const row = saveDiaryNoteRow.get(note, id) as HabitLogRow | undefined;
+
+          if (row === undefined) {
+            // Reported as a persistence failure, like `attachPhoto`: this row was read by the
+            // caller immediately before, so its absence means the write failed rather than that
+            // the user asked about something that does not exist.
+            return {
+              ok: false,
+              error: {
+                code: "persistence_failed",
+                message: `No entry with id ${id} exists, so the note was not written.`,
+              },
+            };
+          }
+
+          return { ok: true, value: toHabitLog(row) };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
       listForDate(date) {
         return (selectHabitsForDate.all(date) as HabitLogRow[]).map(toHabitLog);
       },
@@ -897,6 +1000,10 @@ export function createRepositories(database: DatabaseHandle): Repositories {
         return (selectHabitsWithPhotos.all(limit) as HabitLogRow[]).map(
           toHabitLog,
         );
+      },
+
+      listDiary() {
+        return (selectDiaryEntries.all() as HabitLogRow[]).map(toHabitLog);
       },
     },
 
@@ -1208,8 +1315,13 @@ type HabitLogRow = {
   type: string;
   done: number;
   photo_url: string | null;
+  /** Added by migration 003. */
+  photo_note: string | null;
   minutes: number | null;
 };
+
+/** Every `habit_log` column, in one string, so no statement can forget the new one. */
+const HABIT_COLUMNS = "id, date, type, done, photo_url, photo_note, minutes";
 
 /** One `private_log` row. */
 type PrivateLogRow = {
@@ -1237,6 +1349,10 @@ function toHabitLog(row: HabitLogRow): HabitLog {
     type: row.type,
     done: row.done === 1,
     photoUrl: row.photo_url,
+    // Read rather than defaulted, and an empty string becomes `null` because "no note" has one
+    // representation in this application. `diaryNote` never stores an empty string, so this is a
+    // belt-and-braces normalisation for a row written by hand.
+    photoNote: row.photo_note === "" ? null : row.photo_note,
     minutes: row.minutes,
   };
 }

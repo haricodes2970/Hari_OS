@@ -14,8 +14,8 @@ live state. If the two ever disagree, `PROJECT_STATUS.md` is correct.
 | 4 | Expenses | **Complete** |
 | 5 | Dashboard | **Complete** |
 | 6 | Routine + Sleep | **Complete** |
-| 7 | Skills + Habits | Planned |
-| 8 | Photo + Diary | Planned |
+| 7 | Skills + Habits | **Complete** |
+| 8 | Photo + Diary | **Partial** — diary delivered, PWA not |
 | 9 | Hardening | Planned |
 
 ## Phase summaries
@@ -65,6 +65,18 @@ Dashboard's task, skill, and habit cards pointed at real, empty tables so those 
 a screen that already works. Phase 6 is complete: `plan_task` is written by the night check-in and
 by five new command kinds, `sleep_log` and `nap_log` are written by hand, and the Dashboard gained
 its sleep card by composing the Routine read model rather than reading the tables itself.
+
+Phase 7 is complete: the full replacement-skill list, neutral streaks, the PRD's one progress bar
+for laundry, manually entered screen time, a private log that can produce no number, and a real
+photo path — laundry completion requires an uploaded picture, and the picture timeline is the Photo
+Diary.
+
+Phase 8 is **partial**. The photograph half shipped in Phase 7. What was added here is the other
+half of the PRD's sentence: `/diary` is the timeline of those photos with the user's own notes
+beside each one, editable and clearable in place, and `habit_log.photo_note` is where those words
+live (ADR-056). The phase document's PWA deliverables — installability, camera or file-picker
+access through the installed app, a manifest, a service worker, icons — are **not** done and still
+need a package choice recorded as an ADR.
 
 **Phase 9 — Hardening.** Reliability, correction paths, empty states, and test coverage
 appropriate to what was actually built. See

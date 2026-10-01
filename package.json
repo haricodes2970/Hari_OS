@@ -29,6 +29,8 @@
     "routine:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/routine-test.mjs",
     "skills:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/skills-test.mjs",
     "skills:accept": "node scripts/skills-accept.mjs",
+    "diary:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/diary-test.mjs",
+    "diary:accept": "node scripts/diary-accept.mjs",
     "dashboard:accept": "node scripts/dashboard-accept.mjs",
     "routine:accept": "node scripts/routine-accept.mjs",
     "responsive:check": "node scripts/responsive-check.mjs",

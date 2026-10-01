@@ -127,6 +127,55 @@ const CASES = [
     "@/features/chat/openrouter",
   ],
 
+  // Phase 8. The diary is part of the habits slice, not a slice of its own, so it is held to the
+  // same boundaries: it composes through the runtime, imports its own domain rules, and may not
+  // open a database, a driver, or the disk. `node:fs` is the load-bearing probe here — a diary
+  // that kept images would be the obvious way to break this rule, so the rule is checked against
+  // the module that would most plausibly break it.
+  ["src/features/habits/__probe.ts", "src/features/habits/diary.ts", "node:fs"],
+  [
+    "src/features/habits/__probe.ts",
+    "src/features/habits/diary.ts",
+    "better-sqlite3",
+  ],
+  [
+    "src/features/habits/__probe.ts",
+    "src/features/habits/diary.ts",
+    "@/lib/db/connection",
+  ],
+  [
+    "src/features/habits/__probe.ts",
+    "src/features/habits/diary.ts",
+    "@/commands/executor",
+  ],
+  // The domain file the whole note rule set lives in. A note rule that could reach a database
+  // would no longer be a rule, it would be a query.
+  ["src/domain/__probe.ts", "src/domain/diary.ts", "@/lib/db"],
+  ["src/domain/__probe.ts", "src/domain/diary.ts", "node:fs"],
+  ["src/domain/__probe.ts", "src/domain/diary.ts", "@/features/habits/diary"],
+  // The page and its route: routing only, no filesystem, no provider.
+  [
+    "src/app/diary/__probe.tsx",
+    "src/app/diary/page.tsx",
+    "@/lib/db/connection",
+  ],
+  ["src/app/diary/__probe.tsx", "src/app/diary/page.tsx", "node:fs"],
+  [
+    "src/app/diary/__probe.tsx",
+    "src/app/diary/page.tsx",
+    "@/features/chat/openrouter",
+  ],
+  [
+    "src/app/api/photos/__probe.ts",
+    "src/app/api/photos/[id]/note/route.ts",
+    "@/lib/db/connection",
+  ],
+  [
+    "src/app/api/photos/__probe.ts",
+    "src/app/api/photos/[id]/note/route.ts",
+    "node:fs",
+  ],
+
   // src/components — render and dispatch; no database, no filesystem, no provider.
   ["src/components/__probe.tsx", "src/components/Nav.tsx", "@/lib/db"],
   ["src/components/__probe.tsx", "src/components/Nav.tsx", "@/lib/storage"],
@@ -267,6 +316,29 @@ const ALLOWED = [
     "src/features/skills/__probe_allowed.ts",
     "src/features/skills/view.ts",
     "@/domain/skills",
+  ],
+  // Phase 8. The diary reads its own domain rules and composes through the runtime, exactly as the
+  // rest of the habits slice does. If these were blocked, the note rules would have to be
+  // reimplemented inside the feature, which is the duplication ADR-056 exists to avoid.
+  [
+    "src/features/habits/__probe_allowed.ts",
+    "src/features/habits/diary.ts",
+    "@/domain/diary",
+  ],
+  [
+    "src/features/habits/__probe_allowed.ts",
+    "src/features/habits/diary.ts",
+    "@/features/shared/command-runtime",
+  ],
+  [
+    "src/app/diary/__probe_allowed.tsx",
+    "src/app/diary/page.tsx",
+    "@/features/habits/diary",
+  ],
+  [
+    "src/app/api/photos/__probe_allowed.ts",
+    "src/app/api/photos/[id]/note/route.ts",
+    "@/features/habits/diary",
   ],
   [
     "src/features/routine/__probe_allowed.ts",

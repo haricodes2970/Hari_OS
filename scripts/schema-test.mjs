@@ -101,12 +101,13 @@ console.log("Fresh database");
 
   const first = migrate(database);
   if (
-    first.applied.length === 2 &&
+    first.applied.length === 3 &&
     first.applied[0] === "001_initial" &&
-    first.applied[1] === "002_screen_time"
+    first.applied[1] === "002_screen_time" &&
+    first.applied[2] === "003_diary_note"
   ) {
     ok(
-      "migrations 001_initial and 002_screen_time applied to a fresh database, in order",
+      "migrations 001_initial, 002_screen_time, and 003_diary_note applied to a fresh database, in order",
     );
   } else {
     bad(`unexpected migration result: ${JSON.stringify(first.applied)}`);
@@ -130,10 +131,10 @@ console.log("Fresh database");
   }
 
   const versions = getAppliedVersions(database);
-  if (versions.length === 2) {
+  if (versions.length === 3) {
     ok("schema_migrations records each version exactly once");
   } else {
-    bad(`expected two recorded versions, found: ${versions.join(", ")}`);
+    bad(`expected three recorded versions, found: ${versions.join(", ")}`);
   }
 
   database.close();

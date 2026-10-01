@@ -18,8 +18,9 @@
  *
  * ## What is stored, and what is not
  *
- * `habit_log.photo_url` holds `/api/photos/<id>/<filename>`. It is an **application URL**, never a
- * filesystem path, so the upload directory can move without stranding rows. The filename is in
+ * `habit_log.photo_url` holds `/api/photos/<id>/<filename>`, and `habit_log.photo_note` holds the
+ * user's own words about it (ADR-056). The URL is an **application URL**, never a filesystem path,
+ * so the upload directory can move without stranding rows. The filename is in
  * the URL as well as the id, which costs nothing and buys one thing: `loadPhoto` refuses to read a
  * file whose name does not match the row, so no guessed path can reach a file this table does not
  * name.
@@ -35,6 +36,7 @@
 import "server-only";
 
 import type { CalendarDate } from "@/domain/calendar";
+import { diaryNote } from "@/domain/diary";
 import type { Result } from "@/domain/result";
 
 import {
@@ -73,7 +75,7 @@ export function photoUrl(id: number, filename: string): string {
 }
 
 /**
- * Validates bytes, writes the file, and records today's laundry as proved.
+ * Validates bytes, writes the file, and records the day as proved.
  *
  * `day` is already resolved to a calendar date by the route, from the stated day reference. The
  * row is written as done: uploading the picture is the completion, which is why the domain's
@@ -82,11 +84,33 @@ export function photoUrl(id: number, filename: string): string {
  * Every failure after the file exists removes it. The alternative — leaving an orphan for a
  * `deletePhoto` call nobody makes — is how `data/uploads` quietly fills with images nothing can
  * reach.
+ *
+ * ## About the note
+ *
+ * `note` is optional and, when given, is validated **before** anything is written. The order is the
+ * whole point: a note that cannot be stored must not cost the user an uploaded file, and storing the
+ * photo first would mean cleaning up after a rejection that was decided by text alone.
+ *
+ * A day is one row, so re-photographing it rewrites that row — and the previous note is read
+ * inside the same transaction and carried onto the new photo unless this upload brought a note of
+ * its own. Losing a note because someone uploaded a better picture of the same shelf is not a
+ * correction the user asked for. Rewriting rather than deleting and reinserting is what keeps the
+ * entry's id with its entry, so a note addressed to it still lands on the same picture; the
+ * reasoning is on `updateHabitForDay`.
  */
 export async function storeLaundryPhoto(
   bytes: Uint8Array,
   day: CalendarDate,
+  note?: string | null,
 ): Promise<Result<StoredPhotoRef>> {
+  // Validated up front, and the result is the value that gets stored rather than the text as it
+  // arrived: trimmed, whitespace-only turned into "no note", control characters already refused.
+  const stated = diaryNote(note);
+
+  if (!stated.ok) {
+    return stated;
+  }
+
   const stored = await savePhoto(bytes);
 
   if (!stored.ok) {
@@ -97,14 +121,28 @@ export async function storeLaundryPhoto(
 
   try {
     const saved = repositories.transaction(() => {
+      // Read inside the transaction, so the note carried across belongs to the row being
+      // rewritten and not to whatever a concurrent request did in between.
       const existing = repositories.habits.findForDay(day, "laundry");
 
       if (existing !== null) {
-        const removed = repositories.habits.deleteForDay(day, "laundry");
+        // The day already has an entry, so the picture is updated onto it: same row, same id,
+        // same note unless this upload brought one.
+        const updated = repositories.habits.updateHabitForDay(day, "laundry", {
+          done: true,
+          photoUrl: photoUrl(existing.id, stored.value.filename),
+          // A note typed now wins: it is about *this* photograph. `diaryNote` returning `null`
+          // for an empty box means "the user said nothing", which must not be read as "the user
+          // wants the old words deleted".
+          photoNote: stated.value ?? existing.photoNote,
+          minutes: existing.minutes,
+        });
 
-        if (!removed.ok) {
-          throw new Error(removed.error.message);
+        if (!updated.ok) {
+          throw new Error(updated.error.message);
         }
+
+        return updated.value;
       }
 
       const inserted = repositories.habits.insertHabit({
@@ -113,6 +151,7 @@ export async function storeLaundryPhoto(
         type: "laundry",
         done: true,
         photoUrl: null,
+        photoNote: null,
         minutes: null,
       });
 
@@ -120,6 +159,9 @@ export async function storeLaundryPhoto(
         throw new Error(inserted.error.message);
       }
 
+      // The URL contains the row's id, so it cannot be part of the insert that produces the id.
+      // The transaction is what makes the pair atomic: a row with no photo, or a photo with no
+      // row, never both survive.
       const attached = repositories.habits.attachPhoto(
         day,
         "laundry",
@@ -130,7 +172,16 @@ export async function storeLaundryPhoto(
         throw new Error(attached.error.message);
       }
 
-      return attached.value;
+      const written = repositories.habits.saveDiaryNote(
+        attached.value.id,
+        stated.value,
+      );
+
+      if (!written.ok) {
+        throw new Error(written.error.message);
+      }
+
+      return written.value;
     });
 
     return {

@@ -1,6 +1,18 @@
 # Phase 8 — Photo and Diary
 
-**Status: Planned — scope needs a decision before any code is written**
+**Status: Partial — the diary and its notes are delivered; the PWA deliverables are not.**
+
+**What this phase resolved, 2026-10-01.** The scope note below asked the user one question — is a
+diary entry a photo, a note, or a row of its own? — and it was answered as part of the work rather
+than deferred: **a diary entry is the photo**. `habit_log` gained a nullable `photo_note`
+(migration `003_diary_note`), `/diary` is the timeline of those photos with the user's own words
+beside each one, and no diary table exists (ADR-056). Two further decisions came with it: notes are
+written by forms and never by a sentence (ADR-057), and an entry's id stays with its entry
+(ADR-058).
+
+**What this phase did not do.** Every PWA item below — installability, camera access, a manifest, a
+service worker, icons, and the package choice they need — is untouched. The photo path this document
+originally assumed Phase 8 would own was delivered in Phase 7.
 
 **Scope note added 2026-10-01, after Phase 7.** The first two scope items below were delivered by
 Phase 7, not deferred to this phase: `POST /api/photos` and `GET /api/photos/<id>/<filename>` write
@@ -8,12 +20,8 @@ and serve real pictures under `data/uploads/`, with magic-byte validation, serve
 size limit, and no path ever stored (ADR-051). Laundry cannot be completed by a sentence alone, and
 `/habits` shows a Photo Diary timeline of those pictures.
 
-What is left, and the reason this status says "needs a decision": the PRD describes a diary of
-laundry photos **and daily notes**. Photos are handled; notes have nowhere to live.
-`habit_log.photo_url` is the only column that can hold a picture, and no table exists for a dated
-note. Adding one is a schema change this phase document was not written to authorise, so the
-question — is a diary entry a photo, a note, or a row of its own? — is the user's to answer before
-Phase 8 starts.
+This note is kept as written, because it records what was true when the phase had not started. The
+question it ended with has since been answered; see ADR-056.
 
 Scope taken from `Hari_OS_V1_PRD.docx` sections 6.6 and 1. This document does not expand it.
 

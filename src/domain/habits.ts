@@ -103,6 +103,15 @@ export type HabitLog = {
    * cannot leak a path.
    */
   readonly photoUrl: string | null;
+  /**
+   * The user's own words about the photo, or `null` when the entry has no note.
+   *
+   * Phase 8. It lives on the row rather than in a table of its own because a diary entry *is*
+   * the photo, and two tables holding one picture's location would be two answers to the same
+   * question (ADR-056). `src/domain/diary.ts` owns the rules about the text; this row only says
+   * where the text is kept.
+   */
+  readonly photoNote: string | null;
   /** A manually entered screen-time estimate, or `null`. */
   readonly minutes: number | null;
 };
@@ -164,8 +173,10 @@ export function habitFor(
  * - **One row per type per day.** The second entry for a day replaces the first, because a day
  *   has one cooking and one laundry, and two rows would make "did I cook today?" ambiguous.
  *
- * `id` and `photoUrl` come from the repository and the photo route respectively; neither is
- * something the domain invents.
+ * `id`, `photoUrl`, and `photoNote` come from the repository, the photo route, and the user
+ * respectively; none of them is something this function invents. A recorded habit is written with
+ * no photo and no note, because a photo is attached by the upload route and a note by the diary —
+ * the two are separate operations that happen to land on the same row.
  */
 export function recordHabit(input: {
   readonly date: CalendarDate;
@@ -208,6 +219,7 @@ export function recordHabit(input: {
         type: SCREEN_TIME,
         done: true,
         photoUrl: null,
+        photoNote: null,
         minutes: stated,
       },
       photoAttached: false,
@@ -237,6 +249,7 @@ export function recordHabit(input: {
       type: input.type,
       done: input.done,
       photoUrl: null,
+      photoNote: null,
       minutes: null,
     },
     photoAttached: false,
@@ -253,8 +266,22 @@ export function recordHabit(input: {
  * `entries` may contain any dates; only those on or before `today` are counted, and a habit
  * logged for a future day is not something to reward in advance.
  */
+/**
+ * The smallest row shape the habit rules actually read: a day, a type, and whether it was done.
+ *
+ * `habitStreak` and `laundryProgress` look at nothing else — not the photo, not the note, not the
+ * minutes — so asking for a whole `HabitLog` would have them depend on fields they do not use, and
+ * would have made the read model carry a diary note purely to satisfy them. `HabitLog` satisfies
+ * this structurally, so a caller with full rows still passes rows.
+ */
+export type HabitRecord = {
+  readonly date: CalendarDate;
+  readonly type: LoggableHabitType;
+  readonly done: boolean;
+};
+
 export function habitStreak(
-  entries: readonly HabitLog[],
+  entries: readonly HabitRecord[],
   type: HabitType,
   today: CalendarDate,
 ): { readonly days: number; readonly lastRecorded: CalendarDate | null } {
@@ -326,7 +353,7 @@ export const MAX_STREAK_SCAN = 1461;
  * done, not rows: two uploads on one day are one day of laundry, and counting rows would make a
  * single good day look like two.
  */
-export function laundryProgress(entries: readonly HabitLog[]): {
+export function laundryProgress(entries: readonly HabitRecord[]): {
   readonly doneThisWeek: number;
   readonly target: number;
 } {

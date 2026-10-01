@@ -3,10 +3,35 @@
 **Authority for phase, micro-phase, and next action.** `ROADMAP.md` is the plan; this file is
 the state. Where they disagree, this file is correct.
 
-- **Current phase:** 7 — Skills and Habits. **Complete and verified.**
-- **Latest commit:** `16d51d2` — `feat(7): complete skills, habits, private log, and photo diary`
+- **Current phase:** 8 — Photo and Diary. **Notes and the diary surface complete and verified.**
+  The PWA deliverables this phase document also lists — manifest, service worker, icons — are
+  **not** done and are not part of the work recorded below.
+- **Latest commit:** `pending commit` — the Phase 8 implementation, once it exists
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none.
+
+## Phase 8 — Photo and Diary: the diary half complete
+
+`docs/phases/PHASE_08_PHOTO_DIARY.md` and `docs/sessions/2026-10-01-session-07.md` have the detail.
+
+**What exists now.** A `/diary` page: every laundry photo newest first, with the user's own words
+beside each one, editable and clearable in place. The Habits upload takes an optional note in the
+same submission as the picture, so the thought and the photo are one moment.
+
+**The question the phase document referred upward, answered.** A diary entry *is* the photo. One
+migration, `003_diary_note`, adds `habit_log.photo_note`; no table was created, because two tables
+holding one picture's location are two answers to "which image is this" (ADR-056).
+
+**No command was added, and that was a decision.** Notes are prose, and the parser is a model: a
+sentence cannot name which photo the user meant, and "never a summary, never anything you added
+yourself" is a weaker guarantee than not routing the words through an interpreter at all (ADR-057).
+
+**The boundaries that mattered.** The diary has one reader, and `TodayEntry` gives the Dashboard
+nothing to leak. A note requires a real photo. An entry's id stays with its entry, so a stale page
+cannot write a note onto another day's picture (ADR-058).
+
+**What this phase did not do.** The phase document's PWA items — installability, camera access, a
+service worker — are untouched. `docs/phases/PHASE_08_PHOTO_DIARY.md` still carries them.
 
 ## Phase 7 — Skills and Habits: complete
 
@@ -103,18 +128,18 @@ cards state that they are unavailable. No skill, habit, photo, or log is fabrica
 | 5 — Dashboard | **Complete** | `a87210c` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
 | 6 — Routine + Sleep | **Complete** | `015aa38` | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
 | 7 — Skills + Habits | **Complete** | `16d51d2` | Full replacement list, neutral streaks, laundry photo proof, screen time, private log, Photo Diary |
-| 8 — Photo + Diary | Not started | — | The photo path Phase 8 was assumed to own shipped in Phase 7 (ADR-051); what remains is scope the roadmap and PRD disagree on |
+| 8 — Photo + Diary | **Partial** | `pending commit` | Diary notes and the `/diary` timeline delivered; the phase document's PWA deliverables are not |
 | 9 — Hardening | Not started | — | |
 
 ## Next action
 
-Phase 8, Photo + Diary, when the user asks for it — and its scope needs a decision before any code
-is written. The photo path Phase 8 was assumed to own shipped in Phase 7 (ADR-051), so the
-outstanding question is what a diary entry *is* when it is not a laundry proof: `habit_log.photo_url`
-is the only column that can hold a picture, so anything else needs a column or a table, and no
-phase document has been given one.
+Phase 8's remaining deliverables, if the user wants them: the PWA side of
+`docs/phases/PHASE_08_PHOTO_DIARY.md` — installability, camera or file-picker access through the
+installed app, a manifest, a service worker, and icons. That needs a package choice recorded as an
+ADR first (the phase document says so, and ADR-003 deliberately added no PWA package in Phase 0).
+Nothing in the note-and-timeline work depends on it.
 
-Phase 7 was **not** continued beyond its own scope in this run.
+Phase 9 remains unstarted.
 
 ## Open items carried forward
 
@@ -123,9 +148,10 @@ Phase 7 was **not** continued beyond its own scope in this run.
 - **Batch expense entry.** The PRD contradicts itself; Phase 2's one-sentence-one-command ADR
   stands.
 - **The baseline database fingerprint discrepancy** recorded in 1.5 remains unexplained.
-- **Phase 8's scope.** The PRD's Photo Diary is partly delivered by Phase 7 as a timeline of
-  laundry photos. A diary entry for anything else has nowhere to be stored, and inventing a table
-  would be a schema change no phase document asked for.
+- **Phase 8's PWA half.** The diary and its notes are done; installability, camera access, a
+  manifest, and a service worker are not, and adding a PWA package requires an ADR (ADR-003).
+- **A diary entry for anything other than laundry.** `habit_log.photo_url` is still the only column
+  that can hold a picture, so the V1 diary remains the timeline of laundry photos (ADR-056).
 - **PRD-versus-roadmap scope divergence** in `ROADMAP.md` is unresolved and is the user's call.
 - **No live OpenRouter call has ever been made.** Every sentence path is proven against a local
   stub and an injected transport; no `OPENROUTER_API_KEY` has been available in any phase.

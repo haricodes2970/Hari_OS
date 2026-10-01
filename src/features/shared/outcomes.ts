@@ -52,6 +52,10 @@ export type OutcomeToken =
   | "invalid_private_note"
   | "invalid_photo"
   | "photo_too_large"
+  // Phase 8. The diary note's two refusals. Each names what to change, and the second one points
+  // at the page that can fix it rather than reporting a row that could not be found.
+  | "invalid_diary_note"
+  | "unknown_photo"
   | "persistence_failed";
 
 /** The first thing a person needs to know, in their own terms. */
@@ -111,6 +115,12 @@ const DOMAIN_MESSAGES: Record<string, string> = {
   invalid_photo:
     "That file is not a JPEG, PNG, WebP, or GIF image, so it was not stored.",
   photo_too_large: "That photo is over the 10 MB limit. Try a smaller one.",
+  // The note's own rules, said once. "500 characters" rather than "too long", because the limit is
+  // a number the user can check against, not a verdict on their writing.
+  invalid_diary_note:
+    "A note can be at most 500 characters, and cannot contain control characters. Saving nothing removes the note.",
+  unknown_photo:
+    "That entry has no photo, so there is nothing to write a note on. Upload the photo first.",
 };
 
 function isDomainMessage(code: string): code is keyof typeof DOMAIN_MESSAGES {

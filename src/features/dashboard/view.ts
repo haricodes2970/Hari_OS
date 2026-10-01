@@ -42,10 +42,11 @@
  */
 import "server-only";
 
-import type { HabitLog, HabitType } from "@/domain/habits";
+import type { HabitType } from "@/domain/habits";
 import { selectTopTasks } from "@/domain/routine.ts";
 
 import { readDailyBill } from "../expenses/view.ts";
+import type { TodayEntry } from "../habits/view.ts";
 import { readHabits } from "../habits/view.ts";
 import { listKitchenStock } from "../kitchen/view.ts";
 import { readRoutine } from "../routine/view.ts";
@@ -224,7 +225,7 @@ export function readDashboard(date: string = currentUtcDate()): DashboardModel {
     suggestedFirstAction: undone === undefined ? null : undone.title,
     habits: habits
       .filter(
-        (entry): entry is HabitLog & { readonly type: HabitType } =>
+        (entry): entry is TodayEntry & { readonly type: HabitType } =>
           entry.type === "dishes" || entry.type === "laundry",
       )
       .map((entry) => ({

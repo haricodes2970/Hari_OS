@@ -60,11 +60,14 @@ again changes nothing.
 | `/kitchen`  | Stock levels, and use / restock / recount                                            |
 | `/expenses` | Account balances, and the record of recent spends                                    |
 | `/routine`  | Today's tasks, the night check-in, sleep and naps                                    |
-| `/habits`   | Cooking, dishes, laundry with a photo, screen time, the private log, the Photo Diary |
+| `/habits`   | Cooking, dishes, laundry with a photo, screen time, the private log, a photo preview |
 | `/skills`   | The full replacement list, which the Dashboard's urge entry point opens              |
+| `/diary`    | Every laundry photo newest first, with your own note beside each one                 |
 
 Every command is submitted to `POST /api/commands`, and the forms work with or without JavaScript.
-Photos go to `POST /api/photos` and are served from `/api/photos/<id>/<filename>`.
+Photos go to `POST /api/photos` and are served from `/api/photos/<id>/<filename>`. A photo's note
+goes to `POST /api/photos/<id>/note`, and posting that field empty is what clears it — notes are
+written by forms, never by a sentence, so nothing paraphrases them.
 
 ## Environment
 
@@ -106,8 +109,9 @@ tooling. V1 has no deployment, so there is nothing to point it at in production.
 | `npm run dashboard:test` | The Dashboard read model                    |
 | `npm run routine:test`   | The Routine slice                           |
 | `npm run skills:test`    | Skills, habits, the private log, and photos |
+| `npm run diary:test`     | The diary: notes, the timeline, and privacy |
 
-Three acceptance runs serve a production build over HTTP on a disposable database, so run
+Four acceptance runs serve a production build over HTTP on a disposable database, so run
 `npm run build` first:
 
 | Script                     | Purpose                                       |
@@ -115,6 +119,7 @@ Three acceptance runs serve a production build over HTTP on a disposable databas
 | `npm run dashboard:accept` | The Dashboard over HTTP                       |
 | `npm run routine:accept`   | The Routine page over HTTP                    |
 | `npm run skills:accept`    | The Habits and Skills pages, and photo upload |
+| `npm run diary:accept`     | The diary page and the note path over HTTP    |
 
 | Script                       | Purpose                                       |
 | ---------------------------- | --------------------------------------------- |

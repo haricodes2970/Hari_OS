@@ -41,6 +41,7 @@ import { CommandForm, type CommandField } from "@/components/CommandForm";
 import { Nav } from "@/components/Nav";
 import { OutcomeBanner } from "@/components/OutcomeBanner";
 import { parserAvailability } from "@/features/chat/runtime";
+import { MAX_DIARY_NOTE } from "@/domain/diary";
 import { readHabits } from "@/features/habits/view";
 import { readPrivateLog } from "@/features/habits/private-log";
 import { PHOTO_LIMIT_BYTES } from "@/features/habits/photos";
@@ -191,12 +192,29 @@ export default async function HabitsPage({
           <span>Photo (JPEG, PNG, WebP, or GIF, up to {LIMIT_MB} MB)</span>
           <input type="file" name="photo" accept="image/*" required />
         </label>
+        {/*
+          Optional, and worded as an optional. Phase 8: the thought usually arrives while the
+          photo is still being chosen, so this is where it gets written. An empty box stores no
+          note and says so — it is not a way to write a blank note.
+        */}
+        <label className="field">
+          <span>Diary note (optional, in your own words)</span>
+          <textarea
+            name="note"
+            className="diary-note"
+            rows={3}
+            maxLength={MAX_DIARY_NOTE}
+            placeholder="your own words"
+          />
+        </label>
         <input type="hidden" name="next" value={RETURN_TO} />
         <button type="submit">Upload and record laundry</button>
       </form>
       <p className="muted">
         Uploading a photo records laundry as done for today. It replaces any
-        earlier entry for today, and the previous photo stops being shown.
+        earlier entry for today, and the previous photo stops being shown — a
+        note written on the earlier photo is kept, because removing a picture is
+        not a request to forget what you wrote about it.
       </p>
 
       <h2>Screen time</h2>
@@ -317,6 +335,11 @@ export default async function HabitsPage({
       )}
 
       <h2>Photo Diary</h2>
+      {/*
+        A preview, deliberately without the notes. This page composes `readHabits`, and keeping the
+        notes off it means the diary is read in exactly one place — see `src/features/habits/
+        diary.ts`. The link below is the way there.
+      */}
       {habits.timeline.length === 0 ? (
         <p className="empty">
           No photos yet. Laundry photos appear here, newest first.
@@ -339,6 +362,9 @@ export default async function HabitsPage({
           ))}
         </ul>
       )}
+      <p>
+        <a href="/diary">Open the diary to read and write notes</a>
+      </p>
     </>
   );
 }

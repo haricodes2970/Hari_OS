@@ -8,11 +8,12 @@
  * ## Two Phase 7 links, both to reach a real page
  *
  * `Skills` is the replacement-activity list, which is what the Dashboard's urge entry point opens.
- * `Habits` is where habits, screen time, the private log, and the Photo Diary live. Neither is a
+ * `Habits` is where habits, screen time, and the private log live. Neither is a
  * modal or a query string on the Dashboard: they are pages, because the PRD asks for a full list
  * the user reads, and a page is what a list deserves.
  *
- * The order follows the order of a day, with Skills after the records it replaces.
+ * The order follows the order of a day, with Skills after the records it replaces and `Diary`
+ * last: the photos are the day's record, and the notes on them are what the day left behind.
  */
 export type NavProps = {
   readonly currentPath: string;
@@ -25,6 +26,7 @@ const LINKS = [
   { href: "/routine", label: "Routine" },
   { href: "/habits", label: "Habits" },
   { href: "/skills", label: "Skills" },
+  { href: "/diary", label: "Diary" },
 ] as const;
 
 export function Nav({ currentPath }: NavProps) {

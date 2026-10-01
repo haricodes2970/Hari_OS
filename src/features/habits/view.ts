@@ -33,7 +33,7 @@ import "server-only";
 
 import type { CalendarDate } from "@/domain/calendar";
 import { addDays } from "@/domain/calendar";
-import type { HabitLog, HabitType, LoggableHabitType } from "@/domain/habits";
+import type { HabitType, LoggableHabitType } from "@/domain/habits";
 import { HABIT_TYPES, habitStreak, laundryProgress } from "@/domain/habits";
 
 import { getRepositories } from "../shared/command-runtime.ts";
@@ -74,10 +74,31 @@ export type PhotoTimelineEntry = {
   readonly photoUrl: string;
 };
 
+/**
+ * One of today's rows, as this read model exposes it.
+ *
+ * **A `HabitLog` with the note removed, deliberately.** Phase 8 put the user's diary note on the
+ * same row as the photo (ADR-056), so `habit_log` now carries text the Dashboard must never see.
+ * Exposing `HabitLog` here would hand that note to every reader of this module — including the
+ * Dashboard, which composes `readHabits` — and the note would be one refactor away from appearing
+ * on the Dashboard. Listing the fields instead makes the boundary checkable: there is no note here
+ * to leak, and adding one would be a visible change to this type rather than an accident.
+ *
+ * `photoUrl` is the URL, never a filesystem path, exactly as in `HabitLog`.
+ */
+export type TodayEntry = {
+  readonly id: number;
+  readonly date: string;
+  readonly type: LoggableHabitType;
+  readonly done: boolean;
+  readonly photoUrl: string | null;
+  readonly minutes: number | null;
+};
+
 export type HabitsView = {
   readonly date: string;
-  /** Today's entries, in the order the rows were written. */
-  readonly today: readonly HabitLog[];
+  /** Today's entries, in the order the rows were written. No diary note: see `TodayEntry`. */
+  readonly today: readonly TodayEntry[];
   /** One entry per neutral habit, whether or not anything was recorded for it. */
   readonly streaks: readonly HabitStreakView[];
   readonly laundry: LaundryProgressView;
@@ -113,7 +134,16 @@ const TIMELINE_LABELS: Readonly<Record<LoggableHabitType, string>> = {
  */
 export function readHabits(date: CalendarDate): HabitsView {
   const repositories = getRepositories();
-  const today = repositories.habits.listForDate(date);
+  const today: TodayEntry[] = repositories.habits
+    .listForDate(date)
+    .map((row) => ({
+      id: row.id,
+      date: row.date,
+      type: row.type,
+      done: row.done,
+      photoUrl: row.photoUrl,
+      minutes: row.minutes,
+    }));
 
   // Seven days ending today, read as one window so the laundry count and the streak cannot
   // disagree about which days were considered.

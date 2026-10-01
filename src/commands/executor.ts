@@ -805,22 +805,39 @@ function executeHabitRecord(
     return domainFailure(change.error);
   }
 
+  /**
+   * Re-recording a day rewrites the row and keeps the photo.
+   *
+   * The photo and the note are carried across explicitly, and both are there for the same reason:
+   * a habit statement is an assertion about one day, and replacing it must not delete the
+   * evidence and the words that go with it. The row is updated rather than replaced — see
+   * `updateHabitForDay` for why an entry's id has to stay with its entry.
+   */
   const replacement: HabitLog = {
     ...change.value.habit,
     photoUrl: existing?.photoUrl ?? null,
+    photoNote: existing?.photoNote ?? null,
   };
 
   try {
     const saved = repositories.transaction(() => {
       if (existing !== null) {
-        const removed = repositories.habits.deleteForDay(
+        const updated = repositories.habits.updateHabitForDay(
           date.value,
           command.type,
+          {
+            done: replacement.done,
+            photoUrl: replacement.photoUrl,
+            photoNote: replacement.photoNote,
+            minutes: replacement.minutes,
+          },
         );
 
-        if (!removed.ok) {
-          throw new Error(removed.error.message);
+        if (!updated.ok) {
+          throw new Error(updated.error.message);
         }
+
+        return updated.value;
       }
 
       const stored = repositories.habits.insertHabit(replacement);

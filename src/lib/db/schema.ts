@@ -7,6 +7,14 @@ import "server-only";
  * caught rather than assumed correct. Keeping the expectation separate from the SQL that
  * creates it means a broken migration cannot silently agree with itself.
  */
+/**
+ * The V1 tables and their columns.
+ *
+ * `habit_log.photo_note` was added by migration 003 with `ALTER TABLE`, so it is absent from that
+ * table's CREATE statement while present in the database. It is asserted here, where presence is
+ * the whole claim, and there is no entry for it under `EXPECTED_CONSTRAINTS` because a nullable
+ * column with no default adds no constraint to match.
+ */
 export const EXPECTED_TABLES: Record<string, readonly string[]> = {
   plan_task: ["id", "date", "title", "done"],
   sleep_log: [
@@ -24,7 +32,15 @@ export const EXPECTED_TABLES: Record<string, readonly string[]> = {
   expense: ["id", "timestamp", "item", "amount", "account", "category"],
   skill: ["id", "name", "active"],
   skill_log: ["id", "skill", "timestamp", "minutes"],
-  habit_log: ["id", "date", "type", "done", "photo_url", "minutes"],
+  habit_log: [
+    "id",
+    "date",
+    "type",
+    "done",
+    "photo_url",
+    "minutes",
+    "photo_note",
+  ],
   private_log: ["id", "date", "type", "note"],
 };
 

@@ -69,7 +69,13 @@ export type DomainErrorCode =
   | "invalid_private_type"
   | "invalid_private_note"
   | "invalid_photo"
-  | "photo_too_large";
+  | "photo_too_large"
+  // Phase 8. The diary note's own two codes: what the user wrote cannot be stored, or there is
+  // no photo on that day for a note to belong to. Both are refusals the user can act on — change
+  // the note, or upload the photo first — which is why they are codes rather than a generic
+  // failure.
+  | "invalid_diary_note"
+  | "unknown_photo";
 
 /** Extra machine-readable context, for assertions and for showing the user what was wrong. */
 export type DomainErrorDetail = Readonly<Record<string, string | number>>;

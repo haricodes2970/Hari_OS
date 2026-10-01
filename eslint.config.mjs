@@ -377,6 +377,38 @@ const chatBoundary = {
  * `scripts/architecture-probe.mjs` probes every combination in this block and fails if any of
  * them stops firing, so a future config added above these cannot quietly disarm them again.
  */
+/**
+ * Feature and command imports, refused from `src/domain`.
+ *
+ * Dependency direction points inward and downward, so a domain rule may not import the layers
+ * above it: a feature may call a domain rule, never the reverse.
+ *
+ * ## Why this was not already enforced
+ *
+ * `hari-os/boundaries` states the same rule, and is **shadowed** for `src/domain` by the enforced
+ * block below — ESLint replaces a same-named rule wholesale rather than merging it. So the
+ * repository reported a boundary it was not providing for this scope, which is precisely the
+ * defect ADR-046 was written about, recurring one level up: a domain module could import a
+ * feature and reach a database through it while `npm run lint` passed. Adding the pattern there
+ * is what closes it.
+ *
+ * ## Why `src/components` is not included
+ *
+ * Two components legitimately import a feature's `presentation.ts` — `ChatInput` renders the chat
+ * result wording and `OutcomeBanner` renders the outcome wording — and that is vocabulary rather
+ * than behaviour. The exception cannot be expressed in this rule: negation inside a `group` is
+ * ignored and a top-level negation fails schema validation, so the honest options are enumerating
+ * every slice (which blocks a new slice by omission, silently) or leaving components alone.
+ * Enforcing the reverse direction for components is left to a phase that reviews them rather than
+ * half-enforced here.
+ */
+const upperLayerModules = [
+  "@/features",
+  "@/features/*",
+  "@/commands",
+  "@/commands/*",
+];
+
 const enforcedBoundaries = [
   {
     name: "hari-os/domain-boundaries-enforced",
@@ -400,6 +432,11 @@ const enforcedBoundaries = [
               group: providerModules,
               message:
                 "The language model is an untrusted parser behind a port. The domain must not know a provider exists.",
+            },
+            {
+              group: upperLayerModules,
+              message:
+                "A domain rule depends on nothing above it: it takes plain input and returns plain output. A feature may call the domain, never the reverse.",
             },
           ],
         },

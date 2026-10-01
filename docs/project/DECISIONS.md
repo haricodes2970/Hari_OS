@@ -1412,3 +1412,169 @@ and the provider; the Habits slice must still be allowed `@/lib/storage/photos` 
 - 58 architecture probes pass, up from 47.
 
 **Origin:** Phase 7, from ADR-046's requirement that every documented boundary be probed.
+
+## ADR-056 — A diary entry is the photo: the note is a column on `habit_log`
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 8
+
+**Context.** `docs/phases/PHASE_08_PHOTO_DIARY.md` stopped before starting and recorded the open
+question plainly: the PRD describes a diary of *laundry photos and daily notes*, Phase 7 delivered
+the photographs, and no table exists for a dated note — `habit_log.photo_url` is the only column
+that can hold a picture. It named the decision as the user's to make: is a diary entry a photo, a
+note, or a row of its own?
+
+Everything else in this ADR follows from answering that.
+
+**Alternatives considered.**
+
+- **A `diary_entry` table** — `id`, `date`, `habit_log_id`, `note`. Rejected: it would have to carry
+  the photo reference as well, and two tables holding one picture's location are two answers to
+  "which image is this" on the day they disagree. A join would then be load-bearing for a
+  correctness question, and an outer join would have to decide what a diary entry without a photo
+  is — the same question the column answers structurally.
+- **A `diary` table with its own photo columns** — `photo_url`, `filename`, and the note, unattached
+  to `habit_log`. Rejected: the photo would then exist in two places, and the rules that make a
+  photo real in Phase 7 (ADR-051: an id, a server-chosen filename, and a check that the URL matches
+  the row that owns it) would have to be written twice and would drift.
+- **A `diary_note` table.** Rejected for the same reason with less data: a note with no photo is not
+  something this product has.
+- **Keep it in `habit_log` as `photo_note`, nullable.** Accepted.
+
+**Decision.** The diary entry *is* the laundry photo: the row that owns `photo_url` is the entry,
+and the user's words live on that row. The required invariant — "if a note exists, it belongs to a
+real persisted photo" — is then structural rather than maintained: a row cannot have a note and no
+photo unless a writer put it there, and there is exactly one writer,
+`src/features/habits/diary.ts`, which reads the row and refuses.
+
+Migration `003_diary_note` is a single `ALTER TABLE … ADD COLUMN photo_note TEXT`. No table is
+rebuilt and no constraint is widened, so existing rows are untouched and the operation is
+deterministic. There is no caption column, no tag column, no `JSON`, and no timestamp: the note is
+one string the user typed, and a note with metadata around it is a note a machine is being asked to
+interpret.
+
+The read side is split rather than shared. `readDiary` is the only reader of notes; `readHabits` and
+the Dashboard compose through `TodayEntry`, a projection that has no note field to leak, and
+`src/features/dashboard/view.ts` does not import the diary module at all — the same structural
+privacy boundary ADR-052 built for the private log.
+
+**Consequences.**
+
+- One table describes a diary entry, so nothing has to reconcile two sources for "which picture".
+- Adding a note requires no change to how a photo is stored, named, or served.
+- The PRD's phrase "daily notes" is served as notes *on* the photos the PRD pairs them with, rather
+  than as a second, unpaired stream of text. If a note without a photograph is ever wanted, it is a
+  new decision, not an extension of this one.
+
+**Origin:** Phase 8, resolving the question `docs/phases/PHASE_08_PHOTO_DIARY.md` referred upward.
+
+---
+
+## ADR-057 — A diary note is never written by a sentence, and clearing is an empty note
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 8
+
+**Context.** Every other fact the user records has a chat command (`habit.record`,
+`private.log`, `skill.log`), and Phase 8 had to decide whether a note should too. Two things argue
+against it, and one is decisive.
+
+The first is accuracy. `POST /api/photos/[id]/note` is addressed by **row id**, because the user is
+looking at a picture when they write about it. A sentence has no id. "Add a note to that photo"
+carries no day either, so the interpreter would have to resolve "that photo" to something — and this
+application does not guess: `habit.record` records laundry as *not done* when no photo can be
+verified (ADR-053), and `task.set_done` refuses when no title matches.
+
+The second is the user's words. The parser is a model, and the prompt already has to instruct it
+that a `note` is "the user's own words, exactly as written… never a summary, a judgement, or
+anything you added yourself". A diary entry is precisely the case where that instruction is
+hardest: prose, personal, and long. Routing it through an interpreter risks returning a paraphrase
+of a memory, and the user would have no way to tell that from their own sentence.
+
+**Alternatives considered.**
+
+- **`photo.note` with a required day reference.** Rejected: it works only when the user states the
+  day, so the natural sentence still cannot be used, and the note still passes through the model.
+- **`photo.note` with the day defaulting to today.** Rejected: this is the guessing the rest of the
+  command layer refuses. If a user has one photo today, the sentence is harmless; the day they have
+  three, "that photo" is silently resolved to the wrong one.
+- **No command; a form.** Accepted. The Habits upload takes an optional note in the same submission
+  as the picture, and `/diary` edits and clears one. Both are explicit, deterministic, and carry no
+  text through anything that could alter it.
+
+**Decision.** Diary notes are written through HTTP forms only. `POST /api/photos` accepts an
+optional `note` alongside the file, and `POST /api/photos/[id]/note` writes, changes, or clears the
+note on one entry.
+
+Clearing is the same call with the same field empty. `diaryNote("")` is `null`, `null` means "no
+note", and the repository writes `NULL` — so "add" and "remove" are one statement and one code
+path. There is no `action=delete`, no DELETE route, and no separate clear method, because three
+spellings of one intention are three states that can disagree.
+
+A note is validated **before** anything is written to disk. A rejected note must not cost the user a
+file they just chose, and storing the picture first would mean cleaning up after a decision that was
+made by text alone.
+
+**Consequences.**
+
+- The chat surface cannot write a note, and `parser-prompt.ts` never learns the word "diary" as a
+  command target. Nothing the user writes about a picture is paraphrased or silently redirected.
+- The cost is one extra click for the short note case, which the upload form's optional field removes
+  for the common moment.
+- If a `photo.note` command is ever wanted, ADR-053's rule applies: the executor must verify the row
+  rather than trust the sentence, and the parser must carry the note verbatim.
+
+**Origin:** Phase 8.
+
+---
+
+## ADR-058 — An entry's id stays with its entry: updates, not delete-and-reinsert
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 8
+
+**Context.** Phase 7 wrote a day's row by deleting it and inserting a new one, in both places that
+write a habit: `habit.record` in the executor, and `storeLaundryPhoto`. For a habit that is
+invisible — one row in, one row out. Putting a note on that same row (ADR-056) made both of its
+consequences real, and both are silent.
+
+**The note was destroyed.** The replacement carried `photo_url` across and nothing else, so
+re-recording a habit from chat, or re-photographing a day, deleted what the user had written about
+that day. Phase 8's test 16 exists because of this: it asserts the note is still there after the
+day is photographed again.
+
+**The id was recycled.** SQLite assigns `INTEGER PRIMARY KEY` as `max(rowid) + 1`, so once the only
+row is deleted the next insert takes its number again. A `/diary` page the user had open, naming
+entry 3, could post to `/api/photos/3/note` after that row had been replaced — and the note would be
+stored on a *different day's* new photograph. Nothing would report it, and the user would find their
+words beside the wrong picture.
+
+**Alternatives considered.**
+
+- **Carry the note across, and accept recycled ids.** Rejected: it fixes the visible half and leaves
+  the misattribution.
+- **Add `AUTOINCREMENT` to `habit_log`.** Rejected: it means rebuilding the table (the four-step
+  dance `002_screen_time` used) and creating SQLite's `sqlite_sequence` table, which `db:check`
+  asserts against. A schema rebuild to protect against a row that is only ever replaced by
+  `updateHabitForDay` is a disproportionate fix.
+- **Address the note by id *and* filename**, refusing a mismatch. Rejected: it works, but it makes
+  correctness depend on a second field being threaded through every form and every caller, when the
+  underlying instability has one clean answer.
+- **Update the row in place.** Accepted.
+
+**Decision.** `HabitRepository.updateHabitForDay(date, type, change)` rewrites `done`,
+`photo_url`, `photo_note`, and `minutes` for one day's row and returns it. Both write paths use it
+when a row exists and insert only when one does not. `deleteForDay` is gone: nothing deletes a
+habit row any more.
+
+An entry's id is now stable for the life of the entry, which is what makes it safe to address a note
+to one. The upload path also stops deleting a row to replace it, so the note on a re-photographed
+day is preserved by the same statement that installs the new picture, and a note typed with the new
+upload wins over the carried one — while an *empty* box still carries the old note across, because
+"the user said nothing" is not "the user wants this deleted".
+
+**Consequences.**
+
+- Re-recording a habit and re-photographing a day both keep the diary note.
+- A stale page cannot write a note onto a different entry.
+- `insertHabit` is now the path for a day that has no row, and `attachPhoto` exists only because a
+  new row's id is needed to build its photo URL.
+
+**Origin:** Phase 8, found by `scripts/diary-test.mjs` assertions 16 and 17.

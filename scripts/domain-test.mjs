@@ -70,6 +70,12 @@ import {
   recordHabit,
   recordPrivateEntry,
 } from "../src/domain/habits.ts";
+import {
+  MAX_DIARY_NOTE,
+  byNewestFirst,
+  diaryNote,
+  hasDiaryNote,
+} from "../src/domain/diary.ts";
 
 let passed = 0;
 let failed = 0;
@@ -1329,6 +1335,11 @@ function codeOf(result) {
   return result.ok ? "<succeeded>" : result.error.code;
 }
 
+/** The value a Result succeeded with, for the cases where the value is the whole point. */
+function value(result) {
+  return result.ok ? result.value : "<refused>";
+}
+
 console.log("\n# Phase 7: the replacement-skill list");
 
 {
@@ -1682,6 +1693,118 @@ console.log("\n# Phase 7: the private log");
     /streak|count|score|times|often/i.test(privateTypeLabel("masturbation")),
     false,
     "P7. and never anything about how often or how it ranks",
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n# Phase 8: diary notes");
+
+{
+  assertEqual(
+    value(diaryNote(null)),
+    null,
+    "P8. no note is valid, and means no note",
+  );
+  assertEqual(
+    value(diaryNote(undefined)),
+    null,
+    "P8. an absent note is the same thing, so a form may simply omit it",
+  );
+  assertEqual(
+    value(diaryNote("")),
+    null,
+    "P8. an empty note is the same thing, which is how a note is cleared",
+  );
+  assertEqual(
+    value(diaryNote("   \t\n  ")),
+    null,
+    "P8. and whitespace is nothing to write down",
+  );
+  assertEqual(
+    value(diaryNote("  shelves are clean  ")),
+    "shelves are clean",
+    "P8. a note is trimmed, so two spellings of it are one note",
+  );
+  assertEqual(
+    value(diaryNote("baskets\tshirts")),
+    "baskets shirts",
+    "P8. a tab becomes a space rather than disappearing into the next word",
+  );
+  assertEqual(
+    value(diaryNote("folded\nthe towels")),
+    "folded the towels",
+    "P8. a line break becomes a space too, so a note stays one line of text",
+  );
+  assertEqual(
+    value(diaryNote("x".repeat(MAX_DIARY_NOTE))),
+    "x".repeat(MAX_DIARY_NOTE),
+    `P8. a note of exactly ${MAX_DIARY_NOTE} characters is allowed`,
+  );
+  assertEqual(
+    codeOf(diaryNote("x".repeat(MAX_DIARY_NOTE + 1))),
+    "invalid_diary_note",
+    "P8. one character more is refused",
+  );
+  assertEqual(
+    codeOf(diaryNote("bad\u0000note")),
+    "invalid_diary_note",
+    "P8. a NUL is refused: a note a reader cannot display is not a note",
+  );
+  assertEqual(
+    codeOf(diaryNote("bad\u001b[31mred")),
+    "invalid_diary_note",
+    "P8. and so is an escape sequence, which is not text anyone meant to write",
+  );
+
+  // The order of the two checks, which is only observable in the case that has both: a tab (which
+  // is normalised, not refused) beside a character that must be refused. Normalising first means
+  // the note is judged on what would actually be stored.
+  assertEqual(
+    value(diaryNote("\u0000\t")),
+    "<refused>",
+    "P8. a refused character beside a tab is still refused",
+  );
+  assertEqual(
+    codeOf(diaryNote("\u0000\t")),
+    "invalid_diary_note",
+    "P8. and reported as a note problem rather than silently normalised away",
+  );
+
+  // Statelessness. A module-level `/g` pattern carries `lastIndex` between calls, and the same
+  // refused note checked twice in a row is the case that would expose it.
+  assertEqual(
+    codeOf(diaryNote("bad\u0000note")) === "invalid_diary_note" &&
+      codeOf(diaryNote("bad\u0000note")) === "invalid_diary_note",
+    true,
+    "P8. the same refused note is refused twice, so no state is carried between calls",
+  );
+  assertEqual(
+    value(diaryNote("first\tline")) === "first line" &&
+      value(diaryNote("second\tline")) === "second line",
+    true,
+    "P8. and normalisation is not left half-applied on the next call either",
+  );
+
+  assertEqual(hasDiaryNote(null), false, "P8. null is not a note");
+  assertEqual(hasDiaryNote(""), false, "P8. nor is the empty string");
+  assertEqual(hasDiaryNote("x"), true, "P8. anything else is");
+
+  const entries = [
+    { id: 1, date: "2026-10-01", photoUrl: "/api/photos/1/a.jpg", note: "a" },
+    { id: 4, date: "2026-10-03", photoUrl: "/api/photos/4/d.jpg", note: null },
+    { id: 5, date: "2026-10-03", photoUrl: "/api/photos/5/e.jpg", note: "b" },
+  ];
+  const ordered = byNewestFirst(entries).map((entry) => entry.id);
+
+  assertEqual(
+    ordered.join(","),
+    "5,4,1",
+    "P8. newest first, and a re-photographed day keeps the later entry first",
+  );
+  assertEqual(
+    entries.map((entry) => entry.id).join(","),
+    "1,4,5",
+    "P8. and the input array is not reordered in place",
   );
 }
 

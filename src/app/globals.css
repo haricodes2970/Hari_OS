@@ -347,3 +347,41 @@ button:disabled {
   cursor: pointer;
   padding: 0.35rem 0;
 }
+
+/* --- Photo Diary ---------------------------------------------------------
+   Phase 8. Four rules, and the first one is a fix rather than an addition.
+
+   `.diary-photo` has been used by the Habits page since Phase 7 with no rule
+   behind it, so a photo rendered at its own size and a wide picture pushed the
+   whole page sideways on a narrow screen. Constraining it here is what makes the
+   timeline readable on a phone at all, and it belongs to this phase because this
+   is the phase that makes photos a page rather than a preview. */
+
+.diary-photo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.35rem;
+}
+
+/* The note box. Resizable is left off so the box cannot be dragged taller than
+   its three rows on a desktop, and `min-width: 0` lets it shrink inside a flex
+   row on a 320px screen instead of forcing the page wider. */
+.diary-note {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.3rem;
+  font: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+}
+
+/* The user's own words, as they were written. No italics, no quote marks, and
+   nothing that would make a note look like something the application produced. */
+.diary-note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
