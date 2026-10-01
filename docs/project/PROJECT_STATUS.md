@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-09-30 (micro-phase 1.5)
+- **Last updated:** 2026-09-30 (micro-phase 1.6, Phase 1 closeout)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -9,24 +9,29 @@
 | Phase | Name | Status |
 | --- | --- | --- |
 | 0 | Foundation infrastructure | **Complete** |
-| 1 | Application foundation | **Active** |
+| 1 | Application foundation | **Complete** |
 
 **Phase 0 is complete.** All eight micro-phases are done and verified.
 
-**Phase 1 is active.** Micro-phases 1.1 through 1.5 are complete: schema, pure domain rules,
-the validated command contract, the execution pipeline, and the first vertical slice. A user
-can now record stock changes and expenses through the UI, and see the result persisted.
+**Phase 1 is complete.** All six micro-phases are done and verified: schema, pure domain
+rules, the validated command contract, the execution pipeline, persistence, the server
+boundary, and a user-facing vertical slice. A user can record stock changes and expenses
+through the UI and see the result persisted.
+
+**Phase 2 has not started.** No natural-language parsing and no LLM exist.
 
 ## Current Micro-Phase
 
-**1.5 — First real vertical slice: COMPLETE AND VERIFIED**
+**1.6 — Phase 1 foundation verification and closeout: COMPLETE AND VERIFIED**
 
-Next micro-phase: **1.6 — foundation verification pass. NOT STARTED.** Its scope must be
-planned before work begins; it is not invented here. Phase 1's overall scope is in
-`docs/phases/PHASE_01_FOUNDATION.md`.
+Phase 1 is closed. There is no active micro-phase.
 
-A command now travels the full path — Dashboard, Kitchen, or Expenses, `POST /api/commands`,
-validation, execution, domain, SQLite, then back to a page that shows the stored result.
+The foundation was re-verified end to end rather than rebuilt: the full automated suite
+(460 assertions), the architecture audit, the end-to-end acceptance flow against a disposable
+database, and the repository audit. Nothing was added. Detail in
+`docs/sessions/2026-09-30-session-07.md`.
+
+**Phase 2 has not started and is not begun in this micro-phase.**
 
 ## Completed Micro-Phases
 
@@ -45,10 +50,11 @@ validation, execution, domain, SQLite, then back to a page that shows the stored
 | 1.3 — Validation and structured command contract | `5578457` | Complete | Yes |
 | 1.4 — Command execution foundation | `0d94aad` | Complete | Yes |
 | 1.5 — First real vertical slice | `6f95885` | Complete | Yes |
+| 1.6 — Phase 1 foundation verification and closeout | pending commit | Complete | Yes |
 
 ## Active Work
 
-None. Micro-phase 1.5 is complete and verified; 1.6 is not started.
+None. Phase 1 is complete and verified. Phase 2 has not started.
 
 ## Blockers
 
@@ -70,14 +76,16 @@ None.
   created by an ordered migration in `src/lib/db/migrations.ts`. `npm run db:check` verifies
   tables, columns, constraints, and the absence of unexpected tables.
   `npm run db:test` runs 53 isolated tests on temporary databases.
-  **No seed data exists and no domain result reaches the schema yet.**
+  **`getDb()` applies migrations on open (ADR-038). First-run rows come from
+  `npm run db:setup`; nothing in `src/` inserts rows (ADR-039).**
 - `connection.ts` imports `server-only`, so a Client Component importing it fails the
   build. Verified with a probe route.
 - **Every layer now contains code.** `lib/storage/` holds its boundary README only.
 - **Pure domain rules in place** from micro-phase 1.2, in `src/domain/`: money, quantity,
   inventory, and accounts, all returning `Result` and all tested in memory with
   `npm run domain:test` (170 assertions). Purity is enforced by the `hari-os/domain-purity`
-  lint rule. **No repositories, services, or query modules connect them to SQLite yet.**
+  lint rule. **The executor calls these operations directly; it contains no arithmetic of
+  its own.**
 - **Validated command contract in place** from micro-phase 1.3. `src/commands/contract.ts`
   declares four command kinds carrying facts only, and `parseCommand` in
   `src/lib/validation` turns an untrusted object into a command or a list of specific issues.
@@ -86,7 +94,7 @@ None.
   only module that reads or writes application tables, and `src/commands/executor.ts`
   sequences a validated command: resolve names to rows, apply the domain operation, persist
   the result atomically. 76 integration tests against real SQLite.
-  **No route, feature, or UI invokes it yet, so no production path can execute a command.**
+  **Reached in production only through `POST /api/commands`.**
 - **First vertical slice in place from micro-phase 1.5.** Dashboard (`/`), Kitchen
   (`/kitchen`), and Expenses (`/expenses`) read persisted state and render it. The shared
   `CommandForm` is a Server Component posting to `POST /api/commands` — the single command
@@ -126,10 +134,51 @@ None.
 | `npm run format` | `prettier --write .` |
 | `npm run format:check` | `prettier --check .` |
 | `npm run db:check` | Apply migrations and verify the V1 schema |
+| `npm run db:setup` | Create first-run accounts and example stock (explicit, idempotent) |
 | `npm run db:test` | Isolated schema and constraint tests on temporary databases |
 | `npm run domain:test` | Domain rule tests, in memory, with no database |
 | `npm run contract:test` | Command contract and validation tests, in memory |
 | `npm run exec:test` | Command execution against real SQLite in temporary databases |
+| `npm run app:test` | Form translation through to persisted state (68 tests) |
+
+## Verification Status for Phase 1 (1.6 closeout)
+
+Re-run in full at closeout. Nothing was added or changed to make these pass.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Formatting | `npm run format:check` | Pass |
+| TypeScript | `npm run typecheck` | Pass — 0 errors |
+| Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
+| Production build | `npm run build` | Pass — 4 routes, all dynamic except `_not-found` |
+| Schema intact | `npm run db:check` | Pass — 13 checks, 11 V1 tables, no unexpected tables |
+| Schema tests | `npm run db:test` | Pass — 53 passed, 0 failed |
+| Domain tests | `npm run domain:test` | Pass — 170 passed, 0 failed |
+| Contract tests | `npm run contract:test` | Pass — 93 passed, 0 failed |
+| Execution tests | `npm run exec:test` | Pass — 76 passed, 0 failed |
+| Application tests | `npm run app:test` | Pass — 68 passed, 0 failed |
+| **Total assertions** | | **460 passed, 0 failed** |
+| Dependency direction | grep audit | Pass — see ARCHITECTURE.md section 11 |
+| No SQL outside `src/lib/db` | grep audit | Pass |
+| No `better-sqlite3` outside `src/lib/db` | grep audit | Pass |
+| No client components exist | grep audit | Pass — zero `"use client"` files |
+| Single command entry point | grep audit | Pass — one production call site |
+| Clock confinement | grep audit | Pass — `new Date()` only in the runtime boundary and migrations |
+| No LLM, network, or OpenRouter | grep audit + `package.json` | Pass — no `fetch`, no SDK, no new dependency |
+| Boundary rules still fire | 4 probe files | Pass — 3 lint errors, 1 build failure, all removed |
+| Acceptance flow | HTTP against disposable DB | Pass — Kitchen, Expenses, Dashboard, 7 error paths |
+| No partial mutation on failure | before/after state diff | Pass — state byte-identical across 7 failures |
+| Empty states render | HTTP on unset-up database | Pass — 3 pages return 200 with explicit empty states |
+| Working tree | `git status --porcelain` | Clean |
+| Remote parity | `git rev-parse` | `HEAD == origin/main` |
+
+The two `new Date()` call sites are `src/features/shared/command-runtime.ts`, which is the
+approved execution boundary, and `src/lib/db/migrations.ts`, which records a migration's
+`applied_at`. Neither is reachable from a command path.
+
+## Verification Status for 1.5
+
+Retained for history. All checks passed; see `docs/sessions/2026-09-30-session-06.md`.
 
 ## Verification Status for 1.4
 
@@ -189,23 +238,29 @@ infrastructure.
 
 ## Latest Commit
 
-`6f95885` — `feat(1): complete first vertical slice`
+`pending commit` — `docs(1.6): close phase 1 foundation`
 
 ## Next Action
 
-**1.6 is not yet defined in detail.** It is the foundation verification pass that closes
-Phase 1. The Phase 1 scope in `docs/phases/PHASE_01_FOUNDATION.md` expects a real data round
-trip and negative cases, both of which 1.5 has now delivered and verified, so 1.6 should
-audit that surface rather than build new feature scope.
+**Phase 2 — Command engine: NOT STARTED.** Phase 1 closed at micro-phase 1.6 without
+beginning it. Its scope must be planned before work begins; it is not invented here. See
+`docs/phases/PHASE_02_COMMAND_ENGINE.md` and `docs/project/ROADMAP.md`.
 
-Carried-forward limitations that 1.6 should consider, none of which were fixed in 1.5:
+Phase 2 is where natural-language input is parsed into a validated structured intent, with
+deterministic execution. **No parser, no OpenRouter, no LLM integration, and no model API key
+exists today.** The command contract and validation boundary that Phase 2 will wrap are
+already built and proven.
+
+Limitations carried into Phase 2, all recorded and none silently dropped:
 
 - The expense ledger cannot record a correcting entry, because `expense` holds non-negative
   spends only. A fix requires a migration.
 - There is no command to create an inventory item or to set an opening balance, so both come
-  from `npm run db:setup` and an account reads `₹0.00` until one is spent from.
+  from `npm run db:setup`, and an account reads `₹0.00` until one is spent from.
 - The Dashboard's task list renders, but nothing creates `plan_task` rows, so it is always
-  empty. Task planning is out of Phase 1 scope.
+  empty. Task planning was out of Phase 1 scope.
+- The baseline database fingerprint discrepancy recorded in 1.5 remains unexplained. The
+  current database passes schema verification and contains no application rows.
 
 One open item is carried forward: the **PRD-versus-roadmap scope divergence** recorded in
 `docs/project/ROADMAP.md` is unresolved. The PRD frames V1 as a 2–3 hour prototype; the

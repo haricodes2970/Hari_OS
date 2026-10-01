@@ -1,6 +1,6 @@
 # Phase 1 — Application Foundation
 
-**Status: Active** (micro-phases 1.1 through 1.4 complete)
+**Status: COMPLETE** (micro-phases 1.1 through 1.6 complete and verified)
 
 ## Purpose
 
@@ -52,13 +52,12 @@ them.
 
 ## Status
 
-**Active.** Micro-phases **1.1 (data schema foundation)** and **1.2 (domain model and
-deterministic operations)** are complete and verified.
+**Complete.** All six micro-phases are done and verified.
 
 What 1.1 delivered: the eleven PRD tables, an ordered migration mechanism in
 `src/lib/db/migrations.ts`, an independently declared expected schema in
 `src/lib/db/schema.ts`, and two verification scripts. See `docs/project/ARCHITECTURE.md`
-section 12 and ADRs 020–024.
+section 13 and ADRs 020–024.
 
 What 1.2 delivered: the pure domain layer in `src/domain/` — money, quantity, inventory, and
 accounts — returning `Result` values with a closed set of error codes, with 170 in-memory
@@ -75,18 +74,73 @@ What 1.4 delivered: the persistence boundary in `src/lib/db/repositories.ts` —
 module that reads or writes application tables — and the execution pipeline in
 `src/commands/executor.ts`, which resolves a command's names to real rows, applies the domain
 operation, and persists the result atomically. 76 integration tests against real SQLite. See
-section 8 and ADRs 033–035.
+ADRs 033–035.
 
-What remains: **no feature code exists, and no route can reach the executor.** There is no UI,
-no route handler, and no composition root supplying the real execution clock, so a command
-can now be executed by a user: micro-phase 1.5 delivered the first visible slice. Micro-phase
-1.6, the foundation verification pass, has not started.
+What 1.5 delivered: the first usable vertical slice. `POST /api/commands` is the single
+command entry point; the Dashboard (`/`), Kitchen (`/kitchen`), and Expenses (`/expenses`)
+read persisted state and render it; the shared `CommandForm` is a Server Component that posts
+without client JavaScript; and `src/features/shared/command-runtime.ts` is the composition
+root that supplies the real database handle and clock. See section 11 and ADRs 036–039.
 
-**Carried-forward limitation** (unchanged since 1.2): the expense ledger cannot record a
-correcting entry, because `expense` holds non-negative spends only. Fixing it requires a
-migration.
+What 1.6 delivered: verification only, no new code. The full suite was re-run (460
+assertions), the dependency direction audited, the acceptance flow re-run over HTTP against a
+disposable database, and the repository audited. See
+`docs/sessions/2026-09-30-session-07.md`.
 
-One known limitation is carried forward from 1.2: the expense ledger cannot record a
-correcting entry, because `expense` holds non-negative spends only. Correcting a wrong spend
-currently means replacing the row. Any fix belongs in a migration, not in a later feature
-slice.
+## What Phase 1 delivered
+
+The complete path, verified end to end:
+
+```
+Dashboard / Kitchen / Expenses
+            |
+            v
+     POST /api/commands        single entry point (ADR-036)
+            |
+            v
+     validated command          contract + validation boundary
+            |
+            v
+        executor               resolves names, sequences domain then persistence
+       /        \
+      v          v
+   domain    repositories        repositories are the only persistence module
+                |
+                v
+             SQLite
+```
+
+Four micro-phase boundaries were honoured and are enforced, not merely documented:
+
+- `src/domain/` is pure. It imports nothing from `src/lib/db`, `src/commands`, or the
+  filesystem, and the executor contains no arithmetic of its own.
+- `src/lib/db/repositories.ts` is the only module that reads or writes application tables. No
+  SQL exists anywhere else.
+- `src/components/` cannot import `@/lib/db`, `@/lib/storage`, or `@/commands`. There are no
+  client components at all, so no browser code can reach server infrastructure.
+- `POST /api/commands` is the only production call site that invokes execution.
+
+## What Phase 1 did NOT deliver
+
+The broader PRD modules remain future work. Phase 1 is a foundation, not the product.
+
+- **No natural-language input, no parser, no LLM, no OpenRouter.** Phase 2. The contract and
+  validation boundary that Phase 2 wraps already exist, but no model integration, API key, or
+  conversation history does.
+- **Routine, Sleep, Skills, Habits, and Photo Diary do not exist.** Their tables are in the
+  schema and no code reads or writes them. Only Dashboard, Kitchen, and Expenses are built.
+- **The full PRD is not implemented.** Only the Kitchen and Expenses slices, at the depth of
+  the four existing commands.
+- No authentication, no deployment, no uploads, no PWA packaging, no notifications, no
+  screen-time integration, no "what can I cook" view.
+- No correcting entry for an expense: `expense` holds non-negative spends only, so a wrong
+  spend must be corrected by replacing the row. Carried forward since 1.2; a fix requires a
+  migration.
+- No command to create an inventory item or set an opening balance. Both come from
+  `npm run db:setup`, and an account reads `₹0.00` until one is spent from.
+- The Dashboard's task list renders but nothing creates `plan_task` rows, so it is always
+  empty. Task planning was out of Phase 1 scope.
+
+**Carried-forward database note:** the baseline fingerprint discrepancy recorded in 1.5
+remains unexplained. The current database passes schema verification and contains no
+application rows.

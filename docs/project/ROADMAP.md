@@ -8,7 +8,7 @@ live state. If the two ever disagree, `PROJECT_STATUS.md` is correct.
 | Phase | Name | Status |
 | --- | --- | --- |
 | 0 | Foundation infrastructure | Complete |
-| 1 | Application foundation | Active (1.1–1.4 complete) |
+| 1 | Application foundation | **Complete** (1.1–1.6) |
 | 2 | Command engine | Planned |
 | 3 | Kitchen | Planned |
 | 4 | Expenses | Planned |
@@ -25,10 +25,15 @@ baseline, Next.js foundation, tooling, architecture boundaries, SQLite foundatio
 local data safety. No product features. Detail in
 [`REPOSITORY_BASELINE.md`](REPOSITORY_BASELINE.md) and the session reports.
 
-**Phase 1 — Application foundation.** The transition from infrastructure into a usable
-application skeleton: schema, deterministic domain rules, the command contract, and the
-execution pipeline. Active; 1.1–1.4 complete. See
+**Phase 1 — Application foundation (complete).** The transition from infrastructure into a
+usable application skeleton: schema, deterministic domain rules, the command contract, the
+execution pipeline, persistence, the server boundary, and the first usable vertical slice
+(Dashboard, Kitchen, Expenses). Complete; 1.1–1.6. See
 [`phases/PHASE_01_FOUNDATION.md`](../phases/PHASE_01_FOUNDATION.md).
+
+Note that Phases 3 (Kitchen), 4 (Expenses), and 5 (Dashboard) below remain planned. Phase 1
+delivered an initial working slice of those three areas as its vertical-slice micro-phase,
+not the finished areas; those phases still exist and still have scope.
 
 **Phase 2 — Command engine.** Natural-language input parsed into a validated, structured
 intent, with deterministic execution. See
