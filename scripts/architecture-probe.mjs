@@ -83,6 +83,44 @@ const CASES = [
   ],
   ["src/commands/__probe.ts", "src/commands/executor.ts", "better-sqlite3"],
   ["src/commands/__probe.ts", "src/commands/executor.ts", "node:fs"],
+
+  // src/features/skills and src/features/habits — Phase 7. Each owns one area end to end.
+  ["src/features/skills/__probe.ts", "src/features/skills/view.ts", "node:fs"],
+  [
+    "src/features/skills/__probe.ts",
+    "src/features/skills/view.ts",
+    "better-sqlite3",
+  ],
+  [
+    "src/features/skills/__probe.ts",
+    "src/features/skills/view.ts",
+    "@/commands/executor",
+  ],
+  [
+    "src/features/skills/__probe.ts",
+    "src/features/skills/view.ts",
+    "@/features/chat/openrouter",
+  ],
+  [
+    "src/features/habits/__probe.ts",
+    "src/features/habits/view.ts",
+    "better-sqlite3",
+  ],
+  [
+    "src/features/habits/__probe.ts",
+    "src/features/habits/photos.ts",
+    "node:fs",
+  ],
+  [
+    "src/features/habits/__probe.ts",
+    "src/features/habits/photos.ts",
+    "@/lib/db/connection",
+  ],
+  [
+    "src/features/habits/__probe.ts",
+    "src/features/habits/view.ts",
+    "@/features/chat/runtime",
+  ],
   [
     "src/commands/__probe.ts",
     "src/commands/executor.ts",
@@ -211,6 +249,24 @@ const ALLOWED = [
     "src/app/__probe_allowed.ts",
     "src/app/page.tsx",
     "@/features/dashboard/view",
+  ],
+  // Phase 7. A feature may own a filesystem operation through `src/lib/storage` — that is the
+  // only way a photo can be written, since `src/app` is forbidden from storage — while still being
+  // refused the driver and the disk.
+  [
+    "src/features/habits/__probe_allowed.ts",
+    "src/features/habits/photos.ts",
+    "@/lib/storage/photos",
+  ],
+  [
+    "src/features/habits/__probe_allowed.ts",
+    "src/features/habits/view.ts",
+    "@/features/shared/command-runtime",
+  ],
+  [
+    "src/features/skills/__probe_allowed.ts",
+    "src/features/skills/view.ts",
+    "@/domain/skills",
   ],
   [
     "src/features/routine/__probe_allowed.ts",

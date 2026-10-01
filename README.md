@@ -7,7 +7,8 @@ V1 is a local-first, single-user prototype. No deployment.
 
 ## Current Status
 
-Phase 0 — engineering/bootstrap foundation. No Hari OS features are implemented yet.
+Phases 0 through 7 are complete: the foundation, the command engine, Kitchen, Expenses, the
+Dashboard, Routine and Sleep, and Skills and Habits. Phase 8 is next.
 
 See `docs/project/PROJECT_STATUS.md` for the live status.
 
@@ -53,14 +54,17 @@ again changes nothing.
 
 ## Pages
 
-| Path        | Shows                                             |
-| ----------- | ------------------------------------------------- |
-| `/`         | Today's spend, tracked count, what is running low |
-| `/kitchen`  | Stock levels, and use / restock / recount         |
-| `/expenses` | Account balances, and the record of recent spends |
+| Path        | Shows                                                                                |
+| ----------- | ------------------------------------------------------------------------------------ |
+| `/`         | Today's spend, tracked count, what is running low, top three tasks, last night       |
+| `/kitchen`  | Stock levels, and use / restock / recount                                            |
+| `/expenses` | Account balances, and the record of recent spends                                    |
+| `/routine`  | Today's tasks, the night check-in, sleep and naps                                    |
+| `/habits`   | Cooking, dishes, laundry with a photo, screen time, the private log, the Photo Diary |
+| `/skills`   | The full replacement list, which the Dashboard's urge entry point opens              |
 
-Every command is submitted to `POST /api/commands`. The form works with or without
-JavaScript.
+Every command is submitted to `POST /api/commands`, and the forms work with or without JavaScript.
+Photos go to `POST /api/photos` and are served from `/api/photos/<id>/<filename>`.
 
 ## Environment
 
@@ -79,22 +83,43 @@ tooling. V1 has no deployment, so there is nothing to point it at in production.
 
 ## Scripts
 
-| Script                  | Purpose                                     |
-| ----------------------- | ------------------------------------------- |
-| `npm run dev`           | Start the development server                |
-| `npm run build`         | Production build                            |
-| `npm run start`         | Serve the production build                  |
-| `npm run lint`          | ESLint                                      |
-| `npm run typecheck`     | TypeScript check, no emit                   |
-| `npm run format`        | Format files with Prettier                  |
-| `npm run format:check`  | Verify formatting, no writes                |
-| `npm run db:check`      | Verify the local SQLite setup               |
-| `npm run db:setup`      | Create first-run accounts and example stock |
-| `npm run db:test`       | Schema tests on temporary databases         |
-| `npm run domain:test`   | Pure domain rules, in memory                |
-| `npm run contract:test` | Command validation                          |
-| `npm run exec:test`     | Execution against real SQLite               |
-| `npm run app:test`      | Form translation through to persisted state |
+| Script                   | Purpose                                     |
+| ------------------------ | ------------------------------------------- |
+| `npm run dev`            | Start the development server                |
+| `npm run build`          | Production build                            |
+| `npm run start`          | Serve the production build                  |
+| `npm run lint`           | ESLint                                      |
+| `npm run typecheck`      | TypeScript check, no emit                   |
+| `npm run format`         | Format files with Prettier                  |
+| `npm run format:check`   | Verify formatting, no writes                |
+| `npm run db:check`       | Verify the local SQLite setup               |
+| `npm run db:setup`       | Create first-run accounts and example stock |
+| `npm run db:test`        | Schema tests on temporary databases         |
+| `npm run domain:test`    | Pure domain rules, in memory                |
+| `npm run contract:test`  | Command validation                          |
+| `npm run exec:test`      | Execution against real SQLite               |
+| `npm run app:test`       | Form translation through to persisted state |
+| `npm run parser:test`    | The parser prompt against real sentences    |
+| `npm run chat:test`      | Chat surface wording                        |
+| `npm run kitchen:test`   | The Kitchen slice                           |
+| `npm run expenses:test`  | The Expenses slice                          |
+| `npm run dashboard:test` | The Dashboard read model                    |
+| `npm run routine:test`   | The Routine slice                           |
+| `npm run skills:test`    | Skills, habits, the private log, and photos |
+
+Three acceptance runs serve a production build over HTTP on a disposable database, so run
+`npm run build` first:
+
+| Script                     | Purpose                                       |
+| -------------------------- | --------------------------------------------- |
+| `npm run dashboard:accept` | The Dashboard over HTTP                       |
+| `npm run routine:accept`   | The Routine page over HTTP                    |
+| `npm run skills:accept`    | The Habits and Skills pages, and photo upload |
+
+| Script                       | Purpose                                       |
+| ---------------------------- | --------------------------------------------- |
+| `npm run responsive:check`   | Navigation and layout at 320, 390, and 1440px |
+| `npm run architecture:probe` | The layer-boundary lint rules still fire      |
 
 ## Documentation
 

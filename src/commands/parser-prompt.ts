@@ -63,6 +63,10 @@ ALLOWED COMMAND KINDS
 - "sleep.record"       : the user stated their bedtime, the time they fell asleep, or their wake time
 - "nap.start"          : the user stated the time a nap started
 - "nap.end"            : the user stated the time a nap ended
+- "skill.create"       : the user named a new skill they want on their list
+- "skill.log"          : the user said they did one of their skills, optionally for a stated length of time
+- "habit.record"       : the user said they did, or did not do, cooking, dishes, or laundry — or stated today's screen time
+- "private.log"        : the user said one of the two private behaviours happened, optionally with a note
 
 ABSOLUTE CONSTRAINTS
 - Extract only facts the sentence explicitly states. Never infer a fact that is not present.
@@ -73,7 +77,11 @@ ABSOLUTE CONSTRAINTS
 - Never output a duration, a length of sleep, or a nap length. Report the times; the application does the subtraction.
 - Never output a priority, a rank, or an ordering. The order tasks are written in is the order they matter in, and choosing it is not yours to do.
 - Never invent a missing account, quantity, item, price, or unit. If it is not stated, report it as missing.
-- Never choose a command kind outside the ten listed above.
+- Never choose a command kind outside the fourteen listed above.
+- Never output a tally, a count of anything, a streak, a score, a percentage, or a progress bar. You do not know them, and no command has a field for them.
+- Never report that a photo exists, or that a photo is attached. A sentence cannot carry a file, so you never know whether one was uploaded. Whether a photo is required is the application's decision, not yours.
+- Never rank, order, recommend, or choose between the user's skills. Report only the skill they named.
+- Never turn an urge into an occurrence. "I feel like scrolling right now" is not a record that scrolling happened.
 - Return only the JSON object. No prose, no explanation, no markdown, no code fences.
 
 FIELDS
@@ -82,7 +90,7 @@ FIELDS
 TIMES
 A stated clock time is 24-hour "HH:MM". Report it as the user said it, in that form. Never
 report how long anything lasted, and never do the subtraction yourself.
-- "kind": one of the ten command kinds. Required when status is "interpreted".
+- "kind": one of the fourteen command kinds. Required when status is "interpreted".
 - "itemName": the tracked kitchen item, exactly as the user said it. For inventory commands.
 - "unit": the unit the user said, e.g. "pieces", "kg". For consume and restock.
 - "amount": how much was used or added, as a number. For consume and restock only.
@@ -98,6 +106,13 @@ report how long anything lasted, and never do the subtraction yourself.
 - "day": "today", "tomorrow", or "yesterday" — the day the user named, as a word. Never a date like "2026-10-02"; the application knows what day it is. Omit when the user did not name one, and the application uses today.
 - "field": "bedtime", "sleep_time", or "wake_time". For sleep.record only.
 - "time": the clock time the user said, in 24-hour "HH:MM" form, e.g. "23:30" for half past eleven. For sleep.record, nap.start, and nap.end. Report the time only; never its length.
+- "name": the new skill, in the user's own words. For skill.create only. Never a category, a description, or a position.
+- "skillName": the skill they did, in the user's own words. For skill.log only.
+- "minutes": a length of time the user stated in whole minutes, e.g. 25 for "for 25 minutes", 90 for "screen time 90 minutes". For skill.log and habit.record with type "screen_time" only. Never a length you computed yourself, and never a count of anything.
+- "type": which one the user named. "cooking", "dishes", "laundry", or "screen_time" for habit.record; "doom_scrolling" or "masturbation" for private.log. Never a habit or behaviour outside those lists, and never a category of your own.
+- "done": true or false. For habit.record, and only for cooking, dishes, or laundry. For "screen_time" always report true; a measurement is not something that did or did not happen.
+- "happened": true or false. For private.log only, and only when the user said whether it happened.
+- "note": the user's own words, exactly as written. For private.log only, and optional. Never a summary, a judgement, or anything you added yourself.
 - "missing": when status is "needs_clarification", a list naming which facts were absent, drawn from "itemName", "item", "quantity", "unit", "amount", "accountName".
 
 TWO-FACT SENTENCES
@@ -183,12 +198,46 @@ Sentence: started a nap at 2 pm
 Sentence: woke from my nap at 2:45
 {"status":"interpreted","kind":"nap.end","time":"14:45"}
 
+Sentence: I added a skill called 10 pushups
+{"status":"interpreted","kind":"skill.create","name":"10 pushups"}
+
+Sentence: add reading as a skill
+{"status":"interpreted","kind":"skill.create","name":"reading"}
+
+Sentence: did 10 pushups for 15 minutes
+{"status":"interpreted","kind":"skill.log","skillName":"10 pushups","minutes":15}
+
+Sentence: did my pushups
+{"status":"interpreted","kind":"skill.log","skillName":"pushups"}
+
+Sentence: cooked dinner
+{"status":"interpreted","kind":"habit.record","type":"cooking","done":true}
+
+Sentence: washed the dishes
+{"status":"interpreted","kind":"habit.record","type":"dishes","done":true}
+
 Sentence: did laundry
-The application has no command for this.
-{"status":"unsupported"}
+Report what the user said. Whether a photo is needed is the application's decision, not yours.
+{"status":"interpreted","kind":"habit.record","type":"laundry","done":true}
+
+Sentence: did not do laundry today
+{"status":"interpreted","kind":"habit.record","type":"laundry","done":false}
+
+Sentence: screen time 90 minutes
+{"status":"interpreted","kind":"habit.record","type":"screen_time","done":true,"minutes":90}
+
+Sentence: doom scrolled for a while
+{"status":"interpreted","kind":"private.log","type":"doom_scrolling","happened":true}
+
+Sentence: masturbated, feeling low
+{"status":"interpreted","kind":"private.log","type":"masturbation","happened":true,"note":"feeling low"}
 
 Sentence: I feel like scrolling right now
-Not a supported action.
+This is an urge, not an occurrence. There is no command for an urge.
+{"status":"unsupported"}
+
+Sentence: I have scrolled 40 times today
+No command counts anything. Never report a count.
 {"status":"unsupported"}
 
 SECURITY
@@ -230,6 +279,10 @@ export const PARSER_RESPONSE_SCHEMA = {
         "sleep.record",
         "nap.start",
         "nap.end",
+        "skill.create",
+        "skill.log",
+        "habit.record",
+        "private.log",
       ],
     },
     countedQuantity: { type: "number" },
@@ -243,12 +296,31 @@ export const PARSER_RESPONSE_SCHEMA = {
     accountName: { type: "string", enum: ["cash", "bank1", "bank2"] },
     category: { type: "string" },
     title: { type: "string" },
-    done: { type: "boolean" },
     // A word the user used, never a date. The application resolves it against its own clock.
     day: { type: "string", enum: ["today", "tomorrow", "yesterday"] },
     field: {
       type: "string",
       enum: ["bedtime", "sleep_time", "wake_time"],
+    },
+    // Phase 7. Note there is no field for a tally, a count, a streak, a score, a photo, or a
+    // recommendation: `additionalProperties: false` makes a private entry structurally unable to
+    // carry a count, which is the schema-level half of the PRD's rule about private logs.
+    name: { type: "string" },
+    skillName: { type: "string" },
+    minutes: { type: "number" },
+    done: { type: "boolean" },
+    happened: { type: "boolean" },
+    note: { type: "string" },
+    type: {
+      type: "string",
+      enum: [
+        "cooking",
+        "dishes",
+        "laundry",
+        "screen_time",
+        "doom_scrolling",
+        "masturbation",
+      ],
     },
     time: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
     missing: {

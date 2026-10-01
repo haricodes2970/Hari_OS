@@ -3,13 +3,42 @@
 **Authority for phase, micro-phase, and next action.** `ROADMAP.md` is the plan; this file is
 the state. Where they disagree, this file is correct.
 
-- **Current phase:** 6 — Routine and Sleep. **Complete and verified.**
-- **Latest commit:** `015aa38` — `feat(6): complete routine and sleep`
+- **Current phase:** 7 — Skills and Habits. **Complete and verified.**
+- **Latest commit:** pending commit — `feat(7): complete skills, habits, private log, and photo diary`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
-- **Blockers:** none. The threshold-of-zero discrepancy Phase 5 recorded was resolved in Phase 6
-  (ADR-048): the code's behaviour was kept and `ARCHITECTURE.md` section 15 was corrected, because
-  `quantity <= threshold` means a zero threshold flags an item only at zero, which is not the bug
-  the old wording described.
+- **Blockers:** none.
+
+## Phase 7 — Skills and Habits: complete
+
+Delivered as one unit. `docs/phases/PHASE_07_SKILLS_HABITS.md` and
+`docs/sessions/2026-10-01-session-06.md` have the detail.
+
+**What exists now.** The replacement-skill list, which the Dashboard's urge entry point opens in
+full and in stored order, with nothing chosen. Cooking, dishes, and laundry with neutral streaks,
+one progress bar for the PRD's twice-a-week laundry target, and screen time entered by hand. A
+private log of two behaviours that can produce no number. A real photo path: laundry completion
+requires an uploaded picture, and the Photo Diary is the timeline of those pictures.
+
+**One migration.** `002_screen_time` rebuilds `habit_log` for the fourth type and a validated
+`minutes` column. `skill`, `skill_log`, and `private_log` already existed.
+
+**The boundaries that mattered.** The private log has one reader and no field anywhere could hold
+a count (ADR-052). The laundry photo is verified by reading the row, never by believing the
+sentence (ADR-053). `habit_log` has a single reader, and ADR-050's precondition has now come true
+(ADR-054). Photos are stored as application URLs with the row id, and a feature slice — not a
+route — owns the disk (ADR-051, ADR-055).
+
+**Verification.** 12 test suites, 1584 assertions, 0 failures — including 45 new pure domain
+assertions and a new 150-assertion `skills:test`. 58 architecture probes, up from 47. Three HTTP
+acceptance runs (`dashboard:accept` 58, `routine:accept` 61, `skills:accept` 62), and the 29-check
+responsive run at 320, 390, and 1440px. `format:check`, `typecheck`, `lint`, `build`, and `db:check`
+pass with 0 errors and 0 warnings. The development database is byte-identical after every suite.
+
+**Two defects were found and fixed here.** `habitStreak` never ended a streak when a day was
+recorded as not done, because it walked back from the last *done* day rather than from today — the
+opposite of its own documented rule and of the PRD's "not recorded" versus "not done" distinction. And
+a "no" answer in the private log re-inserted the entry instead of removing it, so a correction grew
+the table.
 
 ## Phase 6 — Routine and Sleep: complete
 
@@ -73,19 +102,19 @@ cards state that they are unavailable. No skill, habit, photo, or log is fabrica
 | 4 — Expenses | Complete | `71ac329` | Accounts, natural-language expense entry, daily bill, Dashboard integration |
 | 5 — Dashboard | **Complete** | `a87210c` | Read model, real low stock and spend, truthful deferred cards, boundary probes |
 | 6 — Routine + Sleep | **Complete** | `015aa38` | Night check-in, sleep log, naps with soft warnings, neutral streak, `/routine`, Dashboard integration |
-| 7 — Skills + Habits | **Not started** | — | `skill` and `habit_log` are read; nothing writes them |
-| 8 — Photo + Diary | Not started | — | |
+| 7 — Skills + Habits | **Complete** | pending commit | Full replacement list, neutral streaks, laundry photo proof, screen time, private log, Photo Diary |
+| 8 — Photo + Diary | Not started | — | The photo path Phase 8 was assumed to own shipped in Phase 7 (ADR-051); what remains is scope the roadmap and PRD disagree on |
 | 9 — Hardening | Not started | — | |
 
 ## Next action
 
-Phase 7, Skills + Habits, when the user asks for it. `docs/phases/PHASE_07_SKILLS_HABITS.md` is
-the plan. What Phase 6 leaves behind: `habit_log` rows are read by the Dashboard and nothing writes
-them, and the Dashboard's skills card is still a truthful unavailable state with `SKILLS_AVAILABLE
-= false`. The user picks from the full skill list — nothing is auto-selected — and the PRD's
-prohibition on shame-based streaks applies to private behaviours.
+Phase 8, Photo + Diary, when the user asks for it — and its scope needs a decision before any code
+is written. The photo path Phase 8 was assumed to own shipped in Phase 7 (ADR-051), so the
+outstanding question is what a diary entry *is* when it is not a laundry proof: `habit_log.photo_url`
+is the only column that can hold a picture, so anything else needs a column or a table, and no
+phase document has been given one.
 
-Phase 7 was **not** started in this run.
+Phase 7 was **not** continued beyond its own scope in this run.
 
 ## Open items carried forward
 
@@ -94,6 +123,9 @@ Phase 7 was **not** started in this run.
 - **Batch expense entry.** The PRD contradicts itself; Phase 2's one-sentence-one-command ADR
   stands.
 - **The baseline database fingerprint discrepancy** recorded in 1.5 remains unexplained.
+- **Phase 8's scope.** The PRD's Photo Diary is partly delivered by Phase 7 as a timeline of
+  laundry photos. A diary entry for anything else has nowhere to be stored, and inventing a table
+  would be a schema change no phase document asked for.
 - **PRD-versus-roadmap scope divergence** in `ROADMAP.md` is unresolved and is the user's call.
 - **No live OpenRouter call has ever been made.** Every sentence path is proven against a local
   stub and an injected transport; no `OPENROUTER_API_KEY` has been available in any phase.

@@ -174,9 +174,22 @@ excluded; only secrets and local user data are.
 
 ## 6. Filesystem storage
 
-`src/lib/storage/`. Used for laundry photos from Phase 8. `public/` is never used for
-private user data. Uploads will land under `data/uploads/`, which is already ignored. No
-upload code exists yet.
+`src/lib/storage/`. `photos.ts` owns every byte of the upload path: the magic-byte check that
+decides an image's real type, the size limit, the server-generated name, and the write, read, and
+delete operations. Files land under `data/uploads/`, which is already ignored. `public/` is never
+used for private user data.
+
+Two rules about who may call it, both enforced in `eslint.config.mjs` and both probed:
+
+- **`src/app` may not import `@/lib/storage`.** A route handler cannot write a file, so
+  `POST /api/photos` holds no rules at all: it reads the request and calls
+  `src/features/habits/photos.ts`, which is the feature slice that owns the operation.
+- **`src/features/habits/**` may, and may not reach for `node:fs` beside it.** This is the one
+  scope whose persistence group omits `@/lib/storage` (ADR-055), so a feature owns the disk write
+  while the storage module remains the only place that knows how.
+
+What is stored is an application URL, never a path: `habit_log.photo_url` holds
+`/api/photos/<id>/<filename>`, and a read requires both parts to match the row (ADR-051).
 
 ## 7. Validation
 
@@ -397,9 +410,12 @@ recognisably a number is forwarded as raw text so validation rejects it and name
 
 None of the following exist, and their absence is intentional:
 
-- Any page beyond Dashboard, Kitchen, and Expenses
-- Sleep, routine, skills, habits, diary, or photo features. The schema has their tables and no
-  code reads or writes them
+- Anything beyond the six pages that exist: Dashboard, Kitchen, Expenses, Routine, Habits, Skills
+- A photo diary of anything other than laundry. `habit_log.photo_url` is the only column that can
+  hold a picture, so the V1 diary is the timeline of laundry photos and any other kind of picture
+  has nowhere to be stored (ADR-051)
+- Any private-log figure. `private_log` has one reader, and nothing in the codebase turns entries
+  into a count, a streak, or a percentage (ADR-052)
 - A command to set an opening balance for an account. First-run rows come from `npm run
   db:setup`, and an account reads `₹0.00` until one is spent from. An inventory item can now
   be created from the page, but only through the Kitchen setup route (ADR-043), never as a
@@ -411,13 +427,14 @@ None of the following exist, and their absence is intentional:
   one-sentence-one-command ADR holds
 - A "what can I cook with current stock" view. The PRD lists it as later work and Phase 3
   deliberately did not build it
-- Filesystem upload handling
 - Authentication
 - Deployment configuration
 - PWA manifest, service service worker, or offline support
-- A general test framework. The tests are nine scripts: `db:test`, `domain:test`,
-  `contract:test`, `exec:test`, `app:test`, `parser:test`, `chat:test`, `kitchen:test`, and
-  `expenses:test`. A tenth, `architecture:probe`, is not a test suite but a check that the
+- A general test framework. The tests are `db:test`, `domain:test`, `contract:test`,
+  `exec:test`, `app:test`, `parser:test`, `chat:test`, `kitchen:test`, `expenses:test`,
+  `dashboard:test`, `routine:test`, and `skills:test` — plus three HTTP acceptance runs
+  (`dashboard:accept`, `routine:accept`, `skills:accept`) that serve a production build, and
+  `responsive:check`. `architecture:probe` is not a test suite but a check that the
   layer-boundary lint rules still fire (ADR-046)
 
 Do not assume a directory is functional because it exists, and do not assume a table being
@@ -824,3 +841,65 @@ gained the sleep card without a second definition of "today's tasks". No new enf
 scope was added: the existing rules already forbid `src/app/**` from touching storage and
 `src/domain/**` and `src/components/**` from importing it, and `src/features/routine/**` is
 covered by the feature rule that existed since Phase 3.
+
+---
+
+## 19. The skills and habits slice (added in Phase 7)
+
+```
+src/domain/skills.ts             the ten-skill cap, names, logging, per-skill tally   pure
+src/domain/habits.ts             habit rules, laundry proof, streaks, private entries  pure
+src/lib/db/migrations.ts         002_screen_time: habit_log gains minutes            server-only
+src/lib/db/repositories.ts       SkillRepository, HabitRepository, PrivateLogRepository
+src/lib/storage/photos.ts        byte checks, server naming, read, write, delete     server-only
+src/features/skills/view.ts      the read model: the full list, unfiltered
+src/features/habits/view.ts      the read model: today's habits, streaks, the diary
+src/features/habits/private-log.ts  the only reader of private_log                    server-only
+src/features/habits/photos.ts    store a laundry photo; read one back                  server-only
+src/app/api/photos/route.ts      POST only: validate the request, then delegate
+src/app/api/photos/[id]/[file]/route.ts   GET: serve the bytes, or 404
+src/app/skills/page.tsx          the full replacement list
+src/app/habits/page.tsx          habits, laundry target, screen time, private log, diary
+```
+
+### One migration, and only because of screen time
+
+`skill`, `skill_log`, `habit_log`, and `private_log` all existed since micro-phase 1.1.
+`002_screen_time` rebuilds `habit_log` to accept a fourth type and a `minutes` column with a
+validated `CHECK`, because the PRD asks for manually entered screen time and the existing
+constraint allowed only cooking, dishes, and laundry.
+
+`habit_log` has **no unique constraint** on `(date, type)` — it came that way from 1.1 — so "one
+row per type per day" is maintained by the executor, which deletes and inserts inside one
+transaction. `findForDay` is the read that decides whether it needs to.
+
+### The rules that are refusals, and what each one is protecting
+
+| Rule | Why it exists |
+| --- | --- |
+| A tenth skill, then no more | The PRD's cap. Checked in the domain against the stored list, not against a remembered count |
+| A duplicate skill name | Case-insensitive. Merging "Read a book" into "read a book" would create two entries the user then has to reconcile |
+| Laundry done without a photo | The PRD accepts no text claim. The executor supplies the proof by reading the row, never by believing the sentence (ADR-053) |
+| Screen time without minutes | It is a measurement the user typed; a number is the whole statement |
+| Minutes on a habit that was done | `habit_log` stores no duration for one, and a number no rule reads is a number that will be read later |
+| A private note over 500 characters, or with control characters | A note the user cannot read back is not a note |
+
+### What this slice will not do
+
+- **It will not choose a skill.** `swapList` returns every skill in stored order, and no field on
+  a `Skill`, on the view, or in the rendered page could express a recommendation. Sorting by the
+  tally is possible but not done, and there is no column header to sort by.
+- **It will not turn a private entry into a number.** No function in `private-log.ts` returns one,
+  the command contract has no field for one, and the Dashboard cannot read the table at all
+  (ADR-052).
+- **It will not show a progress bar anywhere but laundry.** There is exactly one in the
+  application, and `skills-accept.mjs` counts them in the rendered HTML.
+- **It will not read the clock for a habit.** `habit_log` has no timestamp column, so a habit is
+  about a day, not a moment.
+
+### The one judgement the page makes
+
+`readHabits` projects the Dashboard's two neutral habits out of the full read, and screen time is
+deliberately left out: PRD 6.1 names laundry and dishes, and a measurement is not a habit. The
+projection lives in the Dashboard, not in the read side, so a second caller does not inherit a
+presentation decision (ADR-054).

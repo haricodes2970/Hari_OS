@@ -33,6 +33,7 @@
 import type { AccountName } from "@/domain/accounts";
 import type { MinorUnits } from "@/domain/money";
 import type { Quantity } from "@/domain/quantity";
+import type { LoggableHabitType, PrivateType } from "@/domain/habits";
 import type { DayReference } from "@/domain/routine";
 import type { SleepField } from "@/domain/sleep";
 
@@ -234,15 +235,97 @@ export type RoutineCommand =
 export type SleepCommand = SleepRecordCommand | NapStartCommand | NapEndCommand;
 
 /**
+ * Adds one of the user's own skills: PRD 6.5, "add my own skills".
+ *
+ * `name` is the user's own words, not a catalogue entry. Nothing else is carried — no category,
+ * no icon, no order, no default, because the list's meaning is that it is the user's, and every
+ * one of those fields would be a place for the application to express a preference.
+ */
+export type SkillCreateCommand = CommandBase & {
+  readonly kind: "skill.create";
+  readonly name: string;
+};
+
+/**
+ * Records that one of the user's skills was done, optionally for a stated length of time.
+ *
+ * `skillName` is the name as the user said it, resolved to a row at execution; `unknown_skill`
+ * is the honest answer when nothing matches, and inventing a skill would be worse than the
+ * refusal. `minutes` is a fact the user stated, present only when they said it — the duration is
+ * never derived from the difference between two timestamps, because when a skill started is not
+ * something the application observes.
+ */
+export type SkillLogCommand = CommandBase & {
+  readonly kind: "skill.log";
+  readonly skillName: string;
+  readonly minutes?: number | null;
+};
+
+/**
+ * Records what the user said about one habit for one day.
+ *
+ * `type` is the habit they named. `done` is their statement, and for `screen_time` it is always
+ * `true` — a measurement is not something that did not happen, which is why the domain forces it
+ * rather than trusting the field.
+ *
+ * **`hasPhotoProof` is not a command field and is deliberately absent.** The PRD requires a photo
+ * for laundry completion, and that photo arrives through `POST /api/photos`, not through chat.
+ * A sentence cannot carry a file, so a command that claims a photo exists would be claiming
+ * something it cannot know. The executor passes proof only when the photo row for that day was
+ * actually written, which is why `habit.record` records laundry as not done rather than trusting
+ * the claim.
+ */
+export type HabitRecordCommand = CommandBase & {
+  readonly kind: "habit.record";
+  readonly type: LoggableHabitType;
+  readonly done: boolean;
+  /** The user's own estimate of screen time. Ignored by the other three types. */
+  readonly minutes?: number | null;
+  readonly day?: DayReference | null;
+};
+
+/**
+ * Writes one private entry: PRD 6.6's yes/no plus optional note.
+ *
+ * `type` is one of the two private behaviours, `note` is the user's own words and is optional,
+ * and **there is no field for a count.** That absence is the contract's part of the PRD's rule
+ * that a private entry is never a streak, a score, or a bar: if there were nowhere to state one,
+ * a parser could not report one and no downstream code could sum them.
+ */
+export type PrivateLogCommand = CommandBase & {
+  readonly kind: "private.log";
+  readonly type: PrivateType;
+  readonly happened: boolean;
+  readonly note?: string | null;
+  readonly day?: DayReference | null;
+};
+
+export type SkillsCommand = SkillCreateCommand | SkillLogCommand;
+
+export type HabitsCommand = HabitRecordCommand;
+
+export type PrivateCommand = PrivateLogCommand;
+
+/**
  * Every command the application can act on.
  *
- * The families added in Phase 6 carry the same discipline as the first two: a stated time is
- * a fact the user gave, a duration is never a field, a priority is never a field, and no
- * field names a result. What the model may extract is *which* time the user said and *what*
- * the task is. Everything else is computed by `src/domain`.
+ * The families added in Phase 6 and Phase 7 carry the same discipline as the first two: a
+ * stated time is a fact the user gave, a duration is never a field, a priority is never a field,
+ * and no field names a result. What the model may extract is *which* time the user said, *what*
+ * the task is, and *which* skill, habit, or private behaviour the user named. Everything else is
+ * computed by `src/domain`.
+ *
+ * Two Phase 7 absences are deliberate rather than unfinished: no command can claim a photo
+ * exists, and no private command can carry a count.
  */
 export type Command =
-  InventoryCommand | ExpenseCommand | RoutineCommand | SleepCommand;
+  | InventoryCommand
+  | ExpenseCommand
+  | RoutineCommand
+  | SleepCommand
+  | SkillsCommand
+  | HabitsCommand
+  | PrivateCommand;
 
 export type CommandKind = Command["kind"];
 
@@ -258,6 +341,10 @@ export const COMMAND_KINDS: readonly CommandKind[] = [
   "sleep.record",
   "nap.start",
   "nap.end",
+  "skill.create",
+  "skill.log",
+  "habit.record",
+  "private.log",
 ];
 
 /** Narrows an untrusted value's `kind` without validating the rest of the object. */

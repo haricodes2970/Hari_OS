@@ -121,8 +121,61 @@ CREATE INDEX idx_habit_log_date ON habit_log (date);
 CREATE INDEX idx_private_log_date ON private_log (date);
 `;
 
+/**
+ * Migration 002 — manual screen-time entries.
+ *
+ * ## Why this migration exists
+ *
+ * PRD section 6.6 asks for a "screen-time estimate, entered manually", and `habit_log` cannot
+ * store one: its `CHECK` admits only `cooking`, `dishes`, and `laundry`, and it has no column
+ * for a number of minutes. Every other Phase 7 table — `skill`, `skill_log`, `habit_log`,
+ * `private_log` — already existed and needed nothing. This is the one place the V1 schema was
+ * genuinely insufficient, so this is the only migration Phase 7 writes.
+ *
+ * ## Why the table is rebuilt rather than altered
+ *
+ * SQLite cannot widen a `CHECK` constraint with `ALTER TABLE`. The four steps below are the
+ * documented way to change one: create the replacement, copy the rows, drop the old table,
+ * rename. Foreign keys are disabled for the transaction because dropping a table that others
+ * reference is refused while enforcement is on — `habit_log` has no references in either
+ * direction, and the pragma is restored in the same statement so no connection is left with
+ * enforcement off.
+ *
+ * ## What is not added
+ *
+ * No score column, no streak column, no category, no JSON. Screen time is a measurement the
+ * user enters by hand; the day total is computed from the rows by `src/domain/habits.ts`, and a
+ * stored total could disagree with the entries that produced it.
+ */
+const SCREEN_TIME_MIGRATION = `
+PRAGMA foreign_keys = OFF;
+
+CREATE TABLE habit_log_replaced (
+  id INTEGER PRIMARY KEY,
+  date TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('cooking', 'dishes', 'laundry', 'screen_time')),
+  done INTEGER NOT NULL DEFAULT 0
+    CHECK (typeof(done) = 'integer' AND done IN (0, 1)),
+  photo_url TEXT,
+  minutes INTEGER
+    CHECK (minutes IS NULL OR (typeof(minutes) = 'integer' AND minutes >= 0))
+);
+
+INSERT INTO habit_log_replaced (id, date, type, done, photo_url)
+  SELECT id, date, type, done, photo_url FROM habit_log;
+
+DROP TABLE habit_log;
+
+ALTER TABLE habit_log_replaced RENAME TO habit_log;
+
+CREATE INDEX idx_habit_log_date ON habit_log (date);
+
+PRAGMA foreign_keys = ON;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: "001_initial", sql: INITIAL_SCHEMA },
+  { version: "002_screen_time", sql: SCREEN_TIME_MIGRATION },
 ];
 
 const CREATE_MIGRATIONS_TABLE = `

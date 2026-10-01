@@ -233,9 +233,16 @@ try {
       page.includes("not recorded"),
       "21. laundry and dishes report as not recorded, not as not done",
     );
+    // Phase 7 replaced this check. `/skills` exists now, so the entry point opens the real list,
+    // and the claim worth asserting is the one that is easy to break: it says the list is shown
+    // in full and that nothing is chosen for the user.
     assert(
-      page.includes("not available yet"),
-      "20. the scrolling entry point is truthfully unavailable",
+      page.includes("Open the replacement list"),
+      "20. the scrolling entry point opens the skills page",
+    );
+    assert(
+      page.includes("nothing is ever chosen for you"),
+      "20. and says in the page's own words that nothing is chosen",
     );
     assert(
       !page.includes("Balances") && !page.includes("Bank 1"),

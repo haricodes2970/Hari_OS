@@ -100,8 +100,14 @@ console.log("Fresh database");
   }
 
   const first = migrate(database);
-  if (first.applied.length === 1 && first.applied[0] === "001_initial") {
-    ok("migration 001_initial applied to a fresh database");
+  if (
+    first.applied.length === 2 &&
+    first.applied[0] === "001_initial" &&
+    first.applied[1] === "002_screen_time"
+  ) {
+    ok(
+      "migrations 001_initial and 002_screen_time applied to a fresh database, in order",
+    );
   } else {
     bad(`unexpected migration result: ${JSON.stringify(first.applied)}`);
   }
@@ -124,10 +130,10 @@ console.log("Fresh database");
   }
 
   const versions = getAppliedVersions(database);
-  if (versions.length === 1) {
-    ok("schema_migrations records the version exactly once");
+  if (versions.length === 2) {
+    ok("schema_migrations records each version exactly once");
   } else {
-    bad(`expected one recorded version, found: ${versions.join(", ")}`);
+    bad(`expected two recorded versions, found: ${versions.join(", ")}`);
   }
 
   database.close();

@@ -56,7 +56,20 @@ export type DomainErrorCode =
   | "duplicate_task"
   | "unknown_nap"
   | "nap_already_ended"
-  | "invalid_task_selection";
+  | "invalid_task_selection"
+  // Phase 7. Skills, habits, private logs, and photos.
+  | "invalid_skill_name"
+  | "skill_limit_reached"
+  | "duplicate_skill"
+  | "unknown_skill"
+  | "invalid_skill_minutes"
+  | "unknown_habit"
+  | "photo_required"
+  | "invalid_habit_minutes"
+  | "invalid_private_type"
+  | "invalid_private_note"
+  | "invalid_photo"
+  | "photo_too_large";
 
 /** Extra machine-readable context, for assertions and for showing the user what was wrong. */
 export type DomainErrorDetail = Readonly<Record<string, string | number>>;

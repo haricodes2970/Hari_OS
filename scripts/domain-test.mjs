@@ -50,6 +50,26 @@ import {
   parseQuantity,
   subtractQuantities,
 } from "../src/domain/quantity.ts";
+import {
+  MAX_SKILLS,
+  MAX_SKILL_MINUTES,
+  createSkill,
+  findSkill,
+  logSkillUse,
+  remainingSkillSlots,
+  swapList,
+  tallyFor,
+} from "../src/domain/skills.ts";
+import {
+  MAX_SCREEN_TIME_MINUTES,
+  habitStreak,
+  isLoggableHabitType,
+  isPrivateType,
+  laundryProgress,
+  privateTypeLabel,
+  recordHabit,
+  recordPrivateEntry,
+} from "../src/domain/habits.ts";
 
 let passed = 0;
 let failed = 0;
@@ -1277,6 +1297,391 @@ console.log("\n# Phase 3: items are found by name and by id");
     findInventoryItem(items, "RICE").ok ? 1 : 0,
     1,
     "P3. name lookup stays case-insensitive",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: skills, habits, and the private log, as pure rules.
+//
+// `skills-test.mjs` covers these through storage, routes, and commands. This section is here
+// because each rule below is a claim about a *decision*, and a decision is testable with plain
+// input and output — which is exactly the standard `src/domain` is held to. The rules that
+// matter most are the refusals, because each one is a place the application declines to guess.
+// ---------------------------------------------------------------------------
+
+/** A habit row with only the fields a rule reads. */
+function habit(date, type, done, minutes = null) {
+  return { id: 0, date, type, done, photoUrl: null, minutes };
+}
+
+/** A skill row, for the list rules that operate on a collection of them. */
+function skill(name, id = 1) {
+  return { id, name, active: true };
+}
+
+/** Whether a Result succeeded, for the one-line cases where the value is not the point. */
+function succeeded(result) {
+  return result.ok;
+}
+
+/** The code a Result failed with, for the same cases. */
+function codeOf(result) {
+  return result.ok ? "<succeeded>" : result.error.code;
+}
+
+console.log("\n# Phase 7: the replacement-skill list");
+
+{
+  assertEqual(MAX_SKILLS, 10, "P7. the PRD's cap is ten skills");
+  assertEqual(
+    createSkill({ name: "  read a book  " }, []).ok,
+    true,
+    true,
+    'P7. a name is trimmed, so " read a book " and "read a book" cannot both exist',
+  );
+  assertEqual(
+    codeOf(createSkill({ name: "READ A BOOK" }, [skill("read a book")])),
+    "duplicate_skill",
+    "P7. and the duplicate check is case-insensitive",
+  );
+  assertEqual(
+    codeOf(createSkill({ name: "" }, [])),
+    "invalid_skill_name",
+    "P7. an empty name is refused with a name of its own",
+  );
+  assertEqual(
+    codeOf(createSkill({ name: "x".repeat(81) }, [])),
+    "invalid_skill_name",
+    "P7. and a name over 80 characters",
+  );
+  assertEqual(
+    codeOf(
+      createSkill(
+        { name: "another" },
+        new Array(MAX_SKILLS).fill(null).map((_, index) => skill(`s${index}`)),
+      ),
+    ),
+    "skill_limit_reached",
+    "P7. a full list refuses the eleventh skill",
+  );
+
+  const list = [skill("one"), skill("two"), skill("three")];
+
+  assertEqual(
+    swapList(list)
+      .map((entry) => entry.name)
+      .join(", "),
+    "one, two, three",
+    "P7. the swap list is every skill, in order, with nothing filtered out",
+  );
+  assertEqual(
+    remainingSkillSlots(list),
+    MAX_SKILLS - 3,
+    "P7. and the remaining slots are counted from the stored list",
+  );
+  assertEqual(
+    swapList([]).length,
+    0,
+    "P7. an empty list is empty, not an error",
+  );
+}
+
+console.log("\n# Phase 7: logging a skill and tallying it");
+
+{
+  const reading = skill("reading");
+
+  assertEqual(
+    succeeded(logSkillUse(reading, {}), null),
+    true,
+    "P7. a use without a duration is allowed; the PRD makes duration optional",
+  );
+  assertEqual(
+    codeOf(logSkillUse(reading, { minutes: -1 })),
+    "invalid_skill_minutes",
+    "P7. a negative duration is refused",
+  );
+  assertEqual(
+    codeOf(logSkillUse(reading, { minutes: 2.5 })),
+    "invalid_skill_minutes",
+    "P7. and a fractional one",
+  );
+  assertEqual(
+    codeOf(logSkillUse(reading, { minutes: MAX_SKILL_MINUTES + 1 })),
+    "invalid_skill_minutes",
+    "P7. and one over a day",
+  );
+  assertEqual(
+    findSkill([reading], "READING").id,
+    reading.id,
+    "P7. a skill is found case-insensitively, as the duplicate check is",
+  );
+  // `findSkill` returns `null` rather than a Result: it is a lookup, and a lookup's failure is
+  // "not there". The executor turns that into `unknown_skill`, which `skills-test.mjs` asserts.
+  assertEqual(
+    findSkill([reading], "pushups"),
+    null,
+    "P7. an unknown name resolves to nothing rather than to a new skill",
+  );
+
+  const logs = [
+    {
+      id: 1,
+      skillId: reading.id,
+      timestamp: "2026-10-01T09:00:00.000Z",
+      minutes: 30,
+    },
+    {
+      id: 2,
+      skillId: reading.id,
+      timestamp: "2026-10-02T09:00:00.000Z",
+      minutes: null,
+    },
+  ];
+  const tally = tallyFor(reading, logs);
+
+  assertEqual(
+    tally.times,
+    2,
+    "P7. the tally counts the entries for that skill",
+  );
+  assertEqual(
+    tally.minutes,
+    30,
+    "P7. sums only the stated durations, and does not invent one for an entry without",
+  );
+  assertEqual(
+    tallyFor(reading, []).times,
+    0,
+    "P7. a skill never used tallies to zero rather than to nothing",
+  );
+}
+
+console.log("\n# Phase 7: habit rules");
+
+{
+  assertEqual(
+    isLoggableHabitType("laundry"),
+    true,
+    "P7. the four loggable habits are a closed set",
+  );
+  assertEqual(
+    isLoggableHabitType("masturbation"),
+    false,
+    "P7. and a private behaviour is not one of them",
+  );
+  assertEqual(
+    isPrivateType("masturbation"),
+    true,
+    "P7. the two private types are a closed set too",
+  );
+  assertEqual(
+    isPrivateType("cooking"),
+    false,
+    "P7. and a habit is not a private type",
+  );
+
+  assertEqual(
+    codeOf(
+      recordHabit({
+        date: "2026-10-01",
+        type: "laundry",
+        done: true,
+        hasPhotoProof: false,
+      }),
+    ),
+    "photo_required",
+    "P7. laundry cannot be recorded as done without proof",
+  );
+  assertEqual(
+    succeeded(
+      recordHabit({
+        date: "2026-10-01",
+        type: "laundry",
+        done: true,
+        hasPhotoProof: true,
+      }),
+      true,
+    ),
+    true,
+    "P7. and is recorded as done when the caller confirms the photo was written",
+  );
+  assertEqual(
+    succeeded(
+      recordHabit({ date: "2026-10-01", type: "laundry", done: false }),
+      true,
+    ),
+    true,
+    "P7. recording it as not done needs no photo: the rule governs completion",
+  );
+  assertEqual(
+    codeOf(
+      recordHabit({
+        date: "2026-10-01",
+        type: "dishes",
+        done: true,
+        minutes: 10,
+      }),
+    ),
+    "invalid_habit_minutes",
+    "P7. a habit that was done takes no duration",
+  );
+  assertEqual(
+    codeOf(
+      recordHabit({ date: "2026-10-01", type: "screen_time", done: true }),
+    ),
+    "invalid_habit_minutes",
+    "P7. screen time needs minutes",
+  );
+  assertEqual(
+    codeOf(
+      recordHabit({
+        date: "2026-10-01",
+        type: "screen_time",
+        done: true,
+        minutes: MAX_SCREEN_TIME_MINUTES + 1,
+      }),
+    ),
+    "invalid_habit_minutes",
+    "P7. and cannot be more than a day",
+  );
+  assertEqual(
+    recordHabit({
+      date: "2026-10-01",
+      type: "screen_time",
+      done: false,
+      minutes: 30,
+    }).ok,
+    true,
+    "P7. a measurement is always stored as done, whatever was said",
+  );
+}
+
+console.log("\n# Phase 7: streaks and the laundry target");
+
+{
+  const entries = [
+    habit("2026-09-29", "cooking", true),
+    habit("2026-09-30", "cooking", true),
+    habit("2026-10-01", "cooking", true),
+  ];
+
+  assertEqual(
+    habitStreak(entries, "cooking", "2026-10-01").days,
+    3,
+    "P7. consecutive days recorded as done are counted",
+  );
+  assertEqual(
+    habitStreak(entries, "cooking", "2026-10-02").days,
+    3,
+    "P7. and a day with no entry does not break it, because the day is not over",
+  );
+  assertEqual(
+    habitStreak(
+      [...entries, habit("2026-10-02", "cooking", false)],
+      "cooking",
+      "2026-10-02",
+    ).days,
+    0,
+    "P7. a day recorded as not done does break it",
+  );
+  assertEqual(
+    habitStreak(entries, "cooking", "2026-10-04").days,
+    0,
+    "P7. and so does a gap: two unrecorded days is not a run",
+  );
+  assertEqual(
+    habitStreak(entries, "cooking", "2026-09-28").days,
+    0,
+    "P7. entries dated after today are not counted in advance",
+  );
+  assertEqual(
+    habitStreak([], "dishes", "2026-10-01").lastRecorded,
+    null,
+    "P7. nothing recorded reads as nothing, not as zero days kept",
+  );
+
+  const window = [
+    habit("2026-10-01", "laundry", true),
+    habit("2026-10-02", "laundry", true),
+    // Two uploads on one day: still one day of laundry.
+    habit("2026-10-02", "laundry", true),
+    habit("2026-10-03", "laundry", false),
+    habit("2026-10-04", "dishes", true),
+  ];
+  const progress = laundryProgress(window);
+
+  assertEqual(progress.target, 2, "P7. the PRD's target is twice a week");
+  assertEqual(
+    progress.doneThisWeek,
+    2,
+    "P7. counted in days, so a second upload on one day is not a second day",
+  );
+  assertEqual(
+    laundryProgress([habit("2026-10-01", "laundry", true)]).doneThisWeek,
+    1,
+    "P7. one day counts as one, and the domain states no verdict on it",
+  );
+  assertEqual(
+    Object.keys(laundryProgress([])).some((field) =>
+      /met|percent|score/i.test(field),
+    ),
+    false,
+    "P7. the rule returns two numbers and no judgement; the bar is the page's to draw",
+  );
+}
+
+console.log("\n# Phase 7: the private log");
+
+{
+  assertEqual(
+    succeeded(
+      recordPrivateEntry({ date: "2026-10-01", type: "doom_scrolling" }),
+      true,
+    ),
+    true,
+    "P7. a yes with no note is allowed; the PRD makes the note optional",
+  );
+  assertEqual(
+    recordPrivateEntry({
+      date: "2026-10-01",
+      type: "doom_scrolling",
+      note: "  late again  ",
+    }).ok,
+    true,
+    "P7. a note is trimmed",
+  );
+  assertEqual(
+    codeOf(
+      recordPrivateEntry({
+        date: "2026-10-01",
+        type: "doom_scrolling",
+        note: "x".repeat(501),
+      }),
+    ),
+    "invalid_private_note",
+    "P7. a note over 500 characters is refused",
+  );
+  assertEqual(
+    codeOf(
+      recordPrivateEntry({
+        date: "2026-10-01",
+        type: "doom_scrolling",
+        note: "bad\u0000note",
+      }),
+    ),
+    "invalid_private_note",
+    "P7. and one containing a control character, which a reader could not display",
+  );
+  assertEqual(
+    privateTypeLabel("doom_scrolling"),
+    "Doom scrolling",
+    "P7. a label says what the entry is",
+  );
+  assertEqual(
+    /streak|count|score|times|often/i.test(privateTypeLabel("masturbation")),
+    false,
+    "P7. and never anything about how often or how it ranks",
   );
 }
 

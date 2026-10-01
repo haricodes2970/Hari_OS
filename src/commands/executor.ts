@@ -49,6 +49,10 @@ import {
   setInventoryQuantity,
   stampInventoryChange,
 } from "../domain/inventory.ts";
+import type { HabitChange, HabitLog, PrivateLogEntry } from "@/domain/habits";
+import { recordHabit, recordPrivateEntry } from "../domain/habits.ts";
+import type { Skill, SkillLog } from "@/domain/skills";
+import { createSkill, logSkillUse } from "../domain/skills.ts";
 import type { DomainError, Result } from "@/domain/result";
 import type { NapLog, SleepChange } from "@/domain/sleep";
 import { endNap, recordNightTime, startNap } from "../domain/sleep.ts";
@@ -107,7 +111,26 @@ export type ExecutionOutcome =
   | { readonly kind: "inventory"; readonly change: InventoryChange }
   | { readonly kind: "expense"; readonly change: AccountChange }
   | { readonly kind: "task"; readonly change: TaskChange }
-  | { readonly kind: "sleep"; readonly change: SleepChange };
+  | { readonly kind: "sleep"; readonly change: SleepChange }
+  | {
+      readonly kind: "skill";
+      readonly change:
+        | { readonly action: "created"; readonly skill: Skill }
+        | {
+            readonly action: "logged";
+            readonly skill: Skill;
+            readonly log: SkillLog;
+          };
+    }
+  | { readonly kind: "habit"; readonly change: HabitChange }
+  | {
+      readonly kind: "private";
+      readonly change: {
+        readonly date: string;
+        readonly type: PrivateLogEntry["type"];
+        readonly happened: boolean;
+      };
+    };
 
 export type ExecutionResult =
   | { readonly ok: true; readonly value: ExecutionOutcome }
@@ -233,6 +256,22 @@ export function executeCommand(
 
   if (command.kind === "sleep.record") {
     return executeSleepRecord(command, dependencies);
+  }
+
+  if (command.kind === "skill.create") {
+    return executeSkillCreate(command, dependencies);
+  }
+
+  if (command.kind === "skill.log") {
+    return executeSkillLog(command, dependencies);
+  }
+
+  if (command.kind === "habit.record") {
+    return executeHabitRecord(command, dependencies);
+  }
+
+  if (command.kind === "private.log") {
+    return executePrivateLog(command, dependencies);
   }
 
   if (command.kind === "nap.start") {
@@ -618,4 +657,284 @@ function applyRestock(
   item: InventoryItem,
 ) {
   return restockInventory(...restockArguments(command, item));
+}
+
+/**
+ * Adds a skill to the user's list.
+ *
+ * The limit and the duplicate check both come from the domain, which is handed the stored list so
+ * the decision is made from real rows. This function's only job is to supply those rows and write
+ * the skill the domain returned.
+ *
+ * Note what is absent: nothing here sets a position, a category, or an order. The new skill goes
+ * to the end of the user's list because that is the order they added things in, and no
+ * preference is recorded.
+ */
+function executeSkillCreate(
+  command: Extract<Command, { kind: "skill.create" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories } = dependencies;
+
+  const created = createSkill(
+    { name: command.name },
+    repositories.skills.listAll(),
+  );
+
+  if (!created.ok) {
+    return domainFailure(created.error);
+  }
+
+  try {
+    const stored = repositories.skills.insert(created.value.name);
+
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    return succeed({
+      kind: "skill",
+      change: { action: "created", skill: stored.value },
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+}
+
+/**
+ * Records one use of a skill.
+ *
+ * The skill is found by the name the user said, and the timestamp is the execution clock's — the
+ * same clock the inventory events use, so nothing in the application stamps a log entry from a
+ * time it inferred itself. An unrecognised name is `unknown_skill`, never a new skill: creating
+ * one from a chat sentence would let a typo quietly become part of the user's list.
+ */
+function executeSkillLog(
+  command: Extract<Command, { kind: "skill.log" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories, now } = dependencies;
+  const skill = repositories.skills.findByName(command.skillName);
+
+  if (skill === null) {
+    return domainFailure({
+      code: "unknown_skill",
+      message: `"${command.skillName}" is not on the skills list.`,
+      detail: { name: command.skillName },
+    });
+  }
+
+  const logged = logSkillUse(skill, { minutes: command.minutes ?? null });
+
+  if (!logged.ok) {
+    return domainFailure(logged.error);
+  }
+
+  try {
+    const stored = repositories.skills.appendLog(
+      skill.id,
+      now(),
+      logged.value.minutes,
+    );
+
+    if (!stored.ok) {
+      throw new Error(stored.error.message);
+    }
+
+    return succeed({
+      kind: "skill",
+      change: { action: "logged", skill, log: stored.value },
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+}
+
+/**
+ * Records a habit for a day.
+ *
+ * **The laundry photo is the interesting part.** The PRD requires one, and it arrives through
+ * `POST /api/photos`, so this command cannot supply it. The executor therefore does not take the
+ * user's word for it: it asks the repository whether a photo is already attached to that day's
+ * laundry row, and passes that as the proof flag. A sentence that claims laundry is done without a
+ * photo is stored as not done with a spoken reason, because the domain refuses it — the claim was
+ * true as far as the sentence went and incomplete as far as the requirement goes.
+ *
+ * A replacement row keeps the photo the previous row had. Deleting it would orphan a file the user
+ * uploaded and make a correction unrecoverable, which PRD principle 13 rules out.
+ *
+ * `habit_log` has no timestamp column, so `now()` is not called here: a habit is about a day, not
+ * a moment, and reading the clock for a value nothing stores would be noise.
+ */
+function executeHabitRecord(
+  command: Extract<Command, { kind: "habit.record" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories } = dependencies;
+  const today = todayFrom(dependencies);
+
+  if (!today.ok) {
+    return domainFailure(today.error);
+  }
+
+  const date = resolveDayReference(command.day ?? null, today.value);
+
+  if (!date.ok) {
+    return domainFailure(date.error);
+  }
+
+  const existing = repositories.habits.findForDay(date.value, command.type);
+  const change = recordHabit({
+    date: date.value,
+    type: command.type,
+    done: command.done,
+    minutes: command.minutes ?? null,
+    hasPhotoProof:
+      command.type === "laundry" &&
+      existing !== null &&
+      existing.photoUrl !== null,
+  });
+
+  if (!change.ok) {
+    return domainFailure(change.error);
+  }
+
+  const replacement: HabitLog = {
+    ...change.value.habit,
+    photoUrl: existing?.photoUrl ?? null,
+  };
+
+  try {
+    const saved = repositories.transaction(() => {
+      if (existing !== null) {
+        const removed = repositories.habits.deleteForDay(
+          date.value,
+          command.type,
+        );
+
+        if (!removed.ok) {
+          throw new Error(removed.error.message);
+        }
+      }
+
+      const stored = repositories.habits.insertHabit(replacement);
+
+      if (!stored.ok) {
+        throw new Error(stored.error.message);
+      }
+
+      return stored.value;
+    });
+
+    return succeed({
+      kind: "habit",
+      change: { ...change.value, habit: saved },
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+}
+
+/**
+ * Writes one private entry.
+ *
+ * `happened: false` is not stored. The PRD asks for a yes/no, and the useful reading of "no" is
+ * that there is nothing to write down: a row saying "did not happen" would become an entry, and
+ * entries are what the page lists. So a negative answer **deletes** the day's entry for that type
+ * if one exists, which is also the only way to correct a mistaken entry.
+ *
+ * Deleting rather than rewriting is the point: a private log that keeps rows marked "did not
+ * happen" is a list that grows with the number of times nothing occurred, and every count drawn
+ * from it would be a count of entries the user never made.
+ *
+ * Nothing here computes a count, and the outcome carries no number the user could read back as
+ * one. `now()` is not even called: the entry is dated by the day reference, and the stored row has
+ * no timestamp column to fill.
+ */
+function executePrivateLog(
+  command: Extract<Command, { kind: "private.log" }>,
+  dependencies: ExecutionDependencies,
+): ExecutionResult {
+  const { repositories } = dependencies;
+  const today = todayFrom(dependencies);
+
+  if (!today.ok) {
+    return domainFailure(today.error);
+  }
+
+  const date = resolveDayReference(command.day ?? null, today.value);
+
+  if (!date.ok) {
+    return domainFailure(date.error);
+  }
+
+  const existing = repositories.privateLog.findForDay(date.value, command.type);
+
+  if (!command.happened) {
+    if (existing !== null) {
+      try {
+        repositories.transaction(() => {
+          const removed = repositories.privateLog.removeForDay(
+            date.value,
+            command.type,
+          );
+
+          if (!removed.ok) {
+            throw new Error(removed.error.message);
+          }
+        });
+      } catch (cause) {
+        return fail({
+          kind: "persistence",
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
+    }
+
+    return succeed({
+      kind: "private",
+      change: { date: date.value, type: command.type, happened: false },
+    });
+  }
+
+  const entry = recordPrivateEntry({
+    date: date.value,
+    type: command.type,
+    note: command.note ?? null,
+  });
+
+  if (!entry.ok) {
+    return domainFailure(entry.error);
+  }
+
+  try {
+    const stored = repositories.transaction(() => {
+      const written = repositories.privateLog.insertEntry(entry.value);
+
+      if (!written.ok) {
+        throw new Error(written.error.message);
+      }
+
+      return written.value;
+    });
+
+    return succeed({
+      kind: "private",
+      change: { date: stored.date, type: stored.type, happened: true },
+    });
+  } catch (cause) {
+    return fail({
+      kind: "persistence",
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
 }

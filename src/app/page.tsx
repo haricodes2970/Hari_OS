@@ -270,8 +270,9 @@ export default function DashboardPage({
       <h2>Dishes and laundry</h2>
       <Habits habits={dashboard.habits} />
       <p className="muted">
-        Habit logging is a later module. Nothing here writes a habit entry yet,
-        so a line above reads as recorded only if a row already says so.
+        <a href="/habits">Open Habits</a> to record dishes, cooking, and
+        laundry, to enter screen time, and to read the private log and the Photo
+        Diary. A line above reads as recorded only if a row already says so.
       </p>
 
       <h2>I feel like scrolling</h2>

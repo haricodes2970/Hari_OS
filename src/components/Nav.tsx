@@ -1,9 +1,18 @@
 /**
- * Navigation between the three pages that exist in this phase.
+ * Navigation between the pages that exist.
  *
  * A Server Component, since it needs nothing from the browser. `usePathname` would make it a
  * Client Component and hand every page a client boundary purely to underline the current
  * tab; receiving the path as a prop costs nothing instead.
+ *
+ * ## Two Phase 7 links, both to reach a real page
+ *
+ * `Skills` is the replacement-activity list, which is what the Dashboard's urge entry point opens.
+ * `Habits` is where habits, screen time, the private log, and the Photo Diary live. Neither is a
+ * modal or a query string on the Dashboard: they are pages, because the PRD asks for a full list
+ * the user reads, and a page is what a list deserves.
+ *
+ * The order follows the order of a day, with Skills after the records it replaces.
  */
 export type NavProps = {
   readonly currentPath: string;
@@ -14,6 +23,8 @@ const LINKS = [
   { href: "/kitchen", label: "Kitchen" },
   { href: "/expenses", label: "Expenses" },
   { href: "/routine", label: "Routine" },
+  { href: "/habits", label: "Habits" },
+  { href: "/skills", label: "Skills" },
 ] as const;
 
 export function Nav({ currentPath }: NavProps) {

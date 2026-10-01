@@ -1202,3 +1202,213 @@ owning feature, and Habits is Phase 7.
   where the assertion belongs.
 
 **Origin:** Phase 6, from ADR-047's stated precondition having come true.
+
+## ADR-051 — A photo is stored as an application URL with its row id, and both parts are checked
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 7
+
+**Context.** PRD 6.6 requires a photo as the proof of laundry completion and leaves a Photo Diary
+of pictures. `habit_log.photo_url` is the only column in the schema that can hold a picture, and it
+exists already. Two things have to be decided: what goes in that column, and how a request turns
+into bytes.
+
+The obvious answers are wrong in both directions. Storing a filesystem path (`data/uploads/x.jpg`)
+leaks the layout into the database and breaks the moment the directory moves. Storing only the
+filename means the route has no way to know whether a filename it was given is one this table
+actually names — which is the mistake of serving a data directory by guessing.
+
+**Alternatives considered.**
+
+- **Store the filename, and look the file up by it.** Rejected: nothing ties a filename in a URL to
+  a row, so any guess reads any file in the upload directory.
+- **Add a `photo` table.** Rejected: it is a schema change for an entity no phase document was
+  given, and `habit_log.photo_url` already exists for exactly this. Adding a table would also make
+  the photo a separate thing from the day it proves, which is the opposite of what laundry proof
+  is.
+- **Serve uploads from `public/`.** Rejected: `public/` is served with no authorisation and would
+  put the user's laundry photos at a guessable path. `AGENTS.md` already forbids it.
+
+**Decision.** `habit_log.photo_url` stores `/api/photos/<id>/<filename>`, where `id` is the row
+and `filename` is server-generated. `POST /api/photos` writes the file, inserts the row, and then
+sets the URL — three statements in one transaction, because the id does not exist until the insert
+has run and the pair must be atomic. `GET /api/photos/<id>/<filename>` reads the file only when
+the row exists, has a photo, and its stored URL equals the request exactly. A mismatch is a 404,
+not a guess.
+
+Uploads name what they prove and only `laundry` is accepted, because `habit_log.photo_url` is the
+only column that can hold a picture. An upload of any other type is refused before anything is
+written. The consequence is stated rather than hidden: **the V1 Photo Diary is the timeline of
+laundry photos.**
+
+**Consequences.**
+
+- No stored value contains a local path, and moving `data/uploads/` breaks no row.
+- No guessed filename reads a file, and the check is one string comparison.
+- A photo diary of something other than laundry is not buildable until a phase gives it a column or
+  a table. That is a visible limitation rather than a hidden one.
+- `src/lib/storage/photos.ts` owns the byte checks: magic bytes decide the type, the extension is
+  derived from them, SVG is refused outright, the size is bounded before the write, and the name is
+  a fresh UUID. Nothing from the client reaches the path.
+
+**Origin:** Phase 7, from the PRD's laundry-proof requirement.
+
+## ADR-052 — The private log has one reader and can produce no number
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 7
+
+**Context.** PRD 6.6: "Private log (yes/no plus optional note) for doom-scrolling incidents and
+masturbation. Never shown as a streak, score, or progress bar." The stated reason is to avoid a
+shame spiral, so this is a requirement about the user's wellbeing rather than a display preference.
+
+A prohibition phrased as "never shown as" is easy to satisfy and easy to erode. A count is a
+streak without a calendar; a "this week" figure is a score; a list that grows every time something
+did *not* happen is a count by another route. Each of those is a small, innocent-looking change,
+and each violates the PRD.
+
+**Alternatives considered.**
+
+- **Implement it, and rely on review.** Rejected: the rule is about the user's wellbeing, and it
+  would rest on every future reader remembering it.
+- **Store it and simply not display it.** Rejected: not displaying is not the requirement. A count
+  in a repository method is one refactor away from a count on a page.
+- **Keep a display query for `private_log` alongside the others.** Rejected: a second door to the
+  table is what the rule is protecting against.
+
+**Decision.** Three structural choices, each enforced by a probe or a test rather than by a comment:
+
+- `src/features/habits/private-log.ts` is the only module in `src/` that reads `private_log`. It is
+  not imported by `src/features/habits/view.ts`, so the Dashboard — which composes that module —
+  cannot reach a private entry even by accident.
+- The read model exposes no count, total, streak, frequency, or percentage. There is no function in
+  it that takes entries and returns a number.
+- The command contract's `private.log` has no field a count could arrive in, and `readCommand`
+  rejects unknown fields, so a model that proposes one is refused by name.
+
+A "no" answer deletes the day's entry rather than storing a row that records an absence. That is the
+only way the table can shrink, and it is why `PrivateLogRepository.removeForDay` exists.
+
+**Consequences.**
+
+- The Dashboard cannot show a private entry, and `skills-test.mjs` asserts that neither the entry
+  nor the behaviour's name appears in its model.
+- The private section of `/habits` was asserted over rendered HTML for the absence of the words
+  *streak*, *score*, *progress*, *percent*, *rank*, and of any percentage or `progressbar`.
+- Recording an entry takes two commands today: a photo, then a sentence. Both are cheap, and
+  neither pretends the other happened.
+
+**Origin:** Phase 7, from the PRD's direct prohibition.
+
+## ADR-053 — The laundry photo is required by a check, not by the sentence that claims it
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 7
+
+**Context.** The PRD says the application does not accept a text claim alone for laundry. A
+sentence arrives through the parser and carries no file, so "did laundry" cannot satisfy the
+requirement by itself. The question is where the photo requirement is checked, because the answer
+determines whether a sentence can talk its way past it.
+
+If the command carried a field like `hasPhotoProof`, a model could set it. If the page set it
+because the user ticked a box, the requirement would be enforced by the same interface it is
+supposed to constrain.
+
+**Alternatives considered.**
+
+- **Add a `photoId` field to the habit command.** Rejected: a model cannot know an id, so the field
+  would be an unverifiable claim in exactly the place verification matters.
+- **Let the photo route record the habit and remove the command entirely.** Rejected: chat is one of
+  the two doors the PRD asks for, and a sentence that is permanently unable to complete laundry
+  would be a sentence the application lies about.
+- **Let the command trust the caller.** Rejected: that is a claim, not a check.
+
+**Decision.** `recordHabit` takes `hasPhotoProof`, and the executor supplies it by asking the
+repository whether the day's laundry row already carries a photo. Nothing else may set it. So
+"did laundry" is refused with `photo_required` until a photo exists for that day, and accepted once
+one does — the same sentence, and the same code path, with the difference being the stored row.
+
+Replacing that day's row keeps the existing `photo_url`. Deleting it would orphan an uploaded file
+and make a correction unrecoverable, which PRD principle 13 rules out.
+
+**Consequences.**
+
+- A sentence cannot complete laundry. The failure message names the requirement, so the refusal
+  teaches rather than merely blocks.
+- `POST /api/photos` is the completion path: it writes the file, records the day as done, and
+  attaches the photo in one transaction, deleting the file if the row cannot be written.
+- Both routes were exercised over HTTP in `skills-accept.mjs`: a refusal before an upload, and a
+  success after one.
+
+**Origin:** Phase 7, from the PRD's laundry-proof requirement.
+
+## ADR-054 — The habit read model replaced the Dashboard's ad-hoc `habit_log` read
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 7
+
+**Context.** ADR-050 kept `display.habitsForDate` on the explicit condition that `habit_log` still
+had no owning feature. Phase 7 gives it one. The Dashboard had been reading that table to render
+two lines, and applying its own filter to decide which habits the PRD section 6.1 lists.
+
+**Alternatives considered.**
+
+- **Leave `display.habitsForDate` in place.** Rejected: ADR-050's condition for it has come true,
+  and keeping it would mean two readers of `habit_log` able to disagree about what a day contains.
+- **Move the Dashboard's filter into the habit read side.** Rejected: the read side would then carry
+  a presentation decision that the Dashboard owns, and a second caller would inherit it.
+- **Expose screen time on the Dashboard.** Rejected: PRD 6.1 lists laundry and dishes, and a
+  measurement is not a habit. It would also put a number on the summary screen that the user must
+  then feel something about.
+
+**Decision.** `display.habitsForDate` is deleted. The Dashboard composes `readHabits`, which is the
+single reader of `habit_log`, and applies its own two-habit projection in `view.ts` — a
+presentation decision, kept in the presentation layer. Screen time is available on `/habits` and not
+on the Dashboard.
+
+**Consequences.**
+
+- `habit_log` has one reader, and the Dashboard cannot disagree with `/habits` about a day.
+- The Dashboard's habits lines come from the same read model that decides what "not recorded" means,
+  so a day with no row reads identically on both pages.
+- `SKILLS_AVAILABLE` is now `true`, and `dashboard-test.mjs` asserts the distinction that motivated
+  keeping it a flag at all: the module is available on an empty database, and an empty list is a
+  different state from an unavailable one.
+
+**Origin:** Phase 7, from ADR-050's stated precondition having come true.
+
+## ADR-055 — Two new ESLint scopes for the Skills and Habits slices
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 7
+
+**Context.** Phase 3 and Phase 4 each added an enforced scope for their feature slice
+(`src/features/routine/**` and `src/features/dashboard/**`), because a boundary nobody probes is a
+boundary nobody has. Phase 7 adds two slices with a difference between them that needed deciding.
+
+`src/features/habits/**` writes files. `src/app` is forbidden from `src/lib/storage` by
+`hari-os/application-boundaries-enforced`, which means a route handler cannot write a photo at all —
+so something has to own it, and a feature is the only layer left. Meanwhile the same slice must not
+be free to reach for `node:fs` beside the storage module, or "one place that touches the disk" stops
+being true.
+
+**Alternatives considered.**
+
+- **Let `src/app` import `@/lib/storage`.** Rejected: it would undo a boundary that exists to keep
+  the routing layer free of storage, and every future route would be a judgement call.
+- **Put the photo write in the domain.** Rejected: the domain is pure, and this rule was found the
+  hard way in ADR-025.
+- **Enforce nothing for the new slices.** Rejected: the same gap ADR-046 was written about.
+
+**Decision.** Two scopes, both appended to `enforcedBoundaries` so they win under ESLint's
+last-config-wins behaviour (ADR-046). `src/features/skills/**` forbids the full persistence group,
+exactly as the Routine scope does. `src/features/habits/**` forbids everything in that group *except*
+`@/lib/storage`, with the difference stated in the config's comment.
+
+`architecture-probe.mjs` gained 11 probes: each slice must refuse a driver, the disk, the executor,
+and the provider; the Habits slice must still be allowed `@/lib/storage/photos` and
+`command-runtime`; the Skills slice must still be allowed its own domain module.
+
+**Consequences.**
+
+- The routing layer still cannot touch the filesystem, and one feature slice owns every disk write.
+- A rule that permitted "just this one import" is now visible in the config rather than implied by
+  an exception nobody wrote down.
+- 58 architecture probes pass, up from 47.
+
+**Origin:** Phase 7, from ADR-046's requirement that every documented boundary be probed.

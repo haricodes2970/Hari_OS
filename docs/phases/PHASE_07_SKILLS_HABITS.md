@@ -1,6 +1,9 @@
 # Phase 7 — Skills and Habits
 
-**Status: Planned**
+**Status: Complete and verified**
+
+Delivered 2026-10-01. See `docs/project/DECISIONS.md` ADR-051 through ADR-055 and
+`docs/sessions/2026-10-01-session-06.md` for what was actually built and verified.
 
 Scope taken from `Hari_OS_V1_PRD.docx` sections 6.5 and 6.6. This document does not expand
 it.
@@ -29,7 +32,8 @@ habits without turning private behavior into a scoreboard.
   target of twice per week. PRD entity `habit_log` (date, type of cooking / dishes /
   laundry, done, photo_url).
 - **Laundry photo proof.** The PRD states the application does not accept a text claim
-  alone. A placeholder is allowed in V1; the real upload is Phase 8.
+  alone. A placeholder was allowed in V1 and **was not taken**: the real upload path shipped in
+  Phase 7, so the Photo Diary in V1 is the timeline of laundry photos (ADR-051).
 - **Manual screen-time entry.** The PRD marks automatic screen-time integration as later
   work, so no platform API is involved.
 - **Private logs** for doom-scrolling incidents and masturbation: a yes/no plus an optional
@@ -39,8 +43,8 @@ habits without turning private behavior into a scoreboard.
 
 - Phase 1 complete: schema and a working data path.
 - Phase 2 for sentence-based logging such as "did laundry".
-- Phase 8 for real laundry photo upload. Phase 7 can ship with the PRD-sanctioned
-  placeholder.
+- Phase 8 was assumed to own the real laundry photo upload. It does not: Phase 7 shipped
+  it, and Phase 8 has no upload work left to do.
 - Dashboard (5) consumes the laundry and dishes status, and hosts the scrolling-urge entry
   point that opens the skill list.
 
@@ -79,6 +83,46 @@ habits without turning private behavior into a scoreboard.
 - Pages render with no data and do not crash.
 - `npm run db:check` passes with the expected tables.
 
-## Status
+## What was delivered
 
-**Planned.** No skills or habits code, no related schema, and no pages exist today.
+**Schema.** One migration, `002_screen_time`, rebuilding `habit_log` to accept a fourth type and a
+validated `minutes` column. `skill`, `skill_log`, and `private_log` were already in the schema and
+needed nothing.
+
+**Features.** `src/features/skills/` and `src/features/habits/`, with `private-log.ts` and
+`photos.ts` as separate modules for the two rules that needed their own boundary.
+
+**Commands.** `skill.create`, `skill.log`, `habit.record`, and `private.log` — 14 kinds in total,
+each carrying only stated facts. No command can claim a photo exists, and no private command can
+carry a count.
+
+**Pages.** `/skills` and `/habits`, two new navigation items, and the Dashboard's urge entry point
+now opening the real list.
+
+**Photos.** `POST /api/photos`, `GET /api/photos/<id>/<filename>`, magic-byte validated,
+server-named, size-limited, stored under `data/uploads/`, and never referenced by path.
+
+## Verification actually performed
+
+- `skills:test` — 150 assertions, 0 failures: the full list, the ten-skill cap, duplicates, tallies,
+  streaks, the weekly target, screen time, private entries, the photo path, the routes, and the
+  Dashboard's reach.
+- `domain:test` — 258 assertions, 0 failures, including 45 new pure-rule assertions for this phase.
+- `skills:accept` — 62 HTTP checks against a production build on a disposable database: both pages
+  on a never-used database, the complete list through the Dashboard's entry point, a photo uploaded
+  and served back, `did laundry` refused and then accepted, and the private section asserted free of
+  streaks, scores, bars, percentages, and counts.
+- `architecture:probe` — 58 probes, up from 47.
+- Baseline: `format:check`, `typecheck`, `lint`, `build`, `db:check`, and all 12 test suites pass.
+  `dashboard:accept`, `routine:accept`, and `responsive:check` pass with their Phase 7 expectations
+  updated.
+
+## Two defects found and fixed here
+
+- **`habitStreak` did not end a streak.** It walked back from the most recent day recorded as *done*,
+  so a day the user explicitly recorded as not done had no effect — the exact opposite of the rule
+  its own comment described, and of the PRD's distinction between "not recorded" and "not done". It
+  now walks from today, skipping only today itself.
+- **A "no" answer grew the private log.** It re-inserted the entry with a null note instead of
+  removing it, so correcting a mistake left a row behind. `PrivateLogRepository.removeForDay` now
+  exists and a correction is a deletion.

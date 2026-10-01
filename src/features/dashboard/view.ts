@@ -29,8 +29,12 @@
  *   for the user would be the failure the PRD names, not a feature.
  * - **No second task model.** `plan_task` rows are read; nothing here creates one. Writing them is
  *   Routine's job (Phase 6), and until then the list is empty and says so.
- * - **No Skills.** The replacement-activity list is Phase 7. `SKILLS_AVAILABLE` is `false` and the
- *   page renders a truthful unavailable state rather than an empty list that looks like a verdict.
+ * - **No skills in the summary.** `SKILLS_AVAILABLE` is `true` because `/skills` exists, but the
+ *   Dashboard opens the urge entry point and does not show a tally, a favourite, or a suggestion.
+ *   The full list belongs to the moment the user asks for it, and choosing from it is theirs.
+ * - **No private log.** `private_log` is not read here at all. Nothing in this module can reach
+ *   it: it is a separate repository with a separate owner, and the read side below does not
+ *   import it.
  * - **No money arithmetic.** See above.
  *
  * Server-only: it reaches storage through the composition root, so importing it from a client
@@ -38,13 +42,14 @@
  */
 import "server-only";
 
-import type { HabitType } from "@/domain/habits";
+import type { HabitLog, HabitType } from "@/domain/habits";
 import { selectTopTasks } from "@/domain/routine.ts";
 
 import { readDailyBill } from "../expenses/view.ts";
+import { readHabits } from "../habits/view.ts";
 import { listKitchenStock } from "../kitchen/view.ts";
 import { readRoutine } from "../routine/view.ts";
-import { currentUtcDate, getRepositories } from "../shared/command-runtime.ts";
+import { currentUtcDate } from "../shared/command-runtime.ts";
 
 /**
  * How many tasks the morning view shows.
@@ -62,14 +67,18 @@ import { currentUtcDate, getRepositories } from "../shared/command-runtime.ts";
 export { TOP_TASK_LIMIT } from "@/domain/routine.ts";
 
 /**
- * Whether the replacement-activity list exists yet.
+ * Whether the replacement-activity list exists.
  *
- * A build fact, not data, and deliberately `false`: the Skills module is Phase 7. It is declared
- * here rather than hard-coded in the page so that the reason the entry point is unavailable lives
- * beside the other availability statements, and so a test can assert the flag instead of reading
- * the JSX to discover it.
+ * A build fact, not data, and `true` as of Phase 7: `/skills` exists, it reads the user's own
+ * rows, and the scrolling-urge entry point opens it.
+ *
+ * It is still a declaration rather than a hard-coded `true` in the page, for two reasons. The
+ * entry point's availability now sits beside the other availability statements rather than inside
+ * JSX, and a test asserts the flag instead of reading the markup to discover it. The flag says the
+ * module exists — it says nothing about whether the user has added any skills, which is a fact
+ * about their data and is read from the database like any other.
  */
-export const SKILLS_AVAILABLE = false;
+export const SKILLS_AVAILABLE = true;
 
 /** One low-stock line, as the Dashboard needs it. `lowStock` is already the domain's verdict. */
 export type LowStockLine = {
@@ -172,7 +181,10 @@ export function readDashboard(date: string = currentUtcDate()): DashboardModel {
   const bill = readDailyBill(date);
   const stock = listKitchenStock();
   const routine = readRoutine(date);
-  const habits = getRepositories().display.habitsForDate(date);
+  // Read through the Habits feature's own read side, which is the single reader of `habit_log`
+  // (ADR-050's rule). `readHabits` returns the day's entries; the Dashboard projects the two
+  // neutral habits PRD section 6.1 asks for and leaves the rest to the Habits page.
+  const habits = readHabits(date).today;
 
   // `readRoutine` returns every task for the day; the top three are the morning's, chosen by
   // the domain rule rather than by slicing here.
@@ -210,11 +222,16 @@ export function readDashboard(date: string = currentUtcDate()): DashboardModel {
     })),
     taskCount: routine.taskCount,
     suggestedFirstAction: undone === undefined ? null : undone.title,
-    habits: habits.map((entry) => ({
-      type: entry.type,
-      done: entry.done,
-      hasPhoto: entry.hasPhoto,
-    })),
+    habits: habits
+      .filter(
+        (entry): entry is HabitLog & { readonly type: HabitType } =>
+          entry.type === "dishes" || entry.type === "laundry",
+      )
+      .map((entry) => ({
+        type: entry.type,
+        done: entry.done,
+        hasPhoto: entry.photoUrl !== null,
+      })),
     skillsAvailable: SKILLS_AVAILABLE,
     sleep: {
       recorded: routine.night.recorded,

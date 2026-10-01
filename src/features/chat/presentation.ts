@@ -85,6 +85,56 @@ export type TrustedOutcome =
       };
     }
   | {
+      /**
+       * Phase 7. A skill was added, or one use of a skill was logged.
+       *
+       * `tally` is absent on purpose. Reading the skill back out of the database to put a
+       * running total in a chat sentence would make a confirmation depend on a count the user
+       * did not ask about, and for a habit system the accumulating number is the thing most
+       * worth refusing.
+       */
+      readonly kind: "skill";
+      readonly change:
+        | {
+            readonly action: "created";
+            readonly skill: { readonly name: string };
+          }
+        | {
+            readonly action: "logged";
+            readonly skill: { readonly name: string };
+            readonly log: { readonly minutes: number | null };
+          };
+    }
+  | {
+      /** Phase 7. What one habit's row now says. */
+      readonly kind: "habit";
+      readonly change: {
+        readonly habit: {
+          readonly date: string;
+          readonly type: string;
+          readonly done: boolean;
+          readonly minutes: number | null;
+          readonly photoUrl: string | null;
+        };
+        readonly photoAttached: boolean;
+      };
+    }
+  | {
+      /**
+       * Phase 7. One private entry.
+       *
+       * **No count field exists, and that is the point.** The outcome carries the day and the
+       * type so the sentence can be accurate, and carries nothing that could be tallied — so
+       * there is no number here for a future change to accumulate into a streak.
+       */
+      readonly kind: "private";
+      readonly change: {
+        readonly date: string;
+        readonly type: string;
+        readonly happened: boolean;
+      };
+    }
+  | {
       /** Phase 6. A night, or a nap. */
       readonly kind: "sleep";
       readonly change:
@@ -121,7 +171,24 @@ export type AppliedKind =
   | "task.set_done"
   | "sleep.record"
   | "nap.start"
-  | "nap.end";
+  | "nap.end"
+  | "skill.create"
+  | "skill.log"
+  | "habit.record"
+  | "private.log";
+
+/**
+ * How a habit type is named in a sentence.
+ *
+ * Kept here, beside the other wording, so the chat surface and the pages cannot drift apart on
+ * what a habit is called. `screen_time` has no entry: it is a measurement and gets its own
+ * sentence above, because "Screen time recorded as done" is a sentence that should not exist.
+ */
+const HABIT_LABELS: Record<string, string> = {
+  cooking: "Cooking",
+  dishes: "Dishes",
+  laundry: "Laundry",
+};
 
 /** A stated `HH:MM` as a person says it, for a sentence. */
 function clockLabel(time: string): string {
@@ -206,6 +273,44 @@ export function describeApplied(
     return kind === "task.create"
       ? `Added "${task.title}" to ${task.date}.`
       : `Marked "${task.title}" as ${after ? "done" : "not done"}.`;
+  }
+
+  if (outcome.kind === "skill") {
+    const { action } = outcome.change;
+
+    if (action === "created") {
+      return `Added "${outcome.change.skill.name}" to your skills.`;
+    }
+
+    const { minutes } = outcome.change.log;
+
+    return minutes === null
+      ? `Logged ${outcome.change.skill.name}.`
+      : `Logged ${outcome.change.skill.name} for ${minutes} minutes.`;
+  }
+
+  if (outcome.kind === "habit") {
+    const { habit, photoAttached } = outcome.change;
+    const label = HABIT_LABELS[habit.type] ?? habit.type;
+
+    if (habit.type === "screen_time") {
+      return `Screen time: ${habit.minutes ?? 0} minutes.`;
+    }
+
+    return `${label} recorded as ${habit.done ? "done" : "not done"}${
+      photoAttached ? ", with the photo attached." : "."
+    }`;
+  }
+
+  if (outcome.kind === "private") {
+    const label =
+      outcome.change.type === "masturbation"
+        ? "Masturbation"
+        : "Doom scrolling";
+
+    return outcome.change.happened
+      ? `Saved the ${label.toLowerCase()} entry for ${outcome.change.date}.`
+      : `Removed the ${label.toLowerCase()} entry for ${outcome.change.date}.`;
   }
 
   if (outcome.kind === "sleep") {

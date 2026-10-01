@@ -103,7 +103,7 @@ export type Interpretation =
   | {
       readonly kind: "command";
       /**
-       * The kind, already confirmed to be one of the four executable commands.
+       * The kind, already confirmed to be one of the executable commands.
        *
        * Reported separately so the caller can choose the wording of a confirmation without
        * re-reading it out of the unvalidated object. It is a label for the command that was
@@ -133,6 +133,14 @@ const TEXT_FIELDS = [
   "day",
   "field",
   "time",
+  // Phase 7. `name` is a skill as the user named it and `skillName` names one they are logging,
+  // both in their own words. `type` is the habit or private behaviour the sentence named, and
+  // `note` is the user's own words. None of these are ever derived, and none of them may carry a
+  // number: `habit.record`'s `minutes` and `skill.log`'s are read below as numbers, not strings.
+  "name",
+  "skillName",
+  "type",
+  "note",
 ] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -273,6 +281,37 @@ function candidateToCommand(
     if (time !== undefined) {
       command.time = time;
     }
+  } else if (kind === "habit.record") {
+    // A completion is a stated fact, on the same terms as `task.set_done`: a real boolean is
+    // copied and anything else is forwarded so validation refuses it by name.
+    if (typeof proposal.done === "boolean") {
+      command.done = proposal.done;
+    }
+
+    // Screen time is entered by hand, so the model may report the number of minutes the user
+    // said. Converting "90 minutes" to 90 is a string the validator already understands, and
+    // nothing here derives, sums, or converts a duration.
+    const minutes = asNumber(proposal.minutes);
+    if (minutes !== undefined) {
+      command.minutes = minutes;
+    }
+  } else if (kind === "private.log") {
+    // Whether it happened is a stated fact, and a non-boolean is forwarded unchanged rather
+    // than guessed at. There is no field here for a count, and none may be added: the contract
+    // has nowhere to put one, which is what makes a private entry structurally incapable of
+    // becoming a tally.
+    if (typeof proposal.happened === "boolean") {
+      command.happened = proposal.happened;
+    }
+  } else if (kind === "skill.log") {
+    const minutes = asNumber(proposal.minutes);
+    if (minutes !== undefined) {
+      command.minutes = minutes;
+    }
+  } else if (kind === "skill.create") {
+    // Nothing else is read. A proposed position, category, icon, or order would be a preference
+    // the application has no business accepting, and the field is not in the allowlist above so
+    // it never reaches the command even if the model sends one.
   } else {
     // consume and restock both take a quantity in the item's own unit, as `amount`.
     const amount = asNumber(proposal.amount);
@@ -291,9 +330,9 @@ function candidateToCommand(
  * Reads whatever a parser returned and decides what it means.
  *
  * Rejects, in order: a non-object, an unknown `status`, and an `interpreted` proposal whose
- * `kind` is not one of the four executable commands. A proposal claiming to be a command with
- * a kind the application cannot execute is `unreadable`, not `unsupported` — the model
- * invented something, which is a broken proposal rather than an unsupported request.
+ * `kind` is not one of the executable commands. A proposal claiming to be a command with a kind
+ * the application cannot execute is `unreadable`, not `unsupported` — the model invented
+ * something, which is a broken proposal rather than an unsupported request.
  */
 export function interpret(
   proposal: unknown,

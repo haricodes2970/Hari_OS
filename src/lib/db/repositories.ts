@@ -38,7 +38,16 @@ import {
   findInventoryItem,
   findInventoryItemById,
 } from "../../domain/inventory.ts";
-import { isHabitType, type HabitType } from "../../domain/habits.ts";
+import type { CalendarDate } from "../../domain/calendar.ts";
+import {
+  isLoggableHabitType,
+  type HabitLog,
+  type LoggableHabitType,
+  type PrivateLogEntry,
+  type PrivateType,
+} from "../../domain/habits.ts";
+import type { Skill, SkillLog } from "../../domain/skills.ts";
+import { findSkill } from "../../domain/skills.ts";
 import type { PlanTask } from "@/domain/routine";
 import type { NapLog, SleepLog } from "../../domain/sleep.ts";
 import type { Quantity } from "@/domain/quantity";
@@ -201,6 +210,125 @@ export type NapRepository = {
 };
 
 /**
+ * Skills: the user's replacement-activity list, and what has been done with them.
+ *
+ * `findByName` loads the (at most ten) rows and hands them to the domain's `findSkill`, so
+ * "the same skill" means one thing in the application rather than two — the rule this file's own
+ * header already states for items and accounts.
+ */
+export type SkillRepository = {
+  /** Every skill, in the order the user created them. That order is what the swap list shows. */
+  listAll(): Skill[];
+  /** The skill with this name, or `null`. Matching is the domain's. */
+  findByName(name: string): Skill | null;
+  /** Adds one. The name has already been validated by the domain. */
+  insert(name: string): PersistenceResult<Skill>;
+  /**
+   * Appends one use.
+   *
+   * `timestamp` is the server's and `minutes` is the duration the user stated, or `null` when
+   * they did not say. Nothing here derives a duration or a time.
+   */
+  appendLog(
+    skillId: number,
+    timestamp: string,
+    minutes: number | null,
+  ): PersistenceResult<SkillLog>;
+  /**
+   * Recent log entries across all skills, newest first, for the per-skill tally.
+   *
+   * Bounded, because a tally over an unbounded table would be a table scan of a personal database
+   * that will never be large. The limit is generous enough that no real tally is truncated; the
+   * page says nothing about totals it cannot see.
+   */
+  recentLogs(limit: number): SkillLog[];
+};
+
+/**
+ * `habit_log`: cooking, dishes, laundry, and manually entered screen time.
+ *
+ * There is no unique constraint on `(date, type)` — the schema came that way from micro-phase
+ * 1.1 and changing it would be a redesign. "One row per type per day" is therefore maintained by
+ * the executor, which deletes and inserts inside one transaction. `findForDay` is what it reads
+ * to decide whether it needs to.
+ */
+export type HabitRepository = {
+  findForDay(date: CalendarDate, type: LoggableHabitType): HabitLog | null;
+  /**
+   * One entry by its row id, or `null`.
+   *
+   * Exists for the photo route, which is handed an id from a URL and must confirm the row exists
+   * and carries a photo before it reads a file. No other caller uses it: every other read asks
+   * for a day or a window, which is what a page wants and what this repository was shaped for.
+   */
+  findById(id: number): HabitLog | null;
+  /** Removes one type's row for one day. Used only inside the executor's transaction. */
+  deleteForDay(
+    date: CalendarDate,
+    type: LoggableHabitType,
+  ): PersistenceResult<void>;
+  /** Writes one row. */
+  insertHabit(habit: HabitLog): PersistenceResult<HabitLog>;
+  /**
+   * Sets the photo URL on one day's row for one type, and returns the row.
+   *
+   * A separate call because the URL contains the id, and the id comes from the insert — so the
+   * two cannot be one statement. The photo route runs both inside one transaction, which is what
+   * makes the pair atomic: a row with no photo, or a photo with no row, never both survive.
+   *
+   * Updating by `(date, type)` rather than by id is what keeps it a single statement without
+   * knowing the id in advance. It is not a lookup path — nothing else calls this.
+   */
+  attachPhoto(
+    date: CalendarDate,
+    type: LoggableHabitType,
+    photoUrl: string,
+  ): PersistenceResult<HabitLog>;
+  /** Every entry on one day, in the order the rows were written. */
+  listForDate(date: CalendarDate): HabitLog[];
+  /**
+   * Every entry from `from` to `to` inclusive.
+   *
+   * Used for the PRD's "twice a week" laundry target over a trailing seven days, and for the photo
+   * timeline. Both need a window rather than a single day.
+   */
+  listBetween(from: CalendarDate, to: CalendarDate): HabitLog[];
+  /** The most recent entries that have a photo attached, newest first: the photo timeline. */
+  listWithPhotos(limit: number): HabitLog[];
+};
+
+/**
+ * `private_log`: doom-scrolling and masturbation entries.
+ *
+ * ## Why this is its own repository
+ *
+ * A private entry is a fact the user chose to record about their own behaviour, and the PRD
+ * prohibits showing it as a streak, a score, or a bar. The cheapest way to keep that promise is
+ * structural: private rows are reachable through exactly one repository, which one feature module
+ * owns, and no other repository can return them. A Dashboard that wanted a private entry would have
+ * to call this, and the eslint boundary for that feature is what stops it.
+ *
+ * Nothing here aggregates. There is no count, no total, and no grouping — the only read is a
+ * bounded list of entries for display, because a count of these entries is a tally of them.
+ */
+export type PrivateLogRepository = {
+  /** The entry for a day and type, or `null`. */
+  findForDay(date: CalendarDate, type: PrivateType): PrivateLogEntry | null;
+  /** Writes one entry, replacing that day and type's entry. */
+  insertEntry(entry: PrivateLogEntry): PersistenceResult<PrivateLogEntry>;
+  /**
+   * Removes one day's entry for one type.
+   *
+   * Used only by a "no" answer. A private log has no use for a row that records an absence — the
+   * row would be an entry, and entries are what a reader sees — so removing it is the whole of
+   * the correction, and it is the only path that can shrink this table.
+   */
+  removeForDay(date: CalendarDate, type: PrivateType): PersistenceResult<void>;
+  /** The most recent entries, newest first. A list for reading, never a number. */
+  listRecent(limit: number): PrivateLogEntry[];
+};
+
+/**
  * Read-only queries the pages need to display persisted state.
  *
  * Kept separate from the command surface above, and for a real reason: those six methods
@@ -208,6 +336,12 @@ export type NapRepository = {
  * executor. These exist because a human needs to see what was written, and they are
  * exercised by rendering a page. Conflating them would invite a write query into a render
  * path, which is how a "read" endpoint ends up mutating state.
+ *
+ * `skill`, `skill_log`, and `private_log` are deliberately **absent**. Each has exactly one
+ * reader — `SkillRepository` and `PrivateLogRepository` — owned by the feature that owns the
+ * behaviour, which is the same single-reader rule ADR-050 applied to `plan_task`. A second read
+ * here would be a second definition of what the swap list shows, or a second door to the private
+ * log, and neither is worth the convenience.
  */
 export type DisplayQueries = {
   /** Every tracked item, ordered by name. */
@@ -220,21 +354,6 @@ export type DisplayQueries = {
   expensesForDate(date: string): RecentExpense[];
   /** Spend for one UTC calendar day, plus how many entries it came from. */
   spendForDate(date: string): { total: MinorUnits; count: number };
-  /**
-   * The plan for one calendar day, in the order the rows were written.
-   *
-   * `ORDER BY id` is the ordering rule the morning view depends on: the first task written
-   * is the first one to do. See `src/domain/routine.ts`.
-   */
-  /**
-   * The habit entries recorded on one calendar day.
-   *
-   * Read-only and additive: `habit_log` has existed since micro-phase 1.1, so reading it is not a
-   * new capability, and nothing in `src/` writes to it. Rows whose `type` is outside the closed
-   * set are dropped rather than coerced — the schema's CHECK makes that impossible while it holds,
-   * and inventing a habit the user never logged is worse than omitting one.
-   */
-  habitsForDate(date: string): HabitEntry[];
   /**
    * The most recent stock movements, newest first, with the item name resolved.
    *
@@ -255,20 +374,16 @@ export type RecentExpense = {
   readonly category: string | null;
 };
 
-/** One `habit_log` row, read-only, with the photo reduced to whether one is attached. */
-export type HabitEntry = {
-  readonly type: HabitType;
-  readonly done: boolean;
-  /** `photo_url IS NOT NULL`. The path itself is never read: nothing renders or serves it in V1. */
-  readonly hasPhoto: boolean;
-};
-
 export type Repositories = {
   readonly display: DisplayQueries;
   readonly inventory: InventoryRepository;
   readonly accounts: AccountRepository;
   readonly expenses: ExpenseRepository;
   readonly tasks: TaskRepository;
+  readonly skills: SkillRepository;
+  readonly habits: HabitRepository;
+  /** Private entries are reachable only through here. See `PrivateLogRepository`. */
+  readonly privateLog: PrivateLogRepository;
   readonly sleep: SleepRepository;
   readonly naps: NapRepository;
   /**
@@ -425,6 +540,75 @@ export function createRepositories(database: DatabaseHandle): Repositories {
   const lastNapRows = database.prepare(
     "SELECT id, date, start, end FROM nap_log WHERE date = ? ORDER BY id DESC LIMIT 1",
   );
+  const selectSkills = database.prepare(
+    "SELECT id, name, active FROM skill ORDER BY id",
+  );
+  const selectSkillById = database.prepare(
+    "SELECT id, name, active FROM skill WHERE id = ?",
+  );
+  const nextSkillId = database.prepare(
+    "SELECT COALESCE(MAX(id), 0) + 1 AS next FROM skill",
+  );
+  const insertSkillRow = database.prepare(
+    "INSERT INTO skill (id, name, active) VALUES (?, ?, 1)",
+  );
+  const insertSkillLogRow = database.prepare(
+    "INSERT INTO skill_log (skill, timestamp, minutes) VALUES (?, ?, ?)",
+  );
+  const selectSkillLogs = database.prepare(
+    `SELECT l.id, l.skill, l.timestamp, l.minutes, s.name AS skill_name
+     FROM skill_log l
+     JOIN skill s ON s.id = l.skill
+     ORDER BY l.timestamp DESC, l.id DESC
+     LIMIT ?`,
+  );
+  const selectHabitsForDate = database.prepare(
+    `SELECT id, date, type, done, photo_url, minutes
+     FROM habit_log WHERE date = ? ORDER BY id`,
+  );
+  const selectHabitsBetween = database.prepare(
+    `SELECT id, date, type, done, photo_url, minutes
+     FROM habit_log WHERE date BETWEEN ? AND ? ORDER BY date, id`,
+  );
+  const selectHabitsWithPhotos = database.prepare(
+    `SELECT id, date, type, done, photo_url, minutes
+     FROM habit_log
+     WHERE photo_url IS NOT NULL
+     ORDER BY date DESC, id DESC
+     LIMIT ?`,
+  );
+  const selectHabitById = database.prepare(
+    `SELECT id, date, type, done, photo_url, minutes
+     FROM habit_log WHERE id = ?`,
+  );
+  const selectHabitForDay = database.prepare(
+    `SELECT id, date, type, done, photo_url, minutes
+     FROM habit_log WHERE date = ? AND type = ?`,
+  );
+  const deleteHabitForDay = database.prepare(
+    "DELETE FROM habit_log WHERE date = ? AND type = ?",
+  );
+  const insertHabitRow = database.prepare(
+    `INSERT INTO habit_log (date, type, done, photo_url, minutes)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  const attachHabitPhotoRow = database.prepare(
+    `UPDATE habit_log SET photo_url = ?
+     WHERE date = ? AND type = ?
+     RETURNING id, date, type, done, photo_url, minutes`,
+  );
+  const selectPrivateForDay = database.prepare(
+    "SELECT id, date, type, note FROM private_log WHERE date = ? AND type = ?",
+  );
+  const deletePrivateForDay = database.prepare(
+    "DELETE FROM private_log WHERE date = ? AND type = ?",
+  );
+  const insertPrivateRow = database.prepare(
+    "INSERT INTO private_log (date, type, note) VALUES (?, ?, ?)",
+  );
+  const selectPrivateRecent = database.prepare(
+    "SELECT id, date, type, note FROM private_log ORDER BY date DESC, id DESC LIMIT ?",
+  );
   const listNapsRows = database.prepare(
     "SELECT id, date, start, end FROM nap_log WHERE date = ? ORDER BY id",
   );
@@ -570,6 +754,190 @@ export function createRepositories(database: DatabaseHandle): Repositories {
 
       listNapsForDate(date) {
         return (listNapsRows.all(date) as NapRow[]).map(toNap);
+      },
+    },
+
+    skills: {
+      listAll() {
+        return (selectSkills.all() as SkillRow[]).map(toSkill);
+      },
+
+      findByName(name) {
+        // The domain owns what counts as the same name; this only supplies the candidates.
+        return findSkill((selectSkills.all() as SkillRow[]).map(toSkill), name);
+      },
+
+      insert(name) {
+        try {
+          const { next } = nextSkillId.get() as { next: number };
+
+          insertSkillRow.run(next, name);
+
+          const row = selectSkillById.get(next) as SkillRow | undefined;
+
+          if (row === undefined) {
+            throw new Error(
+              "the skill row disappeared immediately after insertion",
+            );
+          }
+
+          return { ok: true, value: toSkill(row) };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      appendLog(skillId, timestamp, minutes) {
+        try {
+          const result = insertSkillLogRow.run(skillId, timestamp, minutes);
+
+          return {
+            ok: true,
+            value: {
+              id: Number(result.lastInsertRowid),
+              skillId,
+              timestamp,
+              minutes,
+            },
+          };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      recentLogs(limit) {
+        return (selectSkillLogs.all(limit) as SkillLogRow[]).map((row) => ({
+          id: row.id,
+          skillId: row.skill,
+          timestamp: row.timestamp,
+          minutes: row.minutes,
+        }));
+      },
+    },
+
+    habits: {
+      findForDay(date, type) {
+        const row = selectHabitForDay.get(date, type) as
+          HabitLogRow | undefined;
+
+        return row === undefined ? null : toHabitLog(row);
+      },
+
+      deleteForDay(date, type) {
+        try {
+          deleteHabitForDay.run(date, type);
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      insertHabit(habit) {
+        try {
+          const result = insertHabitRow.run(
+            habit.date,
+            habit.type,
+            habit.done ? 1 : 0,
+            habit.photoUrl,
+            habit.minutes,
+          );
+
+          return {
+            ok: true,
+            value: { ...habit, id: Number(result.lastInsertRowid) },
+          };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      attachPhoto(date, type, photoUrl) {
+        try {
+          const row = attachHabitPhotoRow.get(photoUrl, date, type) as
+            HabitLogRow | undefined;
+
+          if (row === undefined) {
+            // Reported as a persistence failure rather than a domain one: the row this statement
+            // requires was written by the statement immediately before it in the same
+            // transaction, so its absence means the write failed, not that the user asked for
+            // something that does not exist.
+            return {
+              ok: false,
+              error: {
+                code: "persistence_failed",
+                message: `No ${type} row exists for ${date}, so the photo was not attached.`,
+              },
+            };
+          }
+
+          return { ok: true, value: toHabitLog(row) };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      findById(id) {
+        const row = selectHabitById.get(id) as HabitLogRow | undefined;
+
+        return row === undefined ? null : toHabitLog(row);
+      },
+
+      listForDate(date) {
+        return (selectHabitsForDate.all(date) as HabitLogRow[]).map(toHabitLog);
+      },
+
+      listBetween(from, to) {
+        return (selectHabitsBetween.all(from, to) as HabitLogRow[]).map(
+          toHabitLog,
+        );
+      },
+
+      listWithPhotos(limit) {
+        return (selectHabitsWithPhotos.all(limit) as HabitLogRow[]).map(
+          toHabitLog,
+        );
+      },
+    },
+
+    privateLog: {
+      findForDay(date, type) {
+        const row = selectPrivateForDay.get(date, type) as
+          PrivateLogRow | undefined;
+
+        return row === undefined ? null : toPrivateLog(row);
+      },
+
+      insertEntry(entry) {
+        try {
+          database.transaction(() => {
+            deletePrivateForDay.run(entry.date, entry.type);
+            insertPrivateRow.run(entry.date, entry.type, entry.note);
+          })();
+
+          return {
+            ok: true,
+            value: { ...entry, id: lastInsertedId(database) },
+          };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      removeForDay(date, type) {
+        try {
+          deletePrivateForDay.run(date, type);
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+
+      listRecent(limit) {
+        return (selectPrivateRecent.all(limit) as PrivateLogRow[]).map(
+          toPrivateLog,
+        );
       },
     },
 
@@ -818,6 +1186,78 @@ function toNap(row: NapRow): NapLog {
   return { id: row.id, date: row.date, start: row.start, end: row.end };
 }
 
+/** One `skill` row. */
+type SkillRow = {
+  id: number;
+  name: string;
+  active: number;
+};
+
+/** One `skill_log` row, joined to its skill. Only the ids and the stated facts are read. */
+type SkillLogRow = {
+  id: number;
+  skill: number;
+  timestamp: string;
+  minutes: number | null;
+};
+
+/** One `habit_log` row. */
+type HabitLogRow = {
+  id: number;
+  date: string;
+  type: string;
+  done: number;
+  photo_url: string | null;
+  minutes: number | null;
+};
+
+/** One `private_log` row. */
+type PrivateLogRow = {
+  id: number;
+  date: string;
+  type: string;
+  note: string | null;
+};
+
+function toSkill(row: SkillRow): Skill {
+  return { id: row.id, name: row.name, active: row.active === 1 };
+}
+
+function toHabitLog(row: HabitLogRow): HabitLog {
+  // A row whose type the domain does not recognise is refused rather than coerced. The schema's
+  // CHECK is the reason it cannot happen today; inventing a habit the user never logged would be
+  // worse than omitting one if it ever did.
+  if (!isLoggableHabitType(row.type)) {
+    throw new Error(`habit_log holds an unknown type: ${row.type}`);
+  }
+
+  return {
+    id: row.id,
+    date: row.date,
+    type: row.type,
+    done: row.done === 1,
+    photoUrl: row.photo_url,
+    minutes: row.minutes,
+  };
+}
+
+function toPrivateLog(row: PrivateLogRow): PrivateLogEntry {
+  if (row.type !== "doom_scrolling" && row.type !== "masturbation") {
+    throw new Error(`private_log holds an unknown type: ${row.type}`);
+  }
+
+  return { id: row.id, date: row.date, type: row.type, note: row.note };
+}
+
+/** The id of the row just inserted on this connection. */
+function lastInsertedId(database: DatabaseHandle): number {
+  const row = database.prepare("SELECT last_insert_rowid() AS id").get() as {
+    id: number;
+  };
+
+  return Number(row.id);
+}
+
 function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
   const listInventoryRows = database.prepare(
     "SELECT id, name, quantity, unit, low_threshold FROM inventory_item ORDER BY name COLLATE NOCASE",
@@ -841,9 +1281,6 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
      JOIN account a ON a.id = e.account
      WHERE substr(e.timestamp, 1, 10) = ?
      ORDER BY e.timestamp DESC, e.id DESC`,
-  );
-  const habitsForDateRows = database.prepare(
-    "SELECT type, done, photo_url FROM habit_log WHERE date = ? ORDER BY id",
   );
   const recentEventRows = database.prepare(
     `SELECT e.id, e.item AS item_id, e.delta, e.timestamp, e.source_text, i.name AS item_name
@@ -887,22 +1324,6 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
       };
 
       return { total: row.total, count: row.count };
-    },
-
-    habitsForDate(date) {
-      return (
-        habitsForDateRows.all(date) as {
-          type: string;
-          done: number;
-          photo_url: string | null;
-        }[]
-      )
-        .filter((row) => isHabitType(row.type))
-        .map((row) => ({
-          type: row.type as HabitType,
-          done: row.done === 1,
-          hasPhoto: row.photo_url !== null,
-        }));
     },
 
     recentInventoryEvents(limit) {

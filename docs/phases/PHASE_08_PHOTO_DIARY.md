@@ -1,6 +1,19 @@
 # Phase 8 — Photo and Diary
 
-**Status: Planned**
+**Status: Planned — scope needs a decision before any code is written**
+
+**Scope note added 2026-10-01, after Phase 7.** The first two scope items below were delivered by
+Phase 7, not deferred to this phase: `POST /api/photos` and `GET /api/photos/<id>/<filename>` write
+and serve real pictures under `data/uploads/`, with magic-byte validation, server-generated names, a
+size limit, and no path ever stored (ADR-051). Laundry cannot be completed by a sentence alone, and
+`/habits` shows a Photo Diary timeline of those pictures.
+
+What is left, and the reason this status says "needs a decision": the PRD describes a diary of
+laundry photos **and daily notes**. Photos are handled; notes have nowhere to live.
+`habit_log.photo_url` is the only column that can hold a picture, and no table exists for a dated
+note. Adding one is a schema change this phase document was not written to authorise, so the
+question — is a diary entry a photo, a note, or a row of its own? — is the user's to answer before
+Phase 8 starts.
 
 Scope taken from `Hari_OS_V1_PRD.docx` sections 6.6 and 1. This document does not expand it.
 
@@ -11,11 +24,12 @@ PRD describes as a timeline of laundry photos and daily notes.
 
 ## Scope
 
-- **Laundry photo proof**, replacing the Phase 7 placeholder. PRD section 6.6: the
-  application does not accept a text claim alone.
+- **Laundry photo proof.** PRD section 6.6: the application does not accept a text claim alone.
+  **Delivered in Phase 7** — there is no placeholder left to replace.
 - **Local filesystem upload storage.** Files land under `data/uploads/`, never in `public/`
   (ADR-001; the PRD's Supabase Storage option was rejected in favour of the local
-  filesystem).
+  filesystem). **Delivered in Phase 7**, in `src/lib/storage/photos.ts` with the feature slice
+  owning every write (ADR-051, ADR-055).
 - **Photo access through the PWA**, using the installable-app and camera access the PRD
   requires in sections 1 and 7. This is where the PWA foundation prepared in Phase 0 is
   finally used.
@@ -26,7 +40,8 @@ PRD describes as a timeline of laundry photos and daily notes.
 
 - Phase 1 complete: schema and a working data path.
 - Phase 7 provides the laundry habit that the photo attaches to.
-- `src/lib/storage/` becomes real. It currently holds only a README stating the boundary.
+- `src/lib/storage/` becomes real. **Done in Phase 7**; it holds `photos.ts` and a README that has
+  been updated to say so.
 - A PWA package is likely required here for installability and camera access. Phase 0
   deliberately added none (ADR-003). The package must be chosen and recorded as an ADR at
   the time this phase starts, not before.

@@ -113,7 +113,6 @@ const port = 3600 + Math.floor(Math.random() * 400);
 const base = `http://127.0.0.1:${port}`;
 
 /** Today, as the application will compute it, so the checks below can name the day. */
-const today = new Date().toISOString().slice(0, 10);
 const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 
 async function waitForServer(attempts = 60) {

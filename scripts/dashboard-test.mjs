@@ -526,8 +526,13 @@ console.log("\n# 11-14. empty states, and modules that do not exist");
   );
   assertEqual(
     empty.skillsAvailable,
+    true,
+    "14. the Skills list is declared available, and separately is empty",
+  );
+  assertEqual(
+    "skills" in empty,
     false,
-    "14. the Skills list is declared unavailable rather than shown empty",
+    "14. and the model carries no skills list at all: the entry point opens the page, it does not summarise it",
   );
 
   // 14: the model carries exactly the fields the page renders, and no others.
@@ -567,11 +572,18 @@ console.log("\n# 11-14. empty states, and modules that do not exist");
 
   const dashboard = readDashboard();
 
-  assertEqual(dashboard.skillsAvailable, false, "20. Skills is not available");
+  // Phase 7: `/skills` exists, so the Dashboard's urge entry point opens it. The flag is a build
+  // fact and is true on an empty database — which is the distinction these two assertions exist
+  // to draw. An empty list and an unavailable module are different states and must not be conflated.
+  assertEqual(
+    dashboard.skillsAvailable,
+    true,
+    "20. Skills is available, and the urge entry point opens it",
+  );
   assertEqual(
     SKILLS_AVAILABLE,
-    false,
-    "20. and the flag says so, not a data-dependent guess",
+    true,
+    "20. and the flag is a build fact, not a data-dependent guess",
   );
   assert(
     !Object.values(dashboard).some(

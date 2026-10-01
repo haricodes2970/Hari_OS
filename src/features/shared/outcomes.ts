@@ -38,6 +38,20 @@ export type OutcomeToken =
   | "unknown_nap"
   | "nap_already_ended"
   | "invalid_task_selection"
+  // Phase 7. Skills, habits, and the private log. Every one of these is a refusal the user can
+  // act on, so each has its own wording rather than a shared apology.
+  | "invalid_skill_name"
+  | "skill_limit_reached"
+  | "duplicate_skill"
+  | "unknown_skill"
+  | "invalid_skill_minutes"
+  | "unknown_habit"
+  | "photo_required"
+  | "invalid_habit_minutes"
+  | "invalid_private_type"
+  | "invalid_private_note"
+  | "invalid_photo"
+  | "photo_too_large"
   | "persistence_failed";
 
 /** The first thing a person needs to know, in their own terms. */
@@ -71,6 +85,32 @@ const DOMAIN_MESSAGES: Record<string, string> = {
   nap_already_ended: "That nap already has an end time.",
   invalid_task_selection:
     "The check-in takes one to three task titles, each one a line of text.",
+  // Phase 7. Skills first. The limit message says what the limit is and what to do about it,
+  // because "too many" alone leaves the user guessing whether they are at nine or ninety.
+  invalid_skill_name:
+    "A skill needs a name, at most 80 characters, with no control characters.",
+  skill_limit_reached:
+    "The list already holds 10 skills, which is the most the PRD allows. Remove one before adding another.",
+  duplicate_skill:
+    "That skill is already on the list. Log a use of it instead of adding it again.",
+  unknown_skill:
+    "That skill is not on the list. Add it first, then log the use.",
+  invalid_skill_minutes:
+    "A duration has to be a whole number of minutes, zero or more, and at most 1440.",
+  // Then habits. The laundry message names the requirement rather than merely refusing, because
+  // a text claim is exactly what the user just tried and they are owed the reason.
+  unknown_habit: "That habit is not one this application records.",
+  photo_required:
+    "Laundry is recorded with a photo, because a text claim alone is not proof. Upload one on the Habits page.",
+  invalid_habit_minutes:
+    "Screen time has to be a whole number of minutes, zero or more, and at most 1440. The other habits are recorded as done or not done.",
+  invalid_private_type:
+    "That is not one of the two behaviours the private log records.",
+  invalid_private_note:
+    "A note can be at most 500 characters, and cannot contain control characters.",
+  invalid_photo:
+    "That file is not a JPEG, PNG, WebP, or GIF image, so it was not stored.",
+  photo_too_large: "That photo is over the 10 MB limit. Try a smaller one.",
 };
 
 function isDomainMessage(code: string): code is keyof typeof DOMAIN_MESSAGES {

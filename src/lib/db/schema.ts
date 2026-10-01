@@ -24,7 +24,7 @@ export const EXPECTED_TABLES: Record<string, readonly string[]> = {
   expense: ["id", "timestamp", "item", "amount", "account", "category"],
   skill: ["id", "name", "active"],
   skill_log: ["id", "skill", "timestamp", "minutes"],
-  habit_log: ["id", "date", "type", "done", "photo_url"],
+  habit_log: ["id", "date", "type", "done", "photo_url", "minutes"],
   private_log: ["id", "date", "type", "note"],
 };
 
@@ -62,8 +62,11 @@ export const EXPECTED_CONSTRAINTS: Record<string, readonly string[]> = {
     "typeof(minutes) = 'integer'",
   ],
   habit_log: [
-    "type TEXT NOT NULL CHECK (type IN ('cooking', 'dishes', 'laundry'))",
+    // `screen_time` and `minutes` arrived with migration 002. See `SCREEN_TIME_MIGRATION` in
+    // `migrations.ts` for why the table was rebuilt rather than altered.
+    "type TEXT NOT NULL CHECK (type IN ('cooking', 'dishes', 'laundry', 'screen_time'))",
     "typeof(done) = 'integer'",
+    "minutes INTEGER",
   ],
   private_log: [
     "type TEXT NOT NULL CHECK (type IN ('doom_scrolling', 'masturbation'))",

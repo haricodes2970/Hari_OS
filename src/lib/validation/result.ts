@@ -31,6 +31,14 @@ export type ValidationIssueCode =
   | "invalid_money"
   /** An account name is not one of the three accounts. */
   | "invalid_account"
+  /**
+   * A string field is one of a closed set and is not one of them.
+   *
+   * Distinct from `wrong_type` because the type is right and the value is not: `type:
+   * "scroll"` is a well-formed string that names no habit the application records, and telling
+   * the user it "must be a string" would be useless. The message names the accepted values.
+   */
+  | "unknown_value"
   /** `version` is present but is not the current contract version. */
   | "unsupported_version";
 

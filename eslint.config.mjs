@@ -541,6 +541,94 @@ const enforcedBoundaries = [
     },
   },
   {
+    name: "hari-os/skills-boundaries-enforced",
+    files: ["src/features/skills/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: persistenceModules,
+              message:
+                "The Skills slice reaches storage through src/features/shared/command-runtime and may not open a database, touch the filesystem, or import a driver itself.",
+            },
+            {
+              group: providerModules,
+              message:
+                "Skills renders and records what the user named. It must not know a language model exists, and it never asks one what to do.",
+            },
+            {
+              group: [
+                "@/commands/executor",
+                "@/features/kitchen/setup",
+                "@/features/kitchen/correction",
+                "@/features/expenses/write",
+              ],
+              message:
+                "A feature may not reach into another's write side. Every change on this application goes through the command endpoint or the feature's own route.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: "hari-os/habits-boundaries-enforced",
+    files: ["src/features/habits/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              // `@/lib/storage` is deliberately absent from this group, and that is the one
+              // difference from the Routine and Dashboard scopes: photos are files, and a feature
+              // is the only layer allowed to own them. `src/app` is forbidden from storage by
+              // `hari-os/application-boundaries-enforced`, so the Habits slice is where a photo
+              // may legitimately be written and read. Everything else that touches the disk
+              // directly is still refused, so this slice cannot invent its own filesystem access
+              // beside the storage module's.
+              group: [
+                "@/lib/db/connection",
+                "@/lib/db/migrations",
+                "@/lib/db/schema",
+                "better-sqlite3",
+                "node:fs",
+                "node:fs/*",
+                "node:os",
+                "node:path",
+                "node:child_process",
+                "node:worker_threads",
+                "node:net",
+                "node:http",
+                "node:https",
+                "next/*",
+              ],
+              message:
+                "The Habits slice writes photos through src/lib/storage and reaches the database through src/features/shared/command-runtime. It may not open a handle, import a driver, or touch the disk itself.",
+            },
+            {
+              group: providerModules,
+              message:
+                "Habits renders and records what the user stated. It must not know a language model exists, and it never asks one what to do.",
+            },
+            {
+              group: [
+                "@/commands/executor",
+                "@/features/kitchen/setup",
+                "@/features/kitchen/correction",
+                "@/features/expenses/write",
+              ],
+              message:
+                "A feature may not reach into another's write side. Every change on this application goes through the command endpoint or the feature's own route.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     name: "hari-os/application-boundaries-enforced",
     files: ["src/app/**/*.{ts,tsx}"],
     rules: {

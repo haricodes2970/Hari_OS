@@ -51,6 +51,13 @@ const TEXT_FIELDS = [
   "time",
   "day",
   "field",
+  // Phase 7. A skill's name, the skill a use refers to, which habit or private behaviour a
+  // sentence named, and the user's own note. Copied as words, with no interpretation: the
+  // executor resolves names to rows and the domain decides what is allowed.
+  "name",
+  "skillName",
+  "type",
+  "note",
 ] as const;
 
 function text(form: FormData, name: string): string {
@@ -137,6 +144,14 @@ export function formToCommand(form: FormData): Record<string, unknown> {
     command.quantity = numberField(quantity);
   }
 
+  // `minutes` is a whole number of minutes the user stated. Not validated here: an hour and a
+  // half is refused by the domain with a sentence about minutes, which is more useful than a
+  // silent rounding to 90.
+  const minutes = text(form, "minutes");
+  if (minutes !== "") {
+    command.minutes = numberField(minutes);
+  }
+
   const amount = text(form, "amount");
   if (amount !== "") {
     command.amount =
@@ -144,9 +159,16 @@ export function formToCommand(form: FormData): Record<string, unknown> {
   }
 
   // Same reasoning as `amount`, one field earlier: the wire format has no boolean.
+  // `happened` is a private entry's yes/no and is treated the same way — for the same reason, and
+  // because a checkbox that posts "1" is not a yes.
   const done = text(form, "done");
   if (done !== "") {
     command.done = booleanField(done);
+  }
+
+  const happened = text(form, "happened");
+  if (happened !== "") {
+    command.happened = booleanField(happened);
   }
 
   return command;

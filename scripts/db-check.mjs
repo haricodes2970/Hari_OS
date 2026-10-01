@@ -30,6 +30,11 @@ function pass(message) {
   console.log(`ok    ${message}`);
 }
 
+/** Collapses every run of whitespace to one space, so wrapping cannot change a match. */
+function collapse(sql) {
+  return sql.replace(/\s+/gu, " ").trim();
+}
+
 const databasePath = getDatabasePath();
 
 console.log(`Hari OS database check\n  path: ${databasePath}\n`);
@@ -151,8 +156,17 @@ for (const [table, fragments] of Object.entries(EXPECTED_CONSTRAINTS)) {
     continue;
   }
 
-  const sql = found.get(table);
-  const missing = fragments.filter((fragment) => !sql.includes(fragment));
+  // Whitespace is collapsed before matching, on both sides.
+  //
+  // A constraint check that depends on line wrapping is a check that fails the day someone
+  // reformats a migration, and migration 002 made that a certainty rather than a risk: SQLite
+  // stores the exact CREATE text it was given, and a table rebuilt by `ALTER TABLE ... RENAME`
+  // comes back quoted and wrapped however the migration happened to wrap it. What is being
+  // checked is the shape of the constraint, not the layout of the file that declared it.
+  const sql = collapse(found.get(table));
+  const missing = fragments.filter(
+    (fragment) => !sql.includes(collapse(fragment)),
+  );
 
   if (missing.length > 0) {
     fail(

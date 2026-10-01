@@ -273,13 +273,13 @@ const zeroAmount = expectValid(
 );
 assertEqual(zeroAmount.amount, 0, "zero money is accepted without becoming -0");
 
-// Every declared discriminator is reachable. Phase 6 added the routine and sleep families, so
-// the count is ten: the sample table below is the test that a new kind cannot be declared
+// Every declared discriminator is reachable. Phase 7 added skills, habits, and the private log,
+// so the count is fourteen: the sample table below is the test that a new kind cannot be declared
 // without a minimal valid example.
 assertEqual(
   COMMAND_KINDS.length,
-  10,
-  "the contract declares ten command kinds",
+  14,
+  "the contract declares fourteen command kinds",
 );
 for (const kind of COMMAND_KINDS) {
   const samples = {
@@ -298,6 +298,10 @@ for (const kind of COMMAND_KINDS) {
     "sleep.record": { field: "bedtime", time: "23:00" },
     "nap.start": { time: "14:00" },
     "nap.end": { time: "14:45" },
+    "skill.create": { name: "10 pushups" },
+    "skill.log": { skillName: "10 pushups" },
+    "habit.record": { type: "cooking", done: true },
+    "private.log": { type: "doom_scrolling", happened: true },
   };
 
   expectValid(

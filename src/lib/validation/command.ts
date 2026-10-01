@@ -31,6 +31,7 @@
  * to read. See ADR-031.
  */
 import { isAccountName, type AccountName } from "../../domain/accounts.ts";
+import { isLoggableHabitType, isPrivateType } from "../../domain/habits.ts";
 import { isMoneyAmount } from "../../domain/money.ts";
 import { isQuantity } from "../../domain/quantity.ts";
 import { isDayReference, type DayReference } from "../../domain/routine.ts";
@@ -41,6 +42,7 @@ import {
   isCommandKind,
   type Command,
 } from "../../commands/contract.ts";
+import type { LoggableHabitType, PrivateType } from "../../domain/habits.ts";
 import {
   invalid,
   valid,
@@ -72,6 +74,13 @@ const KEYS_BY_KIND = {
   "sleep.record": [...BASE_KEYS, "field", "time", "day"],
   "nap.start": [...BASE_KEYS, "time", "day"],
   "nap.end": [...BASE_KEYS, "time", "day"],
+  // Phase 7. `habit.record` and `private.log` carry no field that could hold a count or a
+  // proof: the photo requirement is settled by the photo route, and a private entry has
+  // nowhere to state how many times anything happened.
+  "skill.create": [...BASE_KEYS, "name"],
+  "skill.log": [...BASE_KEYS, "skillName", "minutes"],
+  "habit.record": [...BASE_KEYS, "type", "done", "minutes", "day"],
+  "private.log": [...BASE_KEYS, "type", "happened", "note", "day"],
 } as const satisfies Record<string, readonly string[]>;
 
 const MISSING = Symbol("missing");
@@ -442,6 +451,121 @@ function readBoolean(
 }
 
 /**
+ * Reads one of the PRD's four loggable habit types.
+ *
+ * The list is closed rather than open, so an unrecognised type is a failure that names the four
+ * that exist. An unknown type must never be stored: the schema's `CHECK` would refuse it, and
+ * the user would be told their sentence was invalid without being told what the valid answers
+ * are.
+ */
+function readHabitType(
+  value: unknown,
+  issues: ValidationIssue[],
+): LoggableHabitType | null {
+  if (value === MISSING) {
+    issues.push({
+      path: "type",
+      code: "missing_field",
+      message: "`type` is required.",
+    });
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    issues.push({
+      path: "type",
+      code: "wrong_type",
+      message: `\`type\` must be a string, received ${typeof value}.`,
+    });
+    return null;
+  }
+
+  if (!isLoggableHabitType(value)) {
+    issues.push({
+      path: "type",
+      code: "unknown_value",
+      message: `\`type\` must be "cooking", "dishes", "laundry", or "screen_time"; received "${value}".`,
+    });
+    return null;
+  }
+
+  return value;
+}
+
+/**
+ * Reads one of the two private types.
+ *
+ * Closed for the same reason as the habit list, and the message names both so the user is never
+ * left guessing which behaviours this application records at all.
+ */
+function readPrivateType(
+  value: unknown,
+  issues: ValidationIssue[],
+): PrivateType | null {
+  if (value === MISSING) {
+    issues.push({
+      path: "type",
+      code: "missing_field",
+      message: "`type` is required.",
+    });
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    issues.push({
+      path: "type",
+      code: "wrong_type",
+      message: `\`type\` must be a string, received ${typeof value}.`,
+    });
+    return null;
+  }
+
+  if (!isPrivateType(value)) {
+    issues.push({
+      path: "type",
+      code: "unknown_value",
+      message: `\`type\` must be "doom_scrolling" or "masturbation"; received "${value}".`,
+    });
+    return null;
+  }
+
+  return value;
+}
+
+/**
+ * Reads an optional whole number of minutes, absent becoming `null`.
+ *
+ * Only an integer is accepted. `12.5` minutes and `"30"` are both failures rather than
+ * roundings, because the number a user reads back must be the number they said. Whether the
+ * number is *sensible* — positive, within a day — is the domain's decision, not this boundary's.
+ */
+function readOptionalMinutes(
+  value: unknown,
+  issues: ValidationIssue[],
+): number | null | typeof MISSING {
+  if (value === MISSING || value === null) {
+    return null;
+  }
+
+  const read = readNumber("minutes", value, issues);
+
+  if (read === MISSING) {
+    return MISSING;
+  }
+
+  if (!Number.isInteger(read)) {
+    issues.push({
+      path: "minutes",
+      code: "wrong_type",
+      message: `\`minutes\` must be a whole number of minutes, received ${read}.`,
+    });
+    return MISSING;
+  }
+
+  return read as number;
+}
+
+/**
  * Validates an untrusted value into a command, or explains every problem with it.
  *
  * Returns a value or a list of issues. It never throws, and it never touches the clock, the
@@ -677,6 +801,72 @@ function readCommand(
         sourceText,
         field,
         time: time as string,
+        day,
+      };
+    }
+  } else if (kind === "skill.create") {
+    const name = readString("name", ownValue(input, "name"), issues);
+
+    if (name !== MISSING) {
+      command = {
+        version,
+        kind: "skill.create",
+        sourceText,
+        name: name as string,
+      };
+    }
+  } else if (kind === "skill.log") {
+    const skillName = readString(
+      "skillName",
+      ownValue(input, "skillName"),
+      issues,
+    );
+    const minutes = readOptionalMinutes(ownValue(input, "minutes"), issues);
+
+    if (skillName !== MISSING && minutes !== MISSING) {
+      command = {
+        version,
+        kind: "skill.log",
+        sourceText,
+        skillName: skillName as string,
+        minutes,
+      };
+    }
+  } else if (kind === "habit.record") {
+    const type = readHabitType(ownValue(input, "type"), issues);
+    const done = readBoolean("done", ownValue(input, "done"), issues);
+    const minutes = readOptionalMinutes(ownValue(input, "minutes"), issues);
+    const day = readDayReference(ownValue(input, "day"), issues);
+
+    if (type !== null && done !== null && minutes !== MISSING) {
+      command = {
+        version,
+        kind: "habit.record",
+        sourceText,
+        type,
+        done,
+        minutes,
+        day,
+      };
+    }
+  } else if (kind === "private.log") {
+    const type = readPrivateType(ownValue(input, "type"), issues);
+    const happened = readBoolean(
+      "happened",
+      ownValue(input, "happened"),
+      issues,
+    );
+    const note = readOptionalString("note", ownValue(input, "note"), issues);
+    const day = readDayReference(ownValue(input, "day"), issues);
+
+    if (type !== null && happened !== null) {
+      command = {
+        version,
+        kind: "private.log",
+        sourceText,
+        type,
+        happened,
+        note,
         day,
       };
     }
