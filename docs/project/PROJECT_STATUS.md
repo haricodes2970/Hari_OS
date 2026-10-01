@@ -54,7 +54,7 @@ is verified, including the provider itself, which is tested against a local HTTP
 | 1.4 — Command execution foundation | `0d94aad` | Complete | Yes |
 | 1.5 — First real vertical slice | `6f95885` | Complete | Yes |
 | 1.6 — Phase 1 foundation verification and closeout | `946d807` | Complete | Yes |
-| 2 — Command engine (natural language) | `pending commit` | Complete | Yes, except the live provider call |
+| 2 — Command engine (natural language) | `35cb0e3` | Complete | Yes, except the live provider call |
 
 ## Active Work
 
@@ -255,7 +255,7 @@ infrastructure.
 
 ## Latest Commit
 
-`946d807` — `docs(1.6): close phase 1 foundation`
+`35cb0e3` — `feat(2): add natural-language command engine`
 
 ## Next Action
 
