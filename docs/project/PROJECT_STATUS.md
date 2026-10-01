@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** 2026-10-01 (Phase 2, command engine)
+- **Last updated:** 2026-10-01 (Phase 3, kitchen inventory)
 - **Repository:** https://github.com/haricodes2970/Hari_OS
 - **Branch:** `main`
 
@@ -11,6 +11,7 @@
 | 0 | Foundation infrastructure | **Complete** |
 | 1 | Application foundation | **Complete** |
 | 2 | Command engine (natural language) | **Complete** |
+| 3 | Kitchen inventory | **Complete** |
 
 **Phase 0 is complete.** All eight micro-phases are done and verified.
 
@@ -24,17 +25,23 @@ a sentence is parsed by a language model into an untrusted proposal, allowlisted
 command candidate, and applied by the Phase 1 executor with no arithmetic performed by the
 model. Detail in `docs/sessions/2026-10-01-session-01.md`.
 
+**Phase 3 is complete.** Kitchen is a real feature rather than the Phase 1 vertical slice. A
+user can add an item, set what counts as low, record use and restock by form or by sentence,
+read the state, and **correct a mistake without anything being deleted**. Quantity arithmetic
+stays in `src/domain`; a correction is an ordinary movement applied through `runCommand`. Detail
+in `docs/sessions/2026-10-01-session-02.md`.
+
 ## Current Micro-Phase
 
-**Phase 2 — Command engine: COMPLETE AND VERIFIED**
+**Phase 3 — Kitchen inventory: COMPLETE AND VERIFIED**
 
-There is no active micro-phase. Phase 2 was delivered as one unit, because the parser, the
-provider, the engine, and the route are only meaningful together: a parser with no route is
-untestable, and a route with no parser is a stub.
+There is no active micro-phase. Phase 3 was delivered as one unit, because the domain rules,
+the event log, the correction path, and the page that displays them are only meaningful
+together.
 
-The automated suite is 717 assertions, up from 460. The live provider call is **not**
-verified — no `OPENROUTER_API_KEY` was available. Everything reachable without a credential
-is verified, including the provider itself, which is tested against a local HTTP stub.
+The automated suite is 920 assertions, up from 717. The live provider call is **not** verified —
+no `OPENROUTER_API_KEY` was available, unchanged from Phase 2. Everything reachable without a
+credential is verified, including the provider, which is tested against a local HTTP stub.
 
 ## Completed Micro-Phases
 
@@ -55,10 +62,11 @@ is verified, including the provider itself, which is tested against a local HTTP
 | 1.5 — First real vertical slice | `6f95885` | Complete | Yes |
 | 1.6 — Phase 1 foundation verification and closeout | `946d807` | Complete | Yes |
 | 2 — Command engine (natural language) | `35cb0e3` | Complete | Yes, except the live provider call |
+| 3 — Kitchen inventory | `pending commit` | Complete | Yes, except the live provider call |
 
 ## Active Work
 
-None. Phases 0, 1, and 2 are complete.
+None. Phases 0, 1, 2, and 3 are complete.
 
 ## Blockers
 
@@ -71,11 +79,15 @@ None.
   against a local HTTP stub in `scripts/chat-test.mjs` section 37 and against an injected
   transport in `scripts/parser-test.mjs` section 21, but the model id, the account, and the
   schema's acceptance by a real provider remain untested. Everything up to the socket is verified.
+- **The parser prompt's handling of a compound sentence is unproven against a real model.** The
+  prompt now instructs the model to report both the count and the use in "I had 10 onions, used
+  2" rather than dropping the count. Whether a real model complies is a question only a live
+  call can answer. The allowlist and the domain rule are verified independently.
 - **Two architecture gaps found during verification and not fixed here.** `src/lib/db` may
   import `@/commands/parser`, and `src/commands` may import
   `@/features/shared/command-runtime`. Both are pre-existing gaps in the Phase 0/1 lint
-  configuration rather than Phase 2 regressions, and neither is exercised by the current code.
-  Closing them is an architecture change and needs an ADR.
+  configuration rather than Phase 2 or 3 regressions, and neither is exercised by the current
+  code. Closing them is an architecture change and needs an ADR.
 
 ## Current State
 
@@ -100,18 +112,26 @@ None.
 - **Every layer now contains code.** `lib/storage/` holds its boundary README only.
 - **Pure domain rules in place** from micro-phase 1.2, in `src/domain/`: money, quantity,
   inventory, and accounts, all returning `Result` and all tested in memory with
-  `npm run domain:test` (170 assertions). Purity is enforced by the `hari-os/domain-purity`
+  `npm run domain:test` (213 assertions). Purity is enforced by the `hari-os/domain-purity`
   lint rule. **The executor calls these operations directly; it contains no arithmetic of
   its own.**
 - **Validated command contract in place** from micro-phase 1.3. `src/commands/contract.ts`
-  declares four command kinds carrying facts only, and `parseCommand` in
+  declares five command kinds carrying facts only, and `parseCommand` in
   `src/lib/validation` turns an untrusted object into a command or a list of specific issues.
-  93 tests, no database dependency, no parser and no LLM.
+  99 tests, no database dependency, no parser and no LLM.
 - **Execution pipeline in place** from micro-phase 1.4. `src/lib/db/repositories.ts` is the
   only module that reads or writes application tables, and `src/commands/executor.ts`
   sequences a validated command: resolve names to rows, apply the domain operation, persist
   the result atomically. 76 integration tests against real SQLite.
-  **Reached in production only through `POST /api/commands`.**
+  **Reached in production through `POST /api/commands` and `POST /api/commands/parse`.**
+- **Command engine in place from Phase 2.** `POST /api/commands/parse` receives a sentence,
+  the model proposes an untrusted result, an allowlist copies a fixed set of fields, and
+  `parseCommand` gates it before the unchanged Phase 1 executor applies it. The only network
+  call in the application is `src/features/chat/openrouter.ts`.
+- **Kitchen is a real feature from Phase 3.** `src/features/kitchen/` holds item setup,
+  correction, and the read side; `POST /api/kitchen` handles the four operations that move no
+  stock (ADR-043). A correction is an ordinary movement through `runCommand`, never a
+  deletion or a direct write (ADR-044).
 - **First vertical slice in place from micro-phase 1.5.** Dashboard (`/`), Kitchen
   (`/kitchen`), and Expenses (`/expenses`) read persisted state and render it. The shared
   `CommandForm` is a Server Component posting to `POST /api/commands` — the single command
@@ -121,12 +141,15 @@ None.
 - **`npm run db:setup`** creates the first-run rows the commands need: three accounts at a
   zero opening balance, and three example stock items. It is idempotent, and nothing in `src/`
   creates rows (ADR-039). `getDb()` migrates on open, so a new database renders empty states
-  instead of erroring (ADR-038).
+  instead of erroring (ADR-038). An inventory item can now also be added from the Kitchen page.
 - **`npm run app:test`** runs 68 tests covering form translation, return-path safety, the
   end-to-end slice, failure containment, outcome reporting, and display reads, against real
   SQLite on a disposable database.
-- No parser, no LLM dependency, no OpenRouter, no pages beyond the three above, no
-  authentication, no uploads, no test framework beyond the five scripts.
+- **`npm run kitchen:test`** runs 153 tests covering item setup, threshold boundaries, unit
+  refusal, the correction invariant, the history log, and every empty state, against real SQLite
+  on a disposable database that it fingerprints and removes.
+- No pages beyond the three above, no authentication, no uploads, no test framework beyond the
+  eight scripts.
 - `AGENTS.md` at the repository root holds the persistent engineering rules for coding
   agents: project identity, canonical sources of truth, stack, architecture boundaries,
   database rules, data and secret safety, the LLM boundary, product principles, Git and
@@ -157,6 +180,47 @@ None.
 | `npm run contract:test` | Command contract and validation tests, in memory |
 | `npm run exec:test` | Command execution against real SQLite in temporary databases |
 | `npm run app:test` | Form translation through to persisted state (68 tests) |
+| `npm run parser:test` | Sentence interpretation against the allowlist (126 tests) |
+| `npm run chat:test` | Provider, engine, and route against a local HTTP stub (132 tests) |
+| `npm run kitchen:test` | Kitchen setup, correction, history, and empty states (153 tests) |
+
+## Verification Status for Phase 3 (closeout)
+
+Every check below was run at closeout on 2026-10-01.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Formatting | `npm run format:check` | Pass |
+| TypeScript | `npm run typecheck` | Pass — 0 errors |
+| Lint | `npm run lint` | Pass — 0 errors, 0 warnings |
+| Production build | `npm run build` | Pass |
+| Schema intact | `npm run db:check` | Pass — 11 V1 tables, no unexpected tables, no migration added |
+| Schema tests | `npm run db:test` | Pass — 53 passed, 0 failed |
+| Domain tests | `npm run domain:test` | Pass — 213 passed, 0 failed |
+| Contract tests | `npm run contract:test` | Pass — 99 passed, 0 failed |
+| Execution tests | `npm run exec:test` | Pass — 76 passed, 0 failed |
+| Application tests | `npm run app:test` | Pass — 68 passed, 0 failed |
+| Parser tests | `npm run parser:test` | Pass — 126 passed, 0 failed |
+| Chat tests | `npm run chat:test` | Pass — 132 passed, 0 failed |
+| Kitchen tests | `npm run kitchen:test` | Pass — 153 passed, 0 failed |
+| **Total assertions** | | **920 passed, 0 failed** |
+| Acceptance flow | HTTP against a disposable DB | Pass — 17 steps, Kitchen and Dashboard |
+| Development database untouched | `sha256sum` before and after | Pass — identical, no WAL or SHM created |
+| No partial mutation on failure | before/after row and event counts | Pass — refused operations wrote nothing |
+| Log integrity | `SUM(delta) == quantity` after a correction | Pass — 8 == 8, original entry preserved |
+| Low-stock boundaries | Dashboard at `>`, `==`, and `0` | Pass — flagged at `==` and `0`, clear above |
+| Failure output | redirect URLs inspected | Pass — closed-set tokens only, no user input reflected |
+| Disposable database removed | `kitchen:test` self-check | Pass |
+| Working tree | `git status --porcelain` | Clean |
+| Remote parity | `git rev-parse` | `HEAD == origin/main` |
+
+### The invariant that makes the correction trustworthy
+
+After a correction, the stored quantity equals the sum of every delta in the log. This is what
+distinguishes a reversal from a patched number, and it is why the inverse is computed against
+the current quantity rather than a snapshot: a stale-snapshot reversal would silently discard
+whatever happened in between, and this check would fail. Verified over HTTP in the acceptance
+run.
 
 ## Verification Status for Phase 1 (1.6 closeout)
 
@@ -255,25 +319,27 @@ infrastructure.
 
 ## Latest Commit
 
-`35cb0e3` — `feat(2): add natural-language command engine`
+`pending commit` — `feat(3): complete kitchen inventory`
 
 ## Next Action
 
-**Phase 3 — Kitchen: NOT STARTED.** Phase 2 is complete and verified.
+**Phase 4 — Expenses: NOT STARTED.** Phase 3 is complete and verified.
 
-Phase 3 is where the kitchen becomes a real module rather than the Phase 1 vertical slice.
-Its scope must be planned before work begins; it is not invented here. See
-`docs/phases/PHASE_03_KITCHEN.md` and `docs/project/ROADMAP.md`.
+Phase 3 must not be read as approval to begin Phase 4. Nothing in Expenses was started: no
+expense feature work, no expense schema change, and no change to the Expenses page. The only
+shared modules the Kitchen work touched were `command-runtime.ts` and the extracted origin
+guard, both of which it required.
 
-The command contract, validation boundary, and natural-language entry point that Phase 3
-builds on are already built and proven.
+Phase 4's scope is not invented here. See `docs/phases/PHASE_04_EXPENSES.md` and
+`docs/project/ROADMAP.md`.
 
-Limitations carried into Phase 2, all recorded and none silently dropped:
+Limitations carried into Phase 3, all recorded and none silently dropped:
 
-- The expense ledger cannot record a correcting entry, because `expense` holds non-negative
-  spends only. A fix requires a migration.
-- There is no command to create an inventory item or to set an opening balance, so both come
-  from `npm run db:setup`, and an account reads `₹0.00` until one is spent from.
+- **The expense ledger still cannot record a correcting entry.** `expense` holds non-negative
+  spends only, so a reversal would need a negative row the schema currently forbids. Inventory
+  corrections exist; this one needs a migration and is the obvious first piece of Phase 4.
+- An account still reads `₹0.00` until one is spent from, because there is no command to set an
+  opening balance.
 - The Dashboard's task list renders, but nothing creates `plan_task` rows, so it is always
   empty. Task planning was out of Phase 1 scope.
 - The baseline database fingerprint discrepancy recorded in 1.5 remains unexplained. The

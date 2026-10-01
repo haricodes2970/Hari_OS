@@ -34,7 +34,10 @@ import "server-only";
 import type { Account, AccountName, ExpenseDraft } from "@/domain/accounts";
 import { findAccount, isAccountName } from "../../domain/accounts.ts";
 import type { InventoryEventDraft, InventoryItem } from "@/domain/inventory";
-import { findInventoryItem } from "../../domain/inventory.ts";
+import {
+  findInventoryItem,
+  findInventoryItemById,
+} from "../../domain/inventory.ts";
 import type { Quantity } from "@/domain/quantity";
 import type { MinorUnits } from "@/domain/money";
 import type { Result } from "@/domain/result";
@@ -58,14 +61,49 @@ function persisted(cause: unknown): PersistenceError {
   };
 }
 
-/** The inventory reads and writes the four commands need. Nothing more. */
+/**
+ * The inventory reads and writes execution and setup both need.
+ *
+ * Split by *what a write means*, not by which screen asked. `saveQuantity` and `appendEvent`
+ * are the two halves of one movement and are always used together inside a transaction.
+ * `insertItem`, `saveDetails`, and `saveLowThreshold` change no quantity, so they write no
+ * event: a log entry explaining a rename would be a lie about what happened to the stock.
+ */
 export type InventoryRepository = {
   /** The tracked item with this name, or the domain's `unknown_item` failure. */
   findByName(name: string): Result<InventoryItem>;
+  /** The tracked item with this id, or the domain's `unknown_item` failure. */
+  findById(id: number): Result<InventoryItem>;
   /** Stores a quantity the domain has already computed. */
   saveQuantity(itemId: number, quantity: Quantity): PersistenceResult<void>;
   /** Appends the log entry that makes the change correctable. */
   appendEvent(event: InventoryEventDraft): PersistenceResult<void>;
+  /**
+   * Starts tracking an item, with the opening quantity as one logged event.
+   *
+   * The event is part of this call rather than a separate step so that an item's quantity is
+   * always equal to the sum of its deltas, from the moment it exists. A row whose quantity
+   * cannot be explained by its own log would be a gap in the audit trail at the very first
+   * entry. A zero opening quantity writes no event, because there is no movement to record.
+   */
+  insertItem(
+    item: InventoryItem,
+    opening: { readonly timestamp: string; readonly sourceText: string | null },
+  ): PersistenceResult<void>;
+  /**
+   * An unused id for a new item.
+   *
+   * `createInventoryItem` requires an explicit id rather than defaulting one, because a new
+   * item's stock is a fact only the user knows. The id is the one thing the database owns, so
+   * it is asked for here rather than invented in the feature layer.
+   */
+  nextItemId(): number;
+  /** Stores a rename or unit change. Never a quantity. */
+  saveDetails(item: InventoryItem): PersistenceResult<void>;
+  /** Stores the low-stock threshold, or clears it. Never a quantity. */
+  saveLowThreshold(item: InventoryItem): PersistenceResult<void>;
+  /** One logged event by its id, for correction. */
+  findEvent(eventId: number): InventoryEventRow | null;
 };
 
 export type AccountRepository = {
@@ -99,6 +137,14 @@ export type DisplayQueries = {
   spendForDate(date: string): { total: MinorUnits; count: number };
   /** The plan for one calendar day, for the dashboard. Read-only; nothing creates these yet. */
   tasksForDate(date: string): PlanTask[];
+  /**
+   * The most recent stock movements, newest first, with the item name resolved.
+   *
+   * Ordering is `timestamp DESC, id DESC` so two entries written in the same millisecond
+   * still come back in the order they were inserted. Without the tie-break the order would
+   * depend on SQLite's plan for the query, which is not a property to show a user.
+   */
+  recentInventoryEvents(limit: number): InventoryEventRow[];
 };
 
 /** An expense joined with the name of the account it was paid from. */
@@ -139,6 +185,21 @@ type InventoryRow = {
   quantity: number;
   unit: string;
   low_threshold: number | null;
+};
+
+/**
+ * A persisted `inventory_event`, joined with the item name so history can be displayed
+ * without a second lookup per row.
+ *
+ * The id is included because correction has to address a specific entry. It is never rendered.
+ */
+export type InventoryEventRow = {
+  readonly id: number;
+  readonly itemId: number;
+  readonly itemName: string;
+  readonly delta: number;
+  readonly timestamp: string;
+  readonly sourceText: string | null;
 };
 
 type AccountRow = {
@@ -189,6 +250,24 @@ export function createRepositories(database: DatabaseHandle): Repositories {
   const insertEvent = database.prepare(
     "INSERT INTO inventory_event (item, delta, timestamp, source_text) VALUES (?, ?, ?, ?)",
   );
+  const insertItemRow = database.prepare(
+    "INSERT INTO inventory_item (id, name, quantity, unit, low_threshold) VALUES (?, ?, ?, ?, ?)",
+  );
+  const updateDetails = database.prepare(
+    "UPDATE inventory_item SET name = ?, unit = ? WHERE id = ?",
+  );
+  const updateThreshold = database.prepare(
+    "UPDATE inventory_item SET low_threshold = ? WHERE id = ?",
+  );
+  const selectNextId = database.prepare(
+    "SELECT COALESCE(MAX(id), 0) + 1 AS next FROM inventory_item",
+  );
+  const selectEventById = database.prepare(
+    `SELECT e.id, e.item AS item_id, e.delta, e.timestamp, e.source_text, i.name AS item_name
+     FROM inventory_event e
+     JOIN inventory_item i ON i.id = e.item
+     WHERE e.id = ?`,
+  );
   const updateBalance = database.prepare(
     "UPDATE account SET balance = ? WHERE id = ?",
   );
@@ -205,6 +284,12 @@ export function createRepositories(database: DatabaseHandle): Repositories {
         return findInventoryItem(
           (selectInventory.all() as InventoryRow[]).map(toInventoryItem),
           name,
+        );
+      },
+      findById(id) {
+        return findInventoryItemById(
+          (selectInventory.all() as InventoryRow[]).map(toInventoryItem),
+          id,
         );
       },
       saveQuantity(itemId, quantity) {
@@ -227,6 +312,79 @@ export function createRepositories(database: DatabaseHandle): Repositories {
         } catch (cause) {
           return { ok: false, error: persisted(cause) };
         }
+      },
+      nextItemId() {
+        return (selectNextId.get() as { next: number }).next;
+      },
+      insertItem(item, opening) {
+        try {
+          // The opening quantity is written as an event in the same transaction, so the item's
+          // quantity is explainable from its log from the very first row onwards.
+          database.transaction(() => {
+            insertItemRow.run(
+              item.id,
+              item.name,
+              item.quantity,
+              item.unit,
+              item.lowThreshold,
+            );
+
+            if (item.quantity !== 0) {
+              insertEvent.run(
+                item.id,
+                item.quantity,
+                opening.timestamp,
+                opening.sourceText,
+              );
+            }
+          })();
+
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+      saveDetails(item) {
+        try {
+          // The schema's UNIQUE on `name` is what stops two items collapsing into one when a
+          // rename collides, and it is a constraint rather than a check here on purpose: the
+          // storage engine is the only place that can decide it atomically.
+          updateDetails.run(item.name, item.unit, item.id);
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+      saveLowThreshold(item) {
+        try {
+          updateThreshold.run(item.lowThreshold, item.id);
+          return { ok: true, value: undefined };
+        } catch (cause) {
+          return { ok: false, error: persisted(cause) };
+        }
+      },
+      findEvent(eventId) {
+        type JoinedEventRow = {
+          id: number;
+          item_id: number;
+          delta: number;
+          timestamp: string;
+          source_text: string | null;
+          item_name: string;
+        };
+
+        const row = selectEventById.get(eventId) as JoinedEventRow | undefined;
+
+        return row === undefined
+          ? null
+          : {
+              id: row.id,
+              itemId: row.item_id,
+              itemName: row.item_name,
+              delta: row.delta,
+              timestamp: row.timestamp,
+              sourceText: row.source_text,
+            };
       },
     },
 
@@ -302,6 +460,13 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
   const tasksForDateRows = database.prepare(
     "SELECT id, title, done FROM plan_task WHERE date = ? ORDER BY id",
   );
+  const recentEventRows = database.prepare(
+    `SELECT e.id, e.item AS item_id, e.delta, e.timestamp, e.source_text, i.name AS item_name
+     FROM inventory_event e
+     JOIN inventory_item i ON i.id = e.item
+     ORDER BY e.timestamp DESC, e.id DESC
+     LIMIT ?`,
+  );
 
   return {
     listInventory() {
@@ -357,6 +522,26 @@ function buildDisplayQueries(database: DisplayDatabase): DisplayQueries {
           done: number;
         })[]
       ).map((row) => ({ id: row.id, title: row.title, done: row.done === 1 }));
+    },
+
+    recentInventoryEvents(limit) {
+      type JoinedEventRow = {
+        id: number;
+        item_id: number;
+        delta: number;
+        timestamp: string;
+        source_text: string | null;
+        item_name: string;
+      };
+
+      return (recentEventRows.all(limit) as JoinedEventRow[]).map((row) => ({
+        id: row.id,
+        itemId: row.item_id,
+        itemName: row.item_name,
+        delta: row.delta,
+        timestamp: row.timestamp,
+        sourceText: row.source_text,
+      }));
     },
   };
 }

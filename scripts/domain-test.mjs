@@ -16,12 +16,17 @@ import {
   checkInventoryUnit,
   consumeInventory,
   createInventoryItem,
+  editInventoryDetails,
   findInventoryItem,
+  findInventoryItemById,
   isLowStock,
+  recountAfterUse,
   replaceInventoryItem,
   restockInventory,
   reverseInventoryChange,
+  reverseInventoryEvent,
   setInventoryQuantity,
+  setLowStockThreshold,
   stampInventoryChange,
 } from "../src/domain/inventory.ts";
 import {
@@ -913,6 +918,367 @@ assertDeepEqual(
   ],
   "every documented error code is reachable from a real operation",
 );
+
+// ---------------------------------------------------------------------------
+console.log("\n# Phase 3: the compound recount the PRD describes");
+
+// "I had 10 onions, used 2" leaves 8. The two numbers are both stated facts and the
+// result is their difference, so this operation exists to be the only place that
+// difference is ever computed. The tests below check the arithmetic, the refusals, and — the
+// one that matters most — that the result really is computed here rather than arriving whole.
+{
+  const onions = {
+    id: 1,
+    name: "onions",
+    quantity: 10,
+    unit: "piece",
+    lowThreshold: null,
+  };
+  const result = recountAfterUse(onions, 10, 2, "piece");
+
+  assert(result.ok, "P3. the PRD's sentence is expressible");
+  assertEqual(
+    result.ok ? result.value.after : null,
+    8,
+    "P3. 'I had 10, used 2' leaves 8",
+  );
+  assertEqual(
+    result.ok ? result.value.before : null,
+    10,
+    "P3. the before is what was stored",
+  );
+  assertEqual(
+    result.ok ? result.value.delta : null,
+    -2,
+    "P3. the delta is the movement, not the total",
+  );
+
+  // The domain computes from the stated facts; it does not have to be told the answer, and
+  // from a different starting state it must reach 8 as well.
+  const elsewhere = { ...onions, quantity: 0 };
+  const fromZero = recountAfterUse(elsewhere, 10, 2, "piece");
+  assertEqual(
+    fromZero.ok ? fromZero.value.after : null,
+    8,
+    "P3. the same sentence gives the same answer from any starting state",
+  );
+  assertEqual(
+    fromZero.ok ? fromZero.value.delta : null,
+    8,
+    "P3. and the delta is measured against real stock",
+  );
+
+  const rice = {
+    id: 2,
+    name: "rice",
+    quantity: 12,
+    unit: "kg",
+    lowThreshold: null,
+  };
+  const fractional = recountAfterUse(rice, 2.5, 0.5, "kg");
+  assertEqual(
+    fractional.ok ? fractional.value.after : null,
+    2,
+    "P3. fractional quantities subtract exactly",
+  );
+  assertEqual(
+    recountAfterUse(rice, 2.5, 0.5, "piece").ok ? "accepted" : "refused",
+    "refused",
+    "P3. a unit that is not the item's own is refused",
+  );
+  assertEqual(
+    recountAfterUse(rice, 2, 3, "kg").error.code,
+    "insufficient_inventory",
+    "P3. using more than was counted is refused",
+  );
+  assertEqual(
+    recountAfterUse(rice, -1, 1, "kg").error.code,
+    "invalid_quantity",
+    "P3. a negative count is refused",
+  );
+  assertEqual(
+    recountAfterUse(rice, 10, "2", "kg").error.code,
+    "invalid_quantity",
+    "P3. a quantity that is not a number is refused",
+  );
+  assertEqual(
+    recountAfterUse(rice, 10, 2, "").error.code,
+    "invalid_unit",
+    "P3. a missing unit is refused rather than assumed",
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n# Phase 3: thresholds are decided in one place");
+
+{
+  const base = {
+    id: 1,
+    name: "onions",
+    quantity: 10,
+    unit: "piece",
+    lowThreshold: null,
+  };
+
+  // The rule is "at or below", and every boundary is asserted. A rule that used "<" would
+  // pass a test that only checks "clearly low" and would quietly miss a user standing exactly
+  // on their own threshold.
+  const at = setLowStockThreshold(base, 10);
+  assertEqual(
+    isLowStock(at.ok ? at.value : base),
+    true,
+    "P3. equal to the threshold is low",
+  );
+  const just = setLowStockThreshold(base, 9);
+  assertEqual(
+    isLowStock(just.ok ? just.value : base),
+    false,
+    "P3. above the threshold is not low",
+  );
+  const below = setLowStockThreshold(base, 11);
+  assertEqual(
+    isLowStock(below.ok ? below.value : base),
+    true,
+    "P3. below the threshold is low",
+  );
+
+  const emptied = { ...base, quantity: 0 };
+  const zeroThreshold = setLowStockThreshold(emptied, 0);
+  assertEqual(
+    isLowStock(zeroThreshold.ok ? zeroThreshold.value : emptied),
+    true,
+    "P3. an empty item with an alert at 0 is low",
+  );
+  assertEqual(
+    isLowStock({ ...base, quantity: 0.5, lowThreshold: 0 }),
+    false,
+    "P3. anything above a zero threshold is not low",
+  );
+
+  assertEqual(
+    isLowStock(base),
+    false,
+    "P3. no threshold means never flagged, even at zero",
+  );
+  assertEqual(
+    isLowStock({ ...base, quantity: 0 }),
+    false,
+    "P3. including when the item is empty",
+  );
+
+  const cleared = setLowStockThreshold({ ...base, lowThreshold: 3 }, null);
+  assertEqual(
+    cleared.ok ? cleared.value.lowThreshold : 1,
+    null,
+    "P3. a threshold can be cleared",
+  );
+  assertEqual(
+    isLowStock(cleared.ok ? cleared.value : base),
+    false,
+    "P3. clearing returns the item to never-flagged",
+  );
+
+  assertEqual(
+    setLowStockThreshold(base, -1).error.code,
+    "invalid_quantity",
+    "P3. a negative threshold is refused",
+  );
+  assertEqual(
+    setLowStockThreshold(base, "3").error.code,
+    "invalid_quantity",
+    "P3. a threshold that is not a number is refused",
+  );
+
+  // A threshold change is not a movement, so it must leave the quantity alone.
+  const unchanged = setLowStockThreshold(base, 4);
+  assertEqual(
+    unchanged.ok ? unchanged.value.quantity : null,
+    10,
+    "P3. changing a threshold changes no quantity",
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n# Phase 3: correcting a logged entry");
+
+{
+  const item = {
+    id: 1,
+    name: "onions",
+    quantity: 6,
+    unit: "piece",
+    lowThreshold: null,
+  };
+  const event = {
+    itemId: 1,
+    delta: -2,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    sourceText: "used 2 onions",
+  };
+
+  const reversed = reverseInventoryEvent(item, event);
+  assertEqual(
+    reversed.ok ? reversed.value.delta : null,
+    2,
+    "P3. a consumption is undone by adding it back",
+  );
+  assertEqual(
+    reversed.ok ? reversed.value.after : null,
+    8,
+    "P3. which restores the quantity exactly",
+  );
+
+  // The correction is measured against the item as it is *now*. Later movements must survive
+  // it, which is the whole reason this is not `reverseInventoryChange` on a stale snapshot.
+  const movedOn = { ...item, quantity: 11 };
+  const afterOtherWork = reverseInventoryEvent(movedOn, event);
+  assertEqual(
+    afterOtherWork.ok ? afterOtherWork.value.after : null,
+    13,
+    "P3. later stock is preserved, not discarded",
+  );
+
+  const restocked = reverseInventoryEvent(item, { ...event, delta: 5 });
+  assertEqual(
+    restocked.ok ? restocked.value.delta : null,
+    -5,
+    "P3. a restock is undone by removing it",
+  );
+  assertEqual(
+    restocked.ok ? restocked.value.after : null,
+    1,
+    "P3. which also restores exactly",
+  );
+
+  assertEqual(
+    reverseInventoryEvent(item, { ...event, itemId: 99 }).error.code,
+    "unknown_item",
+    "P3. an event for another item is refused",
+  );
+  assertEqual(
+    reverseInventoryEvent(item, { ...event, delta: 0 }).error.code,
+    "invalid_quantity",
+    "P3. an entry that records no change has nothing to correct",
+  );
+  assertEqual(
+    // A restock of 5 being undone while only 1 is on hand: the inverse is a consumption of
+    // 5, which stock cannot cover. Correcting an entry must never drive a quantity negative,
+    // so this is refused rather than applied.
+    reverseInventoryEvent({ ...item, quantity: 1 }, { ...event, delta: 5 })
+      .error.code,
+    "insufficient_inventory",
+    "P3. undoing a restock that the stock cannot absorb is refused rather than going negative",
+  );
+
+  // An immediate undo and a later correction of the same entry are the same answer when
+  // nothing else has happened, which is what makes the historical form safe to prefer.
+  const immediate = reverseInventoryChange({
+    kind: "inventory",
+    itemId: 1,
+    itemName: "onions",
+    unit: "piece",
+    before: 10,
+    after: 8,
+    delta: -2,
+  });
+  assertEqual(
+    immediate.ok ? immediate.value.after : null,
+    10,
+    // Undoing "used 2" from 8 puts the stock back to 10, which is where the original
+    // change started. Both forms therefore agree, which is what makes correcting a
+    // historical entry safe to prefer over this one.
+    "P3. an immediate undo reaches the same state",
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n# Phase 3: renaming an item never moves stock");
+
+{
+  const stocked = {
+    id: 1,
+    name: "onions",
+    quantity: 8,
+    unit: "piece",
+    lowThreshold: 3,
+  };
+
+  const renamed = editInventoryDetails(stocked, {
+    name: "  Red onions ",
+    unit: "piece",
+  });
+  assertEqual(
+    renamed.ok ? renamed.value.name : null,
+    "Red onions",
+    "P3. a name is trimmed and stored",
+  );
+  assertEqual(
+    renamed.ok ? renamed.value.quantity : null,
+    8,
+    "P3. and the quantity is untouched",
+  );
+
+  assertEqual(
+    editInventoryDetails(stocked, { name: "onions", unit: "kg" }).error.code,
+    "invalid_unit",
+    "P3. the unit cannot change while stock remains, because 8 piece is not 8 kg",
+  );
+
+  const emptied = { ...stocked, quantity: 0 };
+  const converted = editInventoryDetails(emptied, {
+    name: "onions",
+    unit: "kg",
+  });
+  assertEqual(
+    converted.ok ? converted.value.unit : null,
+    "kg",
+    "P3. an empty item may be re-tracked in another unit",
+  );
+
+  assertEqual(
+    editInventoryDetails(stocked, { name: "  ", unit: "piece" }).error.code,
+    "unknown_item",
+    "P3. an empty name is refused",
+  );
+  assertEqual(
+    editInventoryDetails(stocked, { name: "onions", unit: " " }).error.code,
+    "invalid_unit",
+    "P3. an empty unit is refused",
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n# Phase 3: items are found by name and by id");
+
+{
+  const items = [
+    { id: 1, name: "onions", quantity: 8, unit: "piece", lowThreshold: 3 },
+    { id: 2, name: "rice", quantity: 2, unit: "kg", lowThreshold: null },
+  ];
+
+  assertEqual(
+    findInventoryItemById(items, 2).ok
+      ? findInventoryItemById(items, 2).value.name
+      : null,
+    "rice",
+    "P3. an id resolves",
+  );
+  assertEqual(
+    findInventoryItemById(items, 99).error.code,
+    "unknown_item",
+    "P3. an unknown id is a failure, not a miss",
+  );
+  assertEqual(
+    findInventoryItemById([], 1).error.code,
+    "unknown_item",
+    "P3. and an empty collection resolves nothing",
+  );
+  assertEqual(
+    findInventoryItem(items, "RICE").ok ? 1 : 0,
+    1,
+    "P3. name lookup stays case-insensitive",
+  );
+}
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

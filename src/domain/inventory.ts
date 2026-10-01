@@ -200,6 +200,54 @@ export function setInventoryQuantity(
 }
 
 /**
+ * The PRD's compound sentence: "I had 10 onions, used 2".
+ *
+ * Two facts were stated — a count and a consumption — and the result is their difference. The
+ * subtraction is performed *here*, which is the whole point: a language model reading this
+ * sentence can report `10` and `2` because both are things the user said, and must never
+ * report `8`, because that is a calculation it has no business performing. The contract
+ * therefore carries two facts and no result, and this function is the only place the two meet.
+ *
+ * Implemented against the *current* quantity rather than by replaying a recount followed by a
+ * consumption, because only one log entry is written: the movement from where stock actually
+ * is to where the sentence says it should be.
+ */
+export function recountAfterUse(
+  item: InventoryItem,
+  countedQuantity: Quantity,
+  usedAmount: Quantity,
+  unit: string,
+): Result<InventoryChange> {
+  const counted = parseQuantity(countedQuantity);
+
+  if (!counted.ok) {
+    return counted;
+  }
+
+  const used = parseQuantity(usedAmount);
+
+  if (!used.ok) {
+    return used;
+  }
+
+  const checked = checkInventoryUnit(item, unit);
+
+  if (!checked.ok) {
+    return checked;
+  }
+
+  // The same primitive `consumeInventory` uses, so "cannot use more than was counted" is
+  // refused here for the same reason and with the same wording.
+  const remaining = subtractQuantities(counted.value, used.value);
+
+  if (!remaining.ok) {
+    return remaining;
+  }
+
+  return ok(change(item, remaining.value - item.quantity, remaining.value));
+}
+
+/**
  * Consumes stock, the PRD's "used 2 onions".
  *
  * The unit is required rather than assumed, because the unit in a sentence is a fact the
@@ -377,6 +425,108 @@ export function reverseInventoryChange(
 }
 
 /**
+ * The change that undoes a *logged event*, computed from where stock is now.
+ *
+ * Distinct from `reverseInventoryChange`, which inverts a change whose `after` is still the
+ * item's current quantity — an immediate undo. Correcting an entry from last week is a
+ * different problem: other movements may have been applied since, so the inverse has to be
+ * measured against the *current* quantity rather than the one the original change left behind.
+ * Using the stale state would silently discard everything that happened in between.
+ *
+ * The result is an ordinary change with a signed delta, which is what makes a correction
+ * indistinguishable in the log from any other movement — the original entry stays, and the
+ * correction sits beside it. Nothing is deleted, and no quantity is overwritten.
+ */
+export function reverseInventoryEvent(
+  item: InventoryItem,
+  event: InventoryEventDraft,
+): Result<InventoryChange> {
+  if (event.itemId !== item.id) {
+    return fail(
+      "unknown_item",
+      `Event belongs to item ${event.itemId} but "${item.name}" is item ${item.id}.`,
+      { expected: item.id, received: event.itemId },
+    );
+  }
+
+  if (normaliseZero(event.delta) === 0) {
+    return fail(
+      "invalid_quantity",
+      "That entry records no change, so there is nothing to correct.",
+      { itemId: item.id },
+    );
+  }
+
+  return adjustInventory(item, -event.delta);
+}
+
+/**
+ * Sets or clears the low-stock threshold.
+ *
+ * Changes no quantity and produces no event, because it is not a movement: it is the user
+ * telling the application what "low" means for this item. `null` removes the threshold, which
+ * puts the item back in the never-flagged state rather than flagging it at zero.
+ */
+export function setLowStockThreshold(
+  item: InventoryItem,
+  threshold: Quantity | null,
+): Result<InventoryItem> {
+  if (threshold === null) {
+    return ok({ ...item, lowThreshold: null });
+  }
+
+  const parsed = parseQuantity(threshold);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  return ok({ ...item, lowThreshold: parsed.value });
+}
+
+/**
+ * Renames an item or changes the unit it is measured in.
+ *
+ * Never changes the quantity. A quantity is a movement, and movements are logged; letting a
+ * metadata edit move stock would put a number in the log with no event explaining it. If the
+ * user wants to change how much there is, that is a recount.
+ *
+ * The unit is only allowed to change when the quantity is zero, because `8 kg` cannot become
+ * `8 piece` without a conversion, and this domain does not convert between units.
+ */
+export function editInventoryDetails(
+  item: InventoryItem,
+  details: { readonly name: string; readonly unit: string },
+): Result<InventoryItem> {
+  const name = details.name.trim();
+
+  if (name === "") {
+    return fail("unknown_item", "An inventory item needs a non-empty name.", {
+      name: details.name,
+    });
+  }
+
+  const unit = details.unit.trim();
+
+  if (unit === "") {
+    return fail("invalid_unit", "An inventory item needs a non-empty unit.", {
+      name,
+      unit: details.unit,
+    });
+  }
+
+  if (unit !== item.unit && normaliseZero(item.quantity) !== 0) {
+    return fail(
+      "invalid_unit",
+      `"${item.name}" still has ${item.quantity} ${item.unit}. Use the quantity form to change the unit once the item is empty.`,
+      { item: item.name, current: item.unit, requested: unit },
+    );
+  }
+
+  return ok({ ...item, name, unit });
+}
+
+/**
  * Whether an item is at or below its low-stock threshold.
  *
  * The PRD's Dashboard flag. Strictly "at or below": an item sitting exactly on its threshold
@@ -414,6 +564,27 @@ export function findInventoryItem(
     requested: name.trim(),
     known: items.map((item) => item.name).join(", "),
   });
+}
+
+/**
+ * Looks up one item by its id.
+ *
+ * The same miss-is-a-failure rule as `findInventoryItem`, and for a sharper reason: a form
+ * identifies the row it is editing by id precisely because a name can be changed. If a rename
+ * happened while a threshold form sat on the page, a name-keyed lookup would resolve to a
+ * different item — or to nothing — and the user's next click would edit the wrong row.
+ */
+export function findInventoryItemById(
+  items: readonly InventoryItem[],
+  id: number,
+): Result<InventoryItem> {
+  for (const item of items) {
+    if (item.id === id) {
+      return ok(item);
+    }
+  }
+
+  return fail("unknown_item", `No inventory item with id ${id}.`, { id });
 }
 
 /**

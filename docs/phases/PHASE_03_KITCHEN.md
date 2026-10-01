@@ -1,6 +1,6 @@
 # Phase 3 — Kitchen
 
-**Status: Planned**
+**Status: Complete and verified**
 
 Scope taken from `Hari_OS_V1_PRD.docx` section 6.3. This document does not expand it.
 
@@ -50,19 +50,66 @@ stock.
 - Quantity arithmetic as pure, testable functions in `src/domain`.
 - A Kitchen page showing stored items and quantities, tolerating empty data.
 
+## What was built
+
+Delivered as one unit, because the domain rules, the event log, the correction path, and the
+page that displays them are only meaningful together. Full detail in
+`docs/sessions/2026-10-01-session-02.md`.
+
+| Deliverable | Where |
+| --- | --- |
+| Kitchen slice | `src/features/kitchen/setup.ts`, `correction.ts`, `view.ts` |
+| Arithmetic and rules | `src/domain/inventory.ts` — `recountAfterUse`, `setLowStockThreshold`, `editInventoryDetails`, `reverseInventoryEvent`, `findInventoryItemById` |
+| The compound sentence | `inventory.recount_after_use`, added to the contract, validation, executor, and parser prompt |
+| Persistence | `src/lib/db/repositories.ts` — item insert with an opening event, `findById`, `saveDetails`, `saveLowThreshold`, `findEvent`, `recentInventoryEvents` |
+| Maintenance endpoint | `POST /api/kitchen` — a closed enum of four non-command operations, ADR-043 |
+| Page | `/kitchen` with stock, low-stock thresholds, correction, and the history log |
+| Tests | `npm run kitchen:test` — 153 assertions |
+
+The schema already existed from micro-phase 1.1. **No migration was added in this phase**, and
+`npm run db:check` still reports the same 11 V1 tables with no unexpected tables.
+
+### Decisions recorded
+
+- **ADR-043** — Kitchen setup operations get a third endpoint, and it cannot execute a command.
+  This narrows ADR-036's "one entry point" claim rather than overriding it: there is still one
+  path to the executor, and this route does not create another.
+- **ADR-044** — A correction is a reversal, never a deletion or an overwrite.
+
+### Two things deliberately not built
+
+- **The "what can I cook with current stock" view.** The PRD lists it as later work. It is the
+  reason this phase is not a meal planner.
+- **A parsed sentence that creates an item.** Item creation goes through the form and the
+  setup route. Inventing an LLM command kind for it was rejected as speculative: the PRD's
+  sentence examples are all about *using* and *buying*, and a name plus a unit plus an opening
+  count is a form, not a sentence.
+
 ## Verification
 
-- Baseline suite passes.
+Every check below was run. Results are in the session report and in
+`docs/project/PROJECT_STATUS.md`.
+
+- Baseline suite passes — `format:check`, `typecheck`, `lint` (0 errors, 0 warnings), `build`,
+  `db:check`.
 - A real quantity change is applied, survives a restart, and shows the correct remaining
-  quantity.
-- **The arithmetic is demonstrated as deterministic:** the same inputs produce the same
-  output regardless of any model involvement.
-- An event-log entry exists for every change, carrying the sentence that caused it.
-- A wrong entry is demonstrated being corrected.
-- The low-stock flag appears at and below the threshold, and not above it.
-- The page renders with no data and does not crash.
+  quantity. Confirmed over HTTP against a disposable database.
+- **The arithmetic is demonstrated as deterministic:** the same inputs produce the same output
+  regardless of any model involvement. The functions are pure and in-memory, and no test
+  involves a provider.
+- An event-log entry exists for every change, carrying the sentence that caused it. Entries made
+  from a form carry no sentence, which is why the history shows an em dash rather than inventing
+  one.
+- A wrong entry is demonstrated being corrected, and **the invariant holds: the stored quantity
+  equals the sum of the deltas in the log.** A stale-snapshot reversal would break this.
+- The low-stock flag appears at and below the threshold, and not above it. Confirmed on the
+  Dashboard at 3 against a threshold of 3, and confirmed gone after restocking to 8.
+- The page renders with no data and does not crash, for: no items, one item, none low, all low,
+  and no history.
 - `npm run db:check` passes with the expected tables.
 
 ## Status
 
-**Planned.** No inventory code, no inventory schema, and no kitchen page exist today.
+**Complete and verified.** Delivered in the commit `feat(3): complete kitchen inventory`. The
+one limitation carried forward is unchanged from Phase 2: no live provider call has been made,
+so the sentence path is verified against a stub and not against the real model.

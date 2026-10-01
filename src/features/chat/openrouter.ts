@@ -183,7 +183,7 @@ export function createOpenRouterParser(
             },
           }),
         });
-      } catch (error) {
+      } catch {
         // Whether the exchange ended because the ceiling was reached is decided by this
         // module's own controller, not by the shape of the error a transport happens to throw.
         // `fetch` rejects an aborted request with an `AbortError`, but that is one transport's

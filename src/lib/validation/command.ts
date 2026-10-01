@@ -55,6 +55,13 @@ const KEYS_BY_KIND = {
   "inventory.consume": [...BASE_KEYS, "itemName", "amount", "unit"],
   "inventory.restock": [...BASE_KEYS, "itemName", "amount", "unit"],
   "inventory.set_quantity": [...BASE_KEYS, "itemName", "quantity"],
+  "inventory.recount_after_use": [
+    ...BASE_KEYS,
+    "itemName",
+    "countedQuantity",
+    "usedAmount",
+    "unit",
+  ],
   "expense.record": [...BASE_KEYS, "accountName", "item", "amount", "category"],
 } as const satisfies Record<string, readonly string[]>;
 
@@ -436,6 +443,40 @@ function readCommand(
         sourceText,
         itemName: itemName as string,
         amount: amount as number,
+        unit: unit as string,
+      } as Command;
+    }
+  } else if (kind === "inventory.recount_after_use") {
+    const itemName = readString(
+      "itemName",
+      ownValue(input, "itemName"),
+      issues,
+    );
+    const countedQuantity = readQuantity(
+      "countedQuantity",
+      ownValue(input, "countedQuantity"),
+      issues,
+    );
+    const usedAmount = readQuantity(
+      "usedAmount",
+      ownValue(input, "usedAmount"),
+      issues,
+    );
+    const unit = readString("unit", ownValue(input, "unit"), issues);
+
+    if (
+      itemName !== MISSING &&
+      countedQuantity !== null &&
+      usedAmount !== null &&
+      unit !== MISSING
+    ) {
+      command = {
+        version,
+        kind,
+        sourceText,
+        itemName: itemName as string,
+        countedQuantity: countedQuantity as number,
+        usedAmount: usedAmount as number,
         unit: unit as string,
       } as Command;
     }

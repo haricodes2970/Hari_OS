@@ -9,8 +9,8 @@ live state. If the two ever disagree, `PROJECT_STATUS.md` is correct.
 | --- | --- | --- |
 | 0 | Foundation infrastructure | Complete |
 | 1 | Application foundation | **Complete** (1.1–1.6) |
-| 2 | Command engine | Planned |
-| 3 | Kitchen | Planned |
+| 2 | Command engine | **Complete** |
+| 3 | Kitchen | **Complete** |
 | 4 | Expenses | Planned |
 | 5 | Dashboard | Planned |
 | 6 | Routine + Sleep | Planned |
@@ -31,16 +31,22 @@ execution pipeline, persistence, the server boundary, and the first usable verti
 (Dashboard, Kitchen, Expenses). Complete; 1.1–1.6. See
 [`phases/PHASE_01_FOUNDATION.md`](../phases/PHASE_01_FOUNDATION.md).
 
-Note that Phases 3 (Kitchen), 4 (Expenses), and 5 (Dashboard) below remain planned. Phase 1
-delivered an initial working slice of those three areas as its vertical-slice micro-phase,
-not the finished areas; those phases still exist and still have scope.
+Note that Phases 4 (Expenses) and 5 (Dashboard) below remain planned. Phase 1 delivered an
+initial working slice of those areas as its vertical-slice micro-phase, not the finished areas;
+those phases still exist and still have scope. Phase 3 has since made Kitchen a finished area,
+including its correction path, so Kitchen is no longer in this group.
 
-**Phase 2 — Command engine.** Natural-language input parsed into a validated, structured
-intent, with deterministic execution. See
+**Phase 2 — Command engine (complete).** Natural-language input parsed into a validated,
+structured intent, with deterministic execution and no arithmetic performed by a model. See
 [`phases/PHASE_02_COMMAND_ENGINE.md`](../phases/PHASE_02_COMMAND_ENGINE.md).
 
-**Phases 3–8 — Product areas.** Kitchen, Expenses, Dashboard, Routine + Sleep, Skills +
-Habits, Photo + Diary, one per document under [`phases/`](../phases/).
+**Phase 3 — Kitchen (complete).** Inventory items with quantities and units, an event log for
+every change, low-stock thresholds surfaced on the Dashboard, and a correction path that
+reverses rather than deletes. See
+[`phases/PHASE_03_KITCHEN.md`](../phases/PHASE_03_KITCHEN.md).
+
+**Phases 4–8 — Product areas.** Expenses, Dashboard, Routine + Sleep, Skills + Habits, Photo +
+Diary, one per document under [`phases/`](../phases/).
 
 **Phase 9 — Hardening.** Reliability, correction paths, empty states, and test coverage
 appropriate to what was actually built. See

@@ -17,7 +17,7 @@ import "server-only";
 import { isLowStock, type InventoryItem } from "@/domain/inventory";
 import { formatMinorUnits, type MinorUnits } from "@/domain/money";
 
-import { currentUtcDate, getRepositories } from "./command-runtime";
+import { currentUtcDate, getRepositories } from "./command-runtime.ts";
 
 /** One inventory line as the Kitchen page needs it. */
 export type InventoryView = {

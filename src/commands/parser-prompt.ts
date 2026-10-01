@@ -56,6 +56,7 @@ ALLOWED COMMAND KINDS
 - "inventory.consume"  : the user used or ate or cooked some of a tracked item
 - "inventory.restock"  : the user bought or received more of a tracked item
 - "inventory.set_quantity" : the user stated what remains right now
+- "inventory.recount_after_use" : the user stated a count AND then a use in one sentence
 - "expense.record"     : the user spent money
 
 ABSOLUTE CONSTRAINTS
@@ -65,21 +66,30 @@ ABSOLUTE CONSTRAINTS
 - Never output a date or timestamp. The application records the time.
 - Never output a field named "balance", "after", "before", "id", "timestamp", or "confidence".
 - Never invent a missing account, quantity, item, price, or unit. If it is not stated, report it as missing.
-- Never choose a command kind outside the four listed above.
+- Never choose a command kind outside the five listed above.
 - Return only the JSON object. No prose, no explanation, no markdown, no code fences.
 
 FIELDS
 - "status": one of "interpreted", "needs_clarification", "unsupported".
-- "kind": one of the four command kinds. Required when status is "interpreted".
+- "kind": one of the five command kinds. Required when status is "interpreted".
 - "itemName": the tracked kitchen item, exactly as the user said it. For inventory commands.
 - "unit": the unit the user said, e.g. "pieces", "kg". For consume and restock.
 - "amount": how much was used or added, as a number. For consume and restock only.
 - "quantity": how much remains, as a number. For set_quantity only.
+- "countedQuantity": the count the user stated BEFORE using some. For recount_after_use only.
+- "usedAmount": how much they then used, as a number. For recount_after_use only.
 - "item": what the money was spent on, as the user said it. For expenses.
 - "amountRupees": the amount in rupees as the user said it, e.g. 10 for "10 rupees". For expenses. Do not convert it to paise.
 - "accountName": "cash", "bank1", or "bank2", only if the user said it. For expenses.
 - "category": an optional short category word the user gave. Omit otherwise.
 - "missing": when status is "needs_clarification", a list naming which facts were absent, drawn from "itemName", "item", "quantity", "unit", "amount", "accountName".
+
+TWO-FACT SENTENCES
+Some sentences state a count and then a use, such as "I had 10 onions, used 2". Both facts were
+stated, so report BOTH using "inventory.recount_after_use". Never report the difference between
+them: "8" is a calculation, and the application performs it. Never drop the count and report
+only the use, because the remaining quantity would then be computed from whatever stock happened
+to be stored rather than from what the user actually said.
 
 EXAMPLES
 
@@ -87,7 +97,10 @@ Sentence: used 2 onions
 {"status":"interpreted","kind":"inventory.consume","itemName":"onions","amount":2,"unit":"pieces"}
 
 Sentence: I had 10 onions, used 2
-{"status":"interpreted","kind":"inventory.consume","itemName":"onions","amount":2,"unit":"pieces"}
+{"status":"interpreted","kind":"inventory.recount_after_use","itemName":"onions","countedQuantity":10,"usedAmount":2,"unit":"pieces"}
+
+Sentence: had 10kg rice, used 2kg
+{"status":"interpreted","kind":"inventory.recount_after_use","itemName":"rice","countedQuantity":10,"usedAmount":2,"unit":"kg"}
 
 Sentence: restocked 5 onions
 {"status":"interpreted","kind":"inventory.restock","itemName":"onions","amount":5,"unit":"onions"}
@@ -163,9 +176,12 @@ export const PARSER_RESPONSE_SCHEMA = {
         "inventory.consume",
         "inventory.restock",
         "inventory.set_quantity",
+        "inventory.recount_after_use",
         "expense.record",
       ],
     },
+    countedQuantity: { type: "number" },
+    usedAmount: { type: "number" },
     itemName: { type: "string" },
     unit: { type: "string" },
     amount: { type: "number" },

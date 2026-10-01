@@ -81,3 +81,15 @@ export function releaseDatabase(): void {
 export function currentUtcDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/**
+ * The current instant as a full ISO-8601 UTC timestamp.
+ *
+ * The same clock `executeCommand` uses, exposed because a row written outside the command path
+ * — the opening entry for a newly tracked item — still needs the moment it happened, and ADR-034
+ * puts the reading of the time in this file alone. A second `new Date()` anywhere else would be
+ * a second authority for "when".
+ */
+export function nowTimestamp(): string {
+  return new Date().toISOString();
+}

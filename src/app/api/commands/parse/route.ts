@@ -30,6 +30,7 @@ import { NextResponse } from "next/server";
 import type { ChatResult } from "@/features/chat/presentation";
 import { describeChatResult } from "@/features/chat/presentation";
 import { getChatEngine } from "@/features/chat/runtime";
+import { isSameOriginRequest } from "@/features/shared/same-origin";
 
 /** Per request; the engine holds a provider client, not request state. */
 export const dynamic = "force-dynamic";
@@ -102,50 +103,6 @@ function wantsJson(request: Request): boolean {
 }
 
 /**
- * Rejects a submission that came from another site.
- *
- * This endpoint is a write: a parsed sentence is executed, so any page the user happens to have
- * open could otherwise cause a command to run by posting a form to `localhost`. There is no
- * cookie or session to rely on, because there is no sign-in (V1 is single-user and
- * unauthenticated), so the browser-supplied `Origin` is the only thing distinguishing the app
- * from a third party — and it is a header a browser cannot be talked out of sending on a
- * cross-origin POST.
- *
- * A request with **no** `Origin` is allowed. Non-browser clients do not send one, and refusing
- * them would break the tests and `curl`. The check is therefore "reject a cross-origin
- * submission" rather than "accept only a browser submission", which is the same trade every
- * same-origin form guard makes.
- *
- * ## Why the `Host` header is also accepted
- *
- * Comparing `Origin` only against `request.url` looks sufficient and is not. `next start`
- * derives its own canonical hostname from configuration, so a request that arrived at
- * `http://127.0.0.1:3111` is seen server-side as `http://localhost:3111` — the `Host` header
- * says `127.0.0.1:3111` while the reconstructed URL says `localhost:3111`. The browser
- * faithfully sends `Origin: http://127.0.0.1:3111`, and comparing that against the URL alone
- * refuses the application's own users. Both are the same origin for this deployment, so both
- * are accepted; `http://` and `https://` are tried because a TLS-terminating proxy would present
- * one scheme while the internal URL carries the other.
- */
-function isSameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-
-  if (origin === null) {
-    return true;
-  }
-
-  const host = request.headers.get("host");
-  const allowed = new Set<string>([new URL(request.url).origin]);
-
-  if (host !== null) {
-    allowed.add(`http://${host}`);
-    allowed.add(`https://${host}`);
-  }
-
-  return allowed.has(origin);
-}
-
-/**
  * `malformed` distinguishes "the caller sent a body I could not read" from "the caller sent an
  * empty sentence". The second is a user who typed nothing and gets a quiet redirect; the first
  * is a broken client, and answering it as if it were an empty sentence would report success for
@@ -185,10 +142,9 @@ async function readSentence(
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  if (!isSameOrigin(request)) {
-    // Reported to the caller as well as the server log's subject: this route is a localhost
-    // application, so the only expected cross-origin submission is one that did not come from
-    // the app. No sentence is read and no provider is called.
+  if (!isSameOriginRequest(request)) {
+    // No sentence is read and no provider is called. This route is a localhost application, so
+    // the only expected cross-origin submission is one that did not come from the app.
     return NextResponse.json(
       { error: "Cross-origin submissions are not accepted." },
       { status: 403 },

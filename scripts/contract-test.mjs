@@ -181,6 +181,41 @@ assertEqual(
   "the discriminator is preserved",
 );
 
+// The PRD's compound sentence. Both facts are carried, and the difference between them is
+// conspicuously absent — a result field here would be the model doing the subtraction.
+const recounted = expectValid(
+  {
+    version: COMMAND_VERSION,
+    kind: "inventory.recount_after_use",
+    itemName: "onions",
+    countedQuantity: 10,
+    usedAmount: 2,
+    unit: "piece",
+    sourceText: "I had 10 onions, used 2",
+  },
+  "the PRD's 'I had 10 onions, used 2'",
+);
+assertEqual(recounted.countedQuantity, 10, "the stated count is carried");
+assertEqual(recounted.usedAmount, 2, "the stated use is carried");
+assertEqual(
+  "after" in recounted || "remaining" in recounted,
+  false,
+  "and the command carries no resulting quantity for a model to invent",
+);
+expectRejected(
+  {
+    version: COMMAND_VERSION,
+    kind: "inventory.recount_after_use",
+    itemName: "onions",
+    countedQuantity: 10,
+    usedAmount: 2,
+    // No unit: the domain needs it to refuse a mismatch, and a missing one cannot be assumed.
+    result: 8,
+  },
+  "unexpected_field",
+  "a recount that tries to supply the result itself",
+);
+
 const spend = expectValid(
   {
     version: COMMAND_VERSION,
@@ -241,14 +276,20 @@ assertEqual(zeroAmount.amount, 0, "zero money is accepted without becoming -0");
 // Every declared discriminator is reachable.
 assertEqual(
   COMMAND_KINDS.length,
-  4,
-  "the contract declares four command kinds",
+  5,
+  "the contract declares five command kinds",
 );
 for (const kind of COMMAND_KINDS) {
   const samples = {
     "inventory.consume": { itemName: "onions", amount: 1, unit: "piece" },
     "inventory.restock": { itemName: "onions", amount: 1, unit: "piece" },
     "inventory.set_quantity": { itemName: "onions", quantity: 1 },
+    "inventory.recount_after_use": {
+      itemName: "onions",
+      countedQuantity: 10,
+      usedAmount: 2,
+      unit: "piece",
+    },
     "expense.record": { accountName: "cash", item: "x", amount: 1 },
   };
 

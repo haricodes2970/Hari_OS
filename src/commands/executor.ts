@@ -37,6 +37,7 @@ import type {
 } from "@/domain/inventory";
 import {
   consumeInventory,
+  recountAfterUse,
   restockInventory,
   setInventoryQuantity,
   stampInventoryChange,
@@ -50,6 +51,7 @@ import type { ValidationIssue } from "@/lib/validation/result";
 import {
   consumeArguments,
   expenseArguments,
+  recountAfterUseArguments,
   restockArguments,
   setQuantityArguments,
 } from "./domain-input.ts";
@@ -245,7 +247,9 @@ export function executeCommand(
       ? applyConsume(command, resolved)
       : command.kind === "inventory.restock"
         ? applyRestock(command, resolved)
-        : setInventoryQuantity(...setQuantityArguments(command, resolved));
+        : command.kind === "inventory.recount_after_use"
+          ? recountAfterUse(...recountAfterUseArguments(command, resolved))
+          : setInventoryQuantity(...setQuantityArguments(command, resolved));
 
   if (!computed.ok) {
     return domainFailure(computed.error);

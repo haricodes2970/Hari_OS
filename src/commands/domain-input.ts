@@ -28,9 +28,11 @@ import {
   setInventoryQuantity,
 } from "../domain/inventory.ts";
 import { applyExpense } from "../domain/accounts.ts";
+import { recountAfterUse } from "../domain/inventory.ts";
 import type {
   ExpenseRecordCommand,
   InventoryConsumeCommand,
+  InventoryRecountAfterUseCommand,
   InventoryRestockCommand,
   InventorySetQuantityCommand,
 } from "./contract.ts";
@@ -74,6 +76,19 @@ export function setQuantityArguments(
 }
 
 /**
+ * Arguments for `recountAfterUse(item, countedQuantity, usedAmount, unit)`.
+ *
+ * Both quantities come from the command unchanged. The difference between them is computed by
+ * the domain, so there is no place in this layer where the two could be combined.
+ */
+export function recountAfterUseArguments(
+  command: InventoryRecountAfterUseCommand,
+  item: InventoryItem,
+): [InventoryItem, Quantity, Quantity, string] {
+  return [item, command.countedQuantity, command.usedAmount, command.unit];
+}
+
+/**
  * Arguments for `applyExpense(account, input)`.
  *
  * `accountId` comes from the resolved account rather than the command, so a command can never
@@ -114,6 +129,12 @@ export type SetQuantityArgumentsMatchDomain = Expect<
   Equal<
     ReturnType<typeof setQuantityArguments>,
     Parameters<typeof setInventoryQuantity>
+  >
+>;
+export type RecountAfterUseArgumentsMatchDomain = Expect<
+  Equal<
+    ReturnType<typeof recountAfterUseArguments>,
+    Parameters<typeof recountAfterUse>
   >
 >;
 export type ExpenseArgumentsMatchDomain = Expect<

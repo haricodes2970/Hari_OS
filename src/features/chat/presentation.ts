@@ -76,6 +76,7 @@ export type AppliedKind =
   | "inventory.consume"
   | "inventory.restock"
   | "inventory.set_quantity"
+  | "inventory.recount_after_use"
   | "expense.record";
 
 /**
@@ -160,6 +161,13 @@ export function describeApplied(
 
   if (kind === "inventory.restock") {
     return `Restocked ${magnitude(delta)} ${itemName}. Now: ${remaining}.`;
+  }
+
+  if (kind === "inventory.recount_after_use") {
+    // Only the resulting figure is shown. The count and the use were two separate statements
+    // in one sentence, and the user is told what is true now rather than a replay of what
+    // they said.
+    return `Counted and used ${itemName}. Now: ${remaining}.`;
   }
 
   return `Set ${itemName} to ${remaining}.`;

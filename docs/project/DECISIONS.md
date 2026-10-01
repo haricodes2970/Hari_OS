@@ -835,3 +835,74 @@ Format: `ADR-XXX — Title` with Status, Date, Context, Decision, Consequences.
   - The route now has direct handler tests. It previously had none, which is why the gap was
     invisible to `npm test`.
 - **Origin:** Phase 2, found during verification.
+
+## ADR-043 — Kitchen setup operations get a third endpoint, and it cannot execute a command
+
+- **Status:** Accepted
+- **Date:** 2026-10-01
+- **Context:** ADR-036 states that `POST /api/commands` is the only way a command enters the
+  application, and ADR-041 added a second endpoint without replacing it. Phase 3 needs
+  operations that ADR-036's contract cannot express: starting to track an item, renaming it,
+  changing its low-stock threshold, and correcting a logged entry. The command contract carries
+  a *movement* — an item, an amount, a unit — and none of these is one. `npm run db:setup` was
+  the previous answer, and it is a CLI script: a user who forgot the stock could not add an item
+  from the page, and a threshold could not be set at all.
+- **Decision:** Add `POST /api/kitchen` for the four operations that move no stock. Its
+  operation set is a closed enum, exactly as the command kinds are, and an unrecognised value
+  is refused rather than ignored. It reuses ADR-042's origin check through the shared
+  `features/shared/same-origin.ts` module so the two write routes cannot drift. A **correction**
+  is a form target here and nothing more: it is built by the domain's `reverseInventoryEvent`,
+  turned into an ordinary `inventory.consume` or `inventory.restock`, and executed through
+  `runCommand`. This endpoint cannot execute a command of its own.
+- **Consequences:**
+  - **ADR-036 is narrowed, not overridden.** There is still exactly one path to the executor,
+    and this route does not create a second one. What changed is that reaching a *maintenance*
+    operation is no longer the same thing as executing a *command*. That distinction is real
+    and was previously unstated; ADR-036's wording is left in place as history, and this ADR
+    records the exception rather than quietly rewriting the earlier one.
+  - A rename or a threshold writes **no event**, because neither moves stock. They are not
+    movements, and pretending otherwise would put meaningless rows in a log meant to explain
+    why a number is what it is. A correction, which does move stock, writes a real event.
+  - Form fields are read strictly here rather than forwarded to `parseCommand`. A blank
+    quantity box is the dangerous case: `Number("")` is `0`, so a loose read would silently
+    record "0 onions". The domain takes a `Quantity`, so there is nothing downstream that could
+    safely receive an unparsed string; the refusal has to happen where it can still name the
+    field.
+  - Items are addressed by **id, not name**, in every operation. A name is editable, so a form
+    left open across a rename would otherwise act on whatever item now carries that name.
+  - Failures return a closed-set token, never the domain's sentence. The domain's message
+    quotes the item name the user typed, and a redirect carries its query string into history,
+    a referrer, and a screenshot. `OutcomeBanner` expands the token to the same wording the
+    rest of the application already uses, so nothing user-typed reaches a URL.
+- **Origin:** Phase 3.
+
+## ADR-044 — A correction is a reversal, never a deletion or an overwrite
+
+- **Status:** Accepted
+- **Date:** 2026-10-01
+- **Context:** PRD principle 13 requires every mutation to be traceable and correctable. A
+  wrong stock entry is inevitable — the user miscounts, or a sentence is misread — so the
+  correction path is a product requirement, not an edge case. Three implementations are
+  possible: delete the event, overwrite the stored quantity, or apply the opposite movement.
+- **Decision:** A correction applies the **inverse of the original delta as a new event**. The
+  original row is never deleted, the stored quantity is never written directly, and there is no
+  undo table and no soft-delete column. The correction's `source_text` is the application-written
+  label `correction of entry #N`, which marks it in the log.
+- **Consequences:**
+  - **The inverse is computed from the current quantity, not from the state the original entry
+    left behind.** This is the decision that matters. Movements applied since the original entry
+    are unaffected; reversing against a stale snapshot would silently discard everything that
+    happened in between. Verified: after `+10, −2, −5, +5, −5`, correcting the `−5` returns the
+    item to 8, and the sum of all six deltas still equals the stored quantity.
+  - The log stays readable as history rather than as a patched number. A user sees what was
+    believed, and later that it was corrected, and can see why the current figure is what it
+    is. Deleting the original would destroy the only evidence that a mistake occurred.
+  - `source_text` is display-only and is never read to decide what a command means, so using it
+    as a label cannot influence execution.
+  - Correcting an entry that is no longer reversible — a `−5` against a current quantity of 2 —
+    is **refused** rather than approximated. The domain decides, and the refusal is the honest
+    answer, because the alternative is a quantity that does not match its own log.
+  - A correction is a normal movement in every other respect: same validation, same executor,
+    same transaction, same event table. Nothing about it is special except that its source text
+    says so.
+- **Origin:** Phase 3.

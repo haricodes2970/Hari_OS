@@ -22,7 +22,8 @@
     "exec:test": "node --conditions=react-server scripts/exec-test.mjs",
     "app:test": "node --conditions=react-server scripts/app-test.mjs",
     "parser:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/parser-test.mjs",
-    "chat:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/chat-test.mjs"
+    "chat:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/chat-test.mjs",
+    "kitchen:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/kitchen-test.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

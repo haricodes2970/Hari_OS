@@ -206,14 +206,20 @@ user before or after being applied.
 
 ### A command carries facts, never results
 
-Four kinds exist, and only those with a domain operation behind them:
+Five kinds exist, and only those with a domain operation behind them:
 
 | Kind | Carries |
 | --- | --- |
 | `inventory.consume` | item name, amount, unit |
 | `inventory.restock` | item name, amount, unit |
 | `inventory.set_quantity` | item name, quantity |
+| `inventory.recount_after_use` | item name, counted quantity, used amount, unit |
 | `expense.record` | account name, item, amount in minor units, optional category |
+
+`inventory.recount_after_use` was added in Phase 3 for the PRD's compound sentence "I had 10
+onions, used 2". It carries **two stated facts and no result**: the model reports the 10 and the
+2 the user said, and the subtraction that produces 8 happens in `src/domain` and nowhere else. A
+kind that could carry a difference would put an unverified number inside the trust boundary.
 
 Common to all: a `version` literal, and the originating sentence as `sourceText`, kept only
 so the application can show what it understood. Nothing ever reads `sourceText` to decide
@@ -349,9 +355,12 @@ src/features/shared/outcomes.ts          error codes -> sentences a user can act
 
 Three rules hold this together.
 
-**There is exactly one entry point.** Every command reaches the executor through
+**There is one path to the executor.** Every command reaches it through
 `POST /api/commands` (ADR-036). No page, component, or feature calls a repository or the
-executor directly, so there is no second path to the data that could skip validation.
+executor directly, so there is no second path to the data that could skip validation. Phase 2
+added a route that reaches the same executor from a sentence (ADR-041), and Phase 3 added one
+that reaches only Kitchen maintenance operations and can execute no command (ADR-043); the
+property that matters is the single path to the data, and it still holds.
 
 **The composition root is the only place that knows about the real world.**
 `command-runtime.ts` supplies the database handle and the clock — the single call to
@@ -391,15 +400,20 @@ None of the following exist, and their absence is intentional:
 - Any page beyond Dashboard, Kitchen, and Expenses
 - Sleep, routine, skills, habits, diary, or photo features. The schema has their tables and no
   code reads or writes them
-- Any command to create an inventory item or set an opening balance. First-run rows come from
-  `npm run db:setup`
-- A correcting entry for the expense ledger, which holds non-negative spends only
+- A command to set an opening balance for an account. First-run rows come from `npm run
+  db:setup`, and an account reads `₹0.00` until one is spent from. An inventory item can now
+  be created from the page, but only through the Kitchen setup route (ADR-043), never as a
+  parsed sentence
+- A correcting entry for the expense ledger, which holds non-negative spends only. Inventory
+  corrections exist; this one needs a migration
+- A "what can I cook with current stock" view. The PRD lists it as later work and Phase 3
+  deliberately did not build it
 - Filesystem upload handling
 - Authentication
 - Deployment configuration
 - PWA manifest, service service worker, or offline support
-- A general test framework. The tests are seven scripts: `db:test`, `domain:test`,
-  `contract:test`, `exec:test`, `app:test`, `parser:test`, and `chat:test`
+- A general test framework. The tests are eight scripts: `db:test`, `domain:test`,
+  `contract:test`, `exec:test`, `app:test`, `parser:test`, `chat:test`, and `kitchen:test`
 
 Do not assume a directory is functional because it exists, and do not assume a table being
 present means anything can use it yet.
@@ -538,3 +552,56 @@ context between calls.
 A form cannot read a response body, so the route answers with a `303` carrying an enum and
 closed-set tokens in the query string. The sentences a user reads are written by
 `presentation.ts` from the trusted execution result. Model text is never rendered.
+
+## 15. The kitchen slice (added in Phase 3)
+
+Kitchen became a real feature rather than the Phase 1 vertical slice. Two additions to the
+architecture, and one rule that is the reason it is trustworthy.
+
+```
+src/features/kitchen/setup.ts        add an item, rename it, set a threshold  server-only
+src/features/kitchen/correction.ts   correct a logged entry                   server-only
+src/features/kitchen/view.ts         read side: stock, low-stock, history
+src/components/KitchenForm.tsx       the Kitchen forms (Server Component, no client JS)
+src/app/api/kitchen/route.ts         POST only: the four non-command operations
+src/features/shared/same-origin.ts   ADR-042's guard, now shared by both write routes
+```
+
+### Movements and maintenance are different things
+
+A **movement** changes a quantity, so it is a command. It travels
+`POST /api/commands` or `POST /api/commands/parse`, is validated by `parseCommand`, is computed
+by `src/domain`, and is executed by the executor in one transaction. There is no other way to
+move stock.
+
+A **maintenance operation** — starting to track an item, renaming one, changing a threshold —
+changes no quantity, so it is not a command and has nothing for a sentence to state. These four
+operations have their own route with a closed enum of operations, the same origin guard, and
+the same token-based outcome (ADR-043). Adding a fifth operation means editing that enum, which
+is the point: the surface cannot grow by accident.
+
+### A correction is a reversal, and the log is the record
+
+Nothing is ever deleted and no quantity is ever written directly. A correction computes the
+inverse of the original delta from the *current* quantity and applies it as an ordinary
+`inventory.consume` or `inventory.restock` through `runCommand`, so a corrected entry is
+validated, computed, and logged exactly like any other movement (ADR-044).
+
+The property that makes this checkable is an invariant: **the stored quantity always equals the
+sum of the deltas in the log.** The Phase 3 acceptance run asserts it directly, and it is the
+reason a stale-snapshot reversal could not pass unnoticed.
+
+```sql
+SELECT SUM(delta) FROM inventory_event WHERE item_id = ?   -- == inventory_item.quantity
+```
+
+### Three rules the domain keeps
+
+- **A unit cannot change while stock is non-zero.** 8 pieces is not 8 kg, and this application
+  does not convert between units. The rule is in `src/domain`, so no caller can skip it.
+- **A threshold of zero is refused.** It would flag every item forever, which is a bug that
+  looks like a feature. No threshold is `NULL` and is distinct from zero.
+- **A recount that also reports a use refuses a use larger than the count.** "I had 10 onions,
+  used 2" is a count of 10 and a use of 2, and the difference of 8 is computed here — the model
+  reports the two numbers the user actually said and never the difference. A use of 3 against a
+  count of 2 is impossible, and is rejected rather than normalised to zero.

@@ -104,6 +104,29 @@ export type InventorySetQuantityCommand = CommandBase &
   };
 
 /**
+ * The PRD's compound sentence: "I had 10 onions, used 2", which leaves 8.
+ *
+ * One command, two stated facts, and deliberately **no resulting quantity**. `countedQuantity`
+ * and `usedAmount` are both things the user said, so a language model may report either; `8`
+ * is the difference between them and is therefore the one thing it may never report. `src/domain`
+ * subtracts. That is why this command exists rather than being handled by two commands in a
+ * row: applying them separately would need the executor to hold intermediate state across
+ * submissions, and a batch of commands would let one model response move stock twice.
+ *
+ * The unit is carried for the same reason as on `inventory.consume` — it can disagree with how
+ * the item is tracked, and that disagreement is what the user needs to hear about.
+ */
+export type InventoryRecountAfterUseCommand = CommandBase &
+  ItemReference & {
+    readonly kind: "inventory.recount_after_use";
+    /** The count the user stated, before the use. */
+    readonly countedQuantity: Quantity;
+    /** How much they then used, in the item's own unit. */
+    readonly usedAmount: Quantity;
+    readonly unit: string;
+  };
+
+/**
  * Records a spend: the PRD's "bought banana 10 rupees cash".
  *
  * `accountName` is the account as the user said it, and `amount` is already in whole minor
@@ -128,7 +151,8 @@ export type ExpenseRecordCommand = CommandBase & {
 export type InventoryCommand =
   | InventoryConsumeCommand
   | InventoryRestockCommand
-  | InventorySetQuantityCommand;
+  | InventorySetQuantityCommand
+  | InventoryRecountAfterUseCommand;
 
 export type ExpenseCommand = ExpenseRecordCommand;
 
@@ -149,6 +173,7 @@ export const COMMAND_KINDS: readonly CommandKind[] = [
   "inventory.consume",
   "inventory.restock",
   "inventory.set_quantity",
+  "inventory.recount_after_use",
   "expense.record",
 ];
 

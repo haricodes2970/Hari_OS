@@ -256,3 +256,34 @@ button:disabled {
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
   gap: 0.75rem;
 }
+
+/* --- Kitchen -------------------------------------------------------------
+   Two additions only, in the same visual language as the rest of the page.
+   Neither introduces a colour, a shadow, or an animation that the existing
+   rules do not already use. */
+
+/* A form inside a table cell. Laid out in a row so a row's height stays the
+   height of its text rather than of a stacked form. */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.inline-form .field {
+  flex: 0 1 7rem;
+}
+
+/* The rename section is collapsed by default. Editing an item's name or unit is
+   rare and should not push stock off the screen, while adding the first item
+   must not be hidden. */
+.setup {
+  margin: 0.75rem 0;
+}
+
+.setup > summary {
+  cursor: pointer;
+  padding: 0.35rem 0;
+}

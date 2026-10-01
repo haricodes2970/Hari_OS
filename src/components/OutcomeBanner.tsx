@@ -20,9 +20,39 @@ function single(value: string | string[] | undefined): string | null {
   return typeof value === "string" ? value : null;
 }
 
+/**
+ * The confirmation a successful write left in the query string.
+ *
+ * Rendered only when the endpoint also sent `saved=ok`, and only up to a fixed length. The text
+ * is written by this application from a stored result, never by a model and never by the user,
+ * so it is safe to display. The cap is belt and braces: a redirect is a place that ends up in
+ * browser history, and nothing that long is worth keeping there.
+ *
+ * A failure never renders `msg`. Those are tokens expanded to fixed wording below, so no input
+ * a user typed can reach the page through a URL.
+ */
+const MAX_MESSAGE = 300;
+
 export async function OutcomeBanner({ searchParams }: OutcomeBannerProps) {
   const params = await searchParams;
-  const message = describeOutcome(single(params.err), single(params.field));
+  const error = single(params.err);
+
+  if (error === null) {
+    const saved = single(params.saved);
+    const message = single(params.msg);
+
+    if (saved !== "ok" || message === null || message.trim() === "") {
+      return null;
+    }
+
+    return (
+      <p className="outcome outcome-ok" role="status">
+        {message.slice(0, MAX_MESSAGE)}
+      </p>
+    );
+  }
+
+  const message = describeOutcome(error, single(params.field));
 
   if (message === null) {
     return null;

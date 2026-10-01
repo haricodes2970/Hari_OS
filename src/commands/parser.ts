@@ -229,6 +229,18 @@ function candidateToCommand(
     if (amount !== undefined) {
       command.amount = amount;
     }
+  } else if (kind === "inventory.recount_after_use") {
+    // Two stated facts, copied one at a time. The subtraction between them is the domain's;
+    // there is deliberately no field here that could carry the difference.
+    const countedQuantity = asNumber(proposal.countedQuantity);
+    if (countedQuantity !== undefined) {
+      command.countedQuantity = countedQuantity;
+    }
+
+    const usedAmount = asNumber(proposal.usedAmount);
+    if (usedAmount !== undefined) {
+      command.usedAmount = usedAmount;
+    }
   } else if (kind === "inventory.set_quantity") {
     const quantity = asNumber(proposal.quantity);
     if (quantity !== undefined) {
