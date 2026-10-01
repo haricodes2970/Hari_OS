@@ -4,7 +4,8 @@
 the state. Where they disagree, this file is correct.
 
 - **Current phase:** 9 — Hardening. **Complete.** Phases 1–8 are delivered; Phase 9 hardened the
-  paths between them and added the cross-module regression suite.
+  paths between them, added the cross-module regression suite, and made the application
+  locally installable and startable with one click on `http://localhost:6377`.
 - **Latest commit:** `237d464` — `test(9): follow each fact through every layer it must cross`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none.
@@ -33,6 +34,19 @@ is that no code path reaches the network for anything it did not choose to.
 **1,879 assertions across fifteen suites, 0 failures.** The new `regression:test` suite is what was
 missing: fourteen suites each test one layer against the one below, and none asked whether a change
 made by one module is visible, and correct, in a module with no other way of knowing it happened.
+
+### Local installation and one-click launch
+
+Hari OS is now an installed local application rather than something you start from a terminal.
+`npm run setup:hari` installs, builds for production, creates the first-run rows, and installs the
+launcher once; after that, clicking **Hari OS** in the applications menu starts the production
+server, waits for it to answer, and opens the browser.
+
+It runs at **http://localhost:6377**, bound to `127.0.0.1` and not to `0.0.0.0`. That binding is
+the point rather than a detail: `next start` binds every interface by default, and with no
+authentication — which the PRD defers — the network binding is the only access control this V1 has.
+One launcher owns the address, never kills a process it did not start, and writes its log and pid
+file outside the repository. Recorded as ADR-062.
 
 ## Phase 8 — Photo and Diary: complete
 

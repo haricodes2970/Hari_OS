@@ -1748,3 +1748,67 @@ a merging approach is not available at all.
 - The two lint scopes share one constant, so neither can lose rules the other has.
 - The private log remains free of any count, streak, or score, and the command contract still has
   no field in which a model could state one.
+
+## ADR-062 — Hari OS runs on a fixed port, on loopback only, started by one launcher
+
+**Date:** 2026-10-01 · **Status:** Accepted · **Phase:** 9 (installation)
+
+**Context.** Phases 0–9 left Hari OS runnable only the way every Next.js project is runnable:
+`npm run dev` on port 3000, or `next start` on whatever port is free. That is fine for
+development and wrong for daily use. The application was never installable, never started with
+one action, and never confirmed to be reachable only from the machine it runs on.
+
+**The default binding is the problem.** `next start` binds `0.0.0.0` unless told otherwise
+(`--hostname` defaults to `0.0.0.0`). On a laptop on café wifi that publishes a database of a
+person's finances, sleep, and private log to the network. The project has never had
+authentication — the PRD defers it — so the network binding *is* the access control. Leaving it
+at the default would mean the access control was accidental.
+
+**A fixed port matters for more than convenience.** The launcher, any future desktop shortcut,
+and the user's own muscle memory all need one address. Nothing about the application needs the
+port, so the choice is free and belongs in one place.
+
+**Alternatives considered.**
+
+- **Leave the port to `PORT` / pick a free one.** Rejected: a launcher cannot reliably find the
+  application again if the port moves, and "it is on a different port today" is exactly the
+  friction this removes.
+- **A desktop-app wrapper (Electron, Tauri, a native binary).** Rejected: a new runtime and a
+  new toolchain to solve a problem that a 90-line shell script solves. It would also change the
+  PWA architecture the PRD and ADR-059 settled.
+- **A systemd user service with socket activation.** Genuinely better engineering, and rejected
+  for scope: it is a background daemon that must be installed, enabled, and understood, where
+  the ask was something to click. Recorded here as the natural next step if launching ever needs
+  to happen without a user present.
+- **`localhost` rather than `127.0.0.1` as the bind address.** Rejected: on a dual-stack machine
+  `localhost` resolves to `::1` on some resolvers, and `127.0.0.1` is unambiguous. The *URL*
+  still uses `localhost`, because that is what a person reads and types.
+- **Install into `/usr/share/applications` or a `.desktop` in `/usr/bin`.** Rejected: both need
+  root for a single-user application. `~/.local/share/applications` needs nothing.
+
+**Decision.**
+
+- `npm run start:hari` is the canonical production command and the only place the address is
+  written: `next start -p 6377 -H 127.0.0.1`. No other file contains a port or a hostname.
+- `scripts/start-hari.sh` is the single launcher. It asks whether Hari OS already answers on the
+  port and, if so, opens the browser and stops. It checks the port before starting anything, and
+  on a conflict it reports the owning process and exits non-zero — **it never kills a process it
+  did not start.** It refuses to run without `.next/BUILD_ID`, so the production build cannot be
+  silently replaced by a dev server. It starts the server with `setsid`, polls for readiness with
+  a bounded 60-second limit, and opens the browser only after the server answers.
+- `scripts/setup-hari.mjs` runs `npm ci`, `npm run build`, and `npm run db:setup` once, then
+  writes the two `.desktop` entries. It holds no application logic, because there is none to
+  hold.
+- Logs and the pid file live in `~/.local/state/hari-os/`, outside the repository. Running Hari
+  OS therefore writes nothing at all into the working tree, tracked or untracked.
+
+**Consequences.**
+
+- Hari OS listens on `127.0.0.1:6377` and is not reachable from the LAN. Verified with `ss`.
+- Clicking the launcher twice is a no-op the second time; it does not create a second server.
+- A foreign process on 6377 produces a clear message naming the process and a non-zero exit.
+- The `.desktop` files bake in the project's absolute path, so moving or deleting the project
+  breaks them. `TryExec` makes the menu grey the entry out instead of failing silently.
+- GNOME requires a one-time "Allow Launching" on a Desktop `.desktop` file. That is documented
+  rather than worked around, because the trust database is the user's, not the repository's.
+- OpenRouter remains optional: the application starts and every structured form works without it.
