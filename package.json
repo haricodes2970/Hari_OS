@@ -37,7 +37,8 @@
     "dashboard:accept": "node scripts/dashboard-accept.mjs",
     "routine:accept": "node scripts/routine-accept.mjs",
     "responsive:check": "node scripts/responsive-check.mjs",
-    "architecture:probe": "node scripts/architecture-probe.mjs"
+    "architecture:probe": "node scripts/architecture-probe.mjs",
+    "regression:test": "node --conditions=react-server --import ./scripts/register-alias.mjs scripts/regression-test.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
