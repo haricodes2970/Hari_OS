@@ -236,3 +236,30 @@ export function describeOutcome(
     detail: "The change was refused.",
   };
 }
+
+/**
+ * A redirect back to a page, carrying an outcome as query parameters.
+ *
+ * Phase 9. Three routes built the URL by string concatenation — `` `${returnTo}?${query}` `` — and
+ * that is wrong in a way a `safeReturnPath` check cannot catch, because the path is genuinely
+ * same-site. A `next` of `/habits#notes` puts the outcome *before* the fragment, where the page
+ * never sees it, and the user sees a page that looks like nothing happened. A `next` that already
+ * carries a query produces two question marks and a mangled one. Setting the parameters on the URL
+ * merges them correctly in both cases and leaves any fragment where it was.
+ *
+ * Returns a `URL` rather than a response: the callers are route handlers, and the decision about
+ * status code belongs to them.
+ */
+export function outcomeRedirect(
+  returnTo: string,
+  requestUrl: string,
+  outcome: URLSearchParams,
+): URL {
+  const target = new URL(returnTo, requestUrl);
+
+  for (const [name, value] of outcome) {
+    target.searchParams.set(name, value);
+  }
+
+  return target;
+}
