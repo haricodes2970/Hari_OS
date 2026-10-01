@@ -5,8 +5,7 @@ the state. Where they disagree, this file is correct.
 
 - **Current phase:** 8 — Photo and Diary. **Complete.** The diary, its notes, and the PWA half are
   delivered and verified.
-- **Latest commit:** `961b4f4` — `feat(8): complete the photo diary` (the PWA half and the boundary
-  tightening are `pending commit` until they exist)
+- **Latest commit:** `865c015` — `feat(8): complete pwa photo diary`
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none.
 
