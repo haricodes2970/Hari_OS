@@ -110,6 +110,6 @@ Every check below was run. Results are in the session report and in
 
 ## Status
 
-**Complete and verified.** Delivered in the commit `feat(3): complete kitchen inventory`. The
+**Complete and verified.** Delivered in `da9a89c` — `feat(3): complete kitchen inventory`. The
 one limitation carried forward is unchanged from Phase 2: no live provider call has been made,
 so the sentence path is verified against a stub and not against the real model.

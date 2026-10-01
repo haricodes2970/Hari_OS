@@ -62,7 +62,7 @@ credential is verified, including the provider, which is tested against a local 
 | 1.5 — First real vertical slice | `6f95885` | Complete | Yes |
 | 1.6 — Phase 1 foundation verification and closeout | `946d807` | Complete | Yes |
 | 2 — Command engine (natural language) | `35cb0e3` | Complete | Yes, except the live provider call |
-| 3 — Kitchen inventory | `pending commit` | Complete | Yes, except the live provider call |
+| 3 — Kitchen inventory | `da9a89c` | Complete | Yes, except the live provider call |
 
 ## Active Work
 
@@ -319,7 +319,7 @@ infrastructure.
 
 ## Latest Commit
 
-`pending commit` — `feat(3): complete kitchen inventory`
+`da9a89c` — `feat(3): complete kitchen inventory`
 
 ## Next Action
 
