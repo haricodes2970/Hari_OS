@@ -128,9 +128,16 @@ let repositories = createRepositories(scratch);
 const row = (sql, ...args) => scratch.prepare(sql).get(...args);
 const count = (sql, ...args) => scratch.prepare(sql).get(...args).n;
 
-/** The clock every command in this file sees. Fixed, so a date is a fact rather than a race. */
-const NOW = "2026-10-01T12:00:00.000Z";
-const TODAY = "2026-10-01";
+/**
+ * The clock every command in this file sees, and the day those commands belong to.
+ *
+ * Fixed, so a date is a fact rather than a race — with one exception. Section 8 posts through the
+ * real photo route, which resolves `day: "today"` from the real clock rather than from an injected
+ * `now`. So `TODAY` is the real UTC day, or that upload lands on a different day from every read
+ * that follows it and the section fails for a reason that has nothing to do with the route.
+ */
+const TODAY = new Date().toISOString().slice(0, 10);
+const NOW = `${TODAY}T12:00:00.000Z`;
 
 function runCommand(command) {
   return executeCommand(

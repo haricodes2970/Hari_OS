@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
+import { AppShell } from "@/components/AppShell";
+
 import { ServiceWorkerRegistration } from "./service-worker-registration";
 import "./globals.css";
 
@@ -14,6 +16,10 @@ import "./globals.css";
  *
  * `apple-touch-icon` is declared for the same reason: iOS does not read the manifest, so an added
  * to the Home Screen would otherwise use a screenshot of the page.
+ *
+ * `themeColor` matches the shell's dark rail. On a phone this is the strip above the browser
+ * chrome, so the difference between a dark bar and a white one over a dark header is the whole
+ * difference between an installed application and a web page.
  */
 export const metadata: Metadata = {
   title: "Hari OS",
@@ -35,7 +41,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#ffffff",
+  themeColor: "#16181d",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -43,14 +49,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         {/*
-          The only client component in the tree, and it renders nothing. See
+          The only client component that renders anything. See
           `service-worker-registration.tsx` for why registration cannot live here.
         */}
         <ServiceWorkerRegistration />
-        <header className="site-header">
-          <span className="site-name">Hari OS</span>
-        </header>
-        <main className="page">{children}</main>
+        {/*
+          The shell wraps every page so the rail is defined once. It is the other client component
+          in the tree, and it exists only because a layout is never told which page it is wrapping;
+          `AppShell.tsx` explains the trade in full.
+        */}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

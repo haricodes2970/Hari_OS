@@ -7,6 +7,13 @@
  * timeline. The Habits page carries a short preview of the same pictures, because the habit record
  * and the picture belong together; this page is the one the note is written on.
  *
+ * ## The photograph is the page
+ *
+ * The reference direction for this redesign is photo-first, and the layout follows it literally:
+ * each entry is a card whose largest element is the image, at a fixed aspect ratio so a grid of
+ * entries lines up no matter what shape the photographs are. The note sits underneath in the same
+ * words the user typed, at a size meant to be read rather than skimmed.
+ *
  * ## Why the note is a textarea with one submit button
  *
  * The note is a sentence or two, and editing one should not cost a page load for every keystroke.
@@ -30,8 +37,8 @@
  *
  * A Server Component: entries came from `readDiary`, and every change posts to one route.
  */
-import { Nav } from "@/components/Nav";
 import { OutcomeBanner } from "@/components/OutcomeBanner";
+import { Card, Empty, PageHeader, Section } from "@/components/ui";
 import { MAX_DIARY_NOTE } from "@/domain/diary";
 import { diarySummary, readDiary } from "@/features/habits/diary";
 
@@ -58,7 +65,7 @@ function NoteForm({
 }) {
   return (
     <form
-      className="command-form"
+      className="stack-form"
       method="post"
       action={`/api/photos/${id}/note`}
     >
@@ -76,7 +83,7 @@ function NoteForm({
         />
       </label>
       <input type="hidden" name="next" value={RETURN_TO} />
-      <div className="field-row">
+      <div className="button-row">
         <button type="submit">Save note</button>
       </div>
     </form>
@@ -101,8 +108,10 @@ function ClearNoteForm({ id }: { readonly id: number }) {
     >
       <input type="hidden" name="note" value="" />
       <input type="hidden" name="next" value={RETURN_TO} />
-      <button type="submit">Remove note</button>
-      <span className="muted">Removes the words. The photo stays.</span>
+      <button type="submit" className="button-quiet">
+        Remove note
+      </button>
+      <span className="meta">Removes the words. The photo stays.</span>
     </form>
   );
 }
@@ -110,56 +119,63 @@ function ClearNoteForm({ id }: { readonly id: number }) {
 export default async function DiaryPage({
   searchParams,
 }: {
-  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const entries = readDiary();
 
   return (
-    <>
-      <Nav currentPath={RETURN_TO} />
-      <h1>Photo Diary</h1>
-      <OutcomeBanner searchParams={searchParams} />
-      <p className="muted">
-        Every laundry photo, newest first, with whatever you wrote about it.
-        Notes are yours alone: nothing here is written, suggested, or summarised
-        for you.
-      </p>
-      <p className="muted">{diarySummary(entries)}</p>
+    <div className="page">
+      <PageHeader
+        title="Photo Diary"
+        description="Every laundry photo, newest first, with whatever you wrote about it. Notes are yours alone: nothing here is written, suggested, or summarised for you."
+        aside={<p className="meta">{diarySummary(entries)}</p>}
+      />
 
-      {entries.length === 0 ? (
-        <p className="empty">
-          No photos yet. Upload one on the <a href="/habits">Habits page</a> and
-          the diary fills itself from there.
-        </p>
-      ) : (
-        <ul className="card-list">
-          {entries.map((entry) => (
-            <li key={entry.id} className="card">
-              <h2>{entry.date}</h2>
-              {/* The src is the application's own URL, recorded with the row in Phase 7. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={entry.photoUrl}
-                alt={`Laundry recorded on ${entry.date}`}
-                className="diary-photo"
-                loading="lazy"
-              />
-              {entry.note === null ? (
-                <p className="muted">No note on this one yet.</p>
-              ) : (
-                /*
-                  The user's own words, rendered as text. React escapes it, the domain has already
-                  refused control characters, and there is no path by which a note is interpreted
-                  as markup.
-                */
-                <p className="diary-note-text">{entry.note}</p>
-              )}
-              <NoteForm id={entry.id} date={entry.date} note={entry.note} />
-              {entry.note === null ? null : <ClearNoteForm id={entry.id} />}
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
+      <OutcomeBanner searchParams={searchParams} />
+
+      <Section title="Timeline">
+        {entries.length === 0 ? (
+          <Empty>
+            No photos yet. Upload one on the <a href="/habits">Habits page</a>{" "}
+            and the diary fills itself from there.
+          </Empty>
+        ) : (
+          <ul className="card-list">
+            {entries.map((entry) => (
+              <li key={entry.id}>
+                <Card>
+                  <span className="photo-frame">
+                    {/* The src is the application's own URL, recorded with the row in Phase 7. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={entry.photoUrl}
+                      alt={`Laundry recorded on ${entry.date}`}
+                      className="diary-photo"
+                      loading="lazy"
+                    />
+                  </span>
+
+                  <h3 className="card-title">{entry.date}</h3>
+
+                  {entry.note === null ? (
+                    <p className="muted">No note on this one yet.</p>
+                  ) : (
+                    /*
+                      The user's own words, rendered as text. React escapes it, the domain has
+                      already refused control characters, and there is no path by which a note is
+                      interpreted as markup.
+                    */
+                    <p className="diary-note-text">{entry.note}</p>
+                  )}
+
+                  <NoteForm id={entry.id} date={entry.date} note={entry.note} />
+                  {entry.note === null ? null : <ClearNoteForm id={entry.id} />}
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </div>
   );
 }

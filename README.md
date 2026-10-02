@@ -92,6 +92,19 @@ project, and remain git-ignored. The server log and pid file are kept outside th
 under `~/.local/state/hari-os/`, so running Hari OS never writes anything into the working
 tree.
 
+### The interface
+
+Eight pages, one design system. A dark rail on the desktop; on a narrow screen the rail is
+replaced by a top bar and a navigation row that wraps rather than scrolls, so every destination
+stays visible. The command box is the largest control on the Dashboard.
+
+Everything below 320px is designed, not squeezed: cards become one column, tables become lists,
+and the command box's button moves under its input so the field keeps the full width. Every page
+is verified at 320px, 390px, 768px, and 1440px with no horizontal overflow.
+
+No UI framework, icon package, or charting library is installed. The design system is one
+stylesheet of named tokens, and the icons are inline SVG.
+
 ### A note on the chat input
 
 Natural-language entry needs an `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` in `.env.local`

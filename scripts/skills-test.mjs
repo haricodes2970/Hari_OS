@@ -941,7 +941,12 @@ privateEntry("masturbation", true, {
   note: "a note the dashboard must never show",
 });
 
-const dashboard = readDashboard();
+// The day is named rather than defaulted. `readDashboard()` with no argument reads the real UTC
+// date, and these fixtures were written to a fixed day — so on any day after that one, the
+// composition correctly reported an empty Dashboard and the assertion failed for a reason that
+// had nothing to do with the behaviour under test. Naming the day is what the rest of this file
+// already does.
+const dashboard = readDashboard("2026-10-01");
 
 assertEqual(
   dashboard.habits.map((entry) => entry.type).join(" | "),

@@ -1,33 +1,183 @@
+/* ===========================================================================
+   Hari OS design system
+
+   One stylesheet, no framework, no build step. Everything the application
+   looks like is defined here as a token plus a primitive, and every page is
+   assembled from those primitives rather than from its own CSS.
+
+   ## The rules this system follows
+
+   - **One accent.** Blue marks the one thing that is actionable on a screen.
+     Green confirms. Red and amber are reserved for states that genuinely need
+     attention. Nothing else is coloured, so colour always means something.
+   - **Numbers are the loudest thing on a card.** When a card exists to report
+     one figure, that figure is set large and the label around it is quiet.
+   - **Whitespace does the work.** Separation is mostly space and a hairline
+     border, not shadow. There are two shadow tokens in this file and both are
+     for things that float above the page.
+   - **Pills are for state, not for controls.** A status is a pill. A button is
+     a button. Roundness is a signal, and a screen full of rounded rectangles
+     stops signalling anything.
+
+   ## Why tokens rather than literal values
+
+   Every colour, radius, space, and shadow step below is named. A page that
+   reaches for a hex code instead is the reason a redesign drifts: there is no
+   second place to change it, and nothing left behind to look inconsistent.
+   =========================================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* --- Colour ---------------------------------------------------------- */
+
+  /* Surfaces, from furthest back to closest. */
+  --surface-page: #f6f7f9;
+  --surface-card: #ffffff;
+  --surface-sunken: #f1f3f6;
+  --surface-inverse: #16181d;
+
+  /* Text, in descending emphasis. */
+  --text-primary: #0f1115;
+  --text-secondary: #5b6472;
+  --text-muted: #8a94a3;
+  --text-inverse: #ffffff;
+  --text-inverse-muted: #9aa3b2;
+
+  /* Hairlines. Three weights: structural, decorative, and the strongest edge. */
+  --border: #e4e7ec;
+  --border-strong: #d3d8e0;
+  --border-inverse: #262a32;
+
+  /* The accent. Used for the primary action and for "this is what matters". */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff4ff;
+  --accent-border: #c7d7fe;
+
+  /* Confirmation. */
+  --positive: #059669;
+  --positive-soft: #ecfdf5;
+  --positive-border: #a7f3d0;
+
+  /* Attention. Red is only ever a real problem: a negative balance, a low
+     stock level. Amber is a warning the domain itself raised. */
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
+
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --warning-border: #fde68a;
+
+  --focus-ring: #2563eb;
+
+  /* --- Space ------------------------------------------------------------ */
+
+  /* A four-pixel base scale. Named by step rather than by size so a gap
+     reads as "two steps" and stays consistent between unrelated pages. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* --- Radius ----------------------------------------------------------- */
+
+  --radius-sm: 0.375rem;
+  --radius: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-pill: 999px;
+
+  /* --- Elevation -------------------------------------------------------- */
+
+  /* Two levels only. One for a resting card, one for something that is
+     genuinely above the page. A third would mean the hierarchy is unclear. */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 4%);
+  --shadow-raised: 0 4px 16px rgb(16 24 40 / 8%);
+
+  /* --- Type ------------------------------------------------------------- */
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --text-4xl: 2.75rem;
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.55;
+
+  /* --- Layout ----------------------------------------------------------- */
+
+  --sidebar-width: 15rem;
+  --content-max: 84rem;
+  --tap-min: 2.75rem;
+}
+
+/* ===========================================================================
+   Reset
+   =========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 html {
   height: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 html,
 body {
+  /* `overflow-x: hidden` on the document is the last line of defence against
+     a stray wide child turning a whole page sideways. Phase 6 hit exactly
+     this with a four-link navigation at 320px, and it is why the constraint
+     is here rather than only in the layout rules. */
   max-width: 100vw;
   overflow-x: hidden;
 }
 
 body {
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  background: var(--surface-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
 }
 
 a {
@@ -35,300 +185,842 @@ a {
   text-decoration: none;
 }
 
-/* ---------------------------------------------------------------------------
-   Hari OS pages
-
-   Plain CSS, no framework. Phase 1 is about function rather than polish, so these
-   rules exist to make state legible — stock levels, balances, and failures should be
-   distinguishable at a glance — and deliberately stop there.
-   --------------------------------------------------------------------------- */
-
-.site-header {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e5e5e5;
+/* One focus treatment for the whole application. Every interactive element
+   gets it, and it is never removed — a keyboard user must be able to see
+   where they are, which matters most in a form-heavy application like this. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
-.site-name {
-  font-weight: 700;
+/* ===========================================================================
+   Typography primitives
+
+   A single scale, applied by role rather than by page. `h1` is the page title
+   everywhere; nothing styles a heading locally to make one section louder than
+   another, because that is how a hierarchy stops being a hierarchy.
+   =========================================================================== */
+
+h1,
+.page-title {
+  font-size: var(--text-2xl);
+  font-weight: 650;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+
+h2,
+.section-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: var(--leading-snug);
   letter-spacing: -0.01em;
 }
 
-.page {
-  max-width: 60rem;
-  margin: 0 auto;
-  padding: 1rem;
+h3,
+.card-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+
+h4 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+
+/* Supporting description under a title. The most-used class in the system. */
+.muted {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+/* Metadata: a label, a date, a unit. The quietest text on the page. */
+.meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+}
+
+/* A section eyebrow. Uppercase, wide-tracked, and never longer than a word or
+   two — it names the section, it does not describe it. */
+.eyebrow {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The figure a card exists to report. Set large, tight, and heavy: on a screen
+   where most numbers are dates and units, the one that matters should be the
+   one your eye lands on. */
+.tile-value {
+  font-size: var(--text-2xl);
+  font-weight: 680;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Smaller figures, for a card with room for more than one. */
+.tile-value-sm {
+  font-size: var(--text-xl);
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A number inside a sentence — a quantity, a count. Aligns with the figures
+   around it without competing with them. */
+.figure {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.positive-text {
+  color: var(--positive);
+}
+
+.negative-text {
+  color: var(--danger);
+}
+
+/* ===========================================================================
+   Shell
+
+   A dark sidebar and a light content area on desktop. On a narrow screen the
+   sidebar is not squeezed — it becomes a top bar plus a horizontal scroller,
+   because a 15rem rail cannot be made usable at 320px and pretending otherwise
+   produces the squeezed-sidebar layout this redesign exists to avoid.
+   =========================================================================== */
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.shell-sidebar {
+  flex: 0 0 var(--sidebar-width);
+  width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-4);
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
 }
 
-h1 {
-  font-size: 1.5rem;
+.shell-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2);
 }
 
-h2 {
-  font-size: 1.05rem;
-  margin-top: 0.5rem;
+.shell-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
+
+.shell-name {
+  font-size: var(--text-md);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.shell-tagline {
+  color: var(--text-inverse-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  padding: 0 var(--space-2);
+  margin-top: calc(var(--space-2) * -1);
+}
+
+/* --- Navigation --------------------------------------------------------- */
 
 .nav {
   display: flex;
-  /*
-   * Wraps rather than scrolling.
-   *
-   * Phase 6 added a fourth page, and four links no longer fit on one 320px line. Without this
-   * the whole document grew wider than the viewport and every element on the page was reported
-   * as overflowing — a navigation change turning into a page-wide layout failure. `flex-wrap`
-   * is the whole fix: the nav takes a second line, and nothing else on the page moves.
-   */
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  border-bottom: 1px solid #e5e5e5;
-  padding-bottom: 0.5rem;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-label {
+  padding: 0 var(--space-2) var(--space-2);
+  color: var(--text-inverse-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .nav-link {
-  padding: 0.3rem 0.7rem;
-  border-radius: 999px;
-  color: #525252;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.375rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-inverse-muted);
+  font-size: var(--text-base);
+  font-weight: 500;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.nav-link:hover {
+  background: var(--border-inverse);
+  color: var(--text-inverse);
+}
+
+/* The active page is marked by weight and a surface, not by an accent colour:
+   in a dark rail a bright highlight on every page would compete with the
+   content, and the current page is not the most important thing on screen. */
+.nav-link-active {
+  background: #21252d;
+  color: var(--text-inverse);
+  font-weight: 600;
+}
+
+.nav-icon {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  opacity: 0.85;
+}
+
+.nav-link-active .nav-icon {
+  opacity: 1;
+}
+
+/* Settings sits at the bottom of the rail, pushed down by the flexible spacer,
+   because it is where configuration lives rather than where the day lives. */
+.shell-sidebar-footer {
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-inverse);
+}
+
+/* --- Mobile navigation -------------------------------------------------- */
+
+.shell-topbar {
+  display: none;
+}
+
+.shell-mobile-nav {
+  display: none;
+}
+
+@media (max-width: 63.999rem) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .shell-sidebar {
+    display: none;
+  }
+
+  /* The top bar carries the brand and, below it, the same links as a single
+     horizontally scrollable row. It scrolls rather than wraps because eight
+     wrapped links push the command box — the most important control on the
+     page — below two rows of chrome. */
+  .shell-topbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-inverse);
+    color: var(--text-inverse);
+  }
+
+  /*
+   * Wraps rather than scrolls.
+
+   * Phase 6 hit this exact decision with a four-link navigation at 320px and chose wrapping, and
+   * the reason still holds at eight links: a link scrolled off the right edge is a link that does
+   * not exist as far as someone using the application is concerned, and a horizontal scroller
+   * inside a page that otherwise has no horizontal scroll is easy to miss entirely. Two short rows
+   * cost a little vertical space and keep every destination visible and tappable.
+   */
+  .shell-mobile-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-inverse);
+  }
+
+  .shell-mobile-nav .nav-link {
+    flex: 0 0 auto;
+    font-size: var(--text-sm);
+    min-height: 2.25rem;
+    padding: var(--space-1) var(--space-2);
+  }
+}
+
+/* ===========================================================================
+   Content area
+   =========================================================================== */
+
+.shell-main {
+  flex: 1 1 auto;
+  min-width: 0; /* Lets a wide child shrink instead of forcing the page wider. */
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6) var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+@media (max-width: 47.999rem) {
+  .page {
+    padding: var(--space-5) var(--space-4) var(--space-12);
+    gap: var(--space-5);
+  }
+}
+
+/* --- Page header -------------------------------------------------------- */
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.page-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.page-description {
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  max-width: 44rem;
+}
+
+/* ===========================================================================
+   Sections and cards
+   =========================================================================== */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* The card grid. `auto-fit` with a floor means the columns follow the
+   container rather than a fixed count, so the same markup serves the 320px
+   phone (one column) and the 1440px desktop (three or four) with no variant. */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
+  gap: var(--space-4);
+}
+
+.card-grid-wide {
+  grid-template-columns: repeat(auto-fit, minmax(min(21rem, 100%), 1fr));
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.card-compact {
+  padding: var(--space-4);
+}
+
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.card-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+/* A card's footer, usually one link that goes deeper. Keeps the link out of
+   the body so the content of the card is the only thing competing for
+   attention at the top. */
+.card-foot {
+  margin-top: auto;
+  padding-top: var(--space-1);
+}
+
+.card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 550;
+}
+
+.card-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.card-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.card-list > li {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Status pills -------------------------------------------------------
+   A pill is a state, never a control. Four states exist and they mean exactly
+   what they say. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.125rem var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
-.nav-link-active {
-  background: #171717;
-  color: #ffffff;
+.badge-ok {
+  background: var(--surface-sunken);
+  border-color: var(--border);
+  color: var(--text-secondary);
 }
 
-.muted {
-  color: #737373;
-  font-size: 0.875rem;
+.badge-low {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+.badge-danger {
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.badge-accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-hover);
+}
+
+.badge-positive {
+  background: var(--positive-soft);
+  border-color: var(--positive-border);
+  color: var(--positive);
+}
+
+/* A small filled dot, for a state that needs no words. Always accompanied by
+   text or a title, never used alone to convey meaning. */
+.dot {
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.125rem var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 550;
+}
+
+/* --- Empty states -------------------------------------------------------
+
+   An empty state is a normal state, not a failure, so it is quiet prose and
+   never an alert. It also never fills itself with example data: an empty
+   screen that showed invented rows would be lying about what is stored. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.empty-compact {
+  padding: var(--space-4);
+}
+
+/* ===========================================================================
+   Lists, rows, and tables
+
+   A data table on a wide screen and a card list on a narrow one, from one
+   piece of markup: the row is a list item at small widths and becomes a table
+   row at large ones. This is why a 320px screen shows no horizontal scroll.
+   =========================================================================== */
+
+.row-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row-title {
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.row-aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+}
+
+.row-warn {
+  background: var(--warning-soft);
+}
+
+/* Done rows stay legible. Struck-through and dimmed is enough; the row is not
+   hidden, because "what I finished today" is part of the answer. */
+.row-done .row-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
 }
 
 .table th,
 .table td {
   text-align: left;
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid #ededed;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
 }
 
 .table thead th {
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #737373;
+  color: var(--text-muted);
+  background: var(--surface-card);
+}
+
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody th {
+  font-weight: 550;
+}
+
+.table .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .row-low {
-  background: #fffbeb;
-}
-
-.badge {
-  display: inline-block;
-  padding: 0.05rem 0.45rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-}
-
-.badge-low {
-  background: #fde68a;
-  color: #713f12;
-}
-
-.badge-ok {
-  background: #e5e5e5;
-  color: #525252;
-}
-
-.tag {
-  font-size: 0.8rem;
-  color: #737373;
+  background: var(--warning-soft);
 }
 
 .amount-negative {
-  color: #b91c1c;
+  color: var(--danger);
+  font-weight: 600;
 }
 
 .list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-2);
 }
 
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.75rem;
-}
-
-.tile {
-  border: 1px solid #e5e5e5;
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-}
-
-.tile-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-}
-
-/* An empty state is a normal state, not a failure, so it is styled as quiet
-   prose rather than as an alert. */
-.empty {
-  color: #737373;
-  padding: 0.5rem 0;
-}
-
-.outcome {
-  padding: 0.6rem 0.8rem;
-  border-radius: 0.4rem;
-  font-size: 0.95rem;
-}
-
-.outcome-ok {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  color: #14532d;
-}
-
-.outcome-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #7f1d1d;
-}
-
-.command-form {
-  border: 1px solid #e5e5e5;
-  border-radius: 0.5rem;
-  padding: 0.75rem;
+.plain-list {
+  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  margin-top: 0.5rem;
+  gap: var(--space-2);
+}
+
+/* ===========================================================================
+   Forms
+
+   Every form is a plain `method="post"` with no client JavaScript, which is
+   the only reason any of this works without scripts. The visuals are generous
+   with height and hit area because the target is a phone as often as a desk.
+   =========================================================================== */
+
+.command-form,
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .form-heading {
-  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
 }
 
 .field-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-3);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  font-size: 0.85rem;
-  flex: 1 1 8rem;
+  gap: var(--space-1);
+  flex: 1 1 9rem;
+  min-width: 0;
+  font-size: var(--text-sm);
 }
 
 .field-label {
-  color: #525252;
+  color: var(--text-secondary);
+  font-weight: 550;
+}
+
+/* A hint under a field. It states the rule before the user breaks it, which is
+   the difference between an inline validation message and a server error. */
+.field-hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
 }
 
 .field input,
-.field select {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #d4d4d4;
-  border-radius: 0.3rem;
-  font: inherit;
-  font-size: 0.95rem;
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  font-size: var(--text-base);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
-button {
-  align-self: flex-start;
-  padding: 0.4rem 0.9rem;
-  border: 0;
-  border-radius: 0.3rem;
-  background: #171717;
-  color: #ffffff;
-  font: inherit;
-  font-size: 0.95rem;
-  cursor: pointer;
+.field input::placeholder,
+.field textarea::placeholder {
+  color: var(--text-muted);
 }
 
-button:disabled {
-  background: #a3a3a3;
-  cursor: progress;
+.field input:hover,
+.field select:hover,
+.field textarea:hover {
+  border-color: var(--text-muted);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr));
+  gap: var(--space-4);
+  align-items: start;
 }
 
-/* --- Shared input ---------------------------------------------------------
-   Phase 2 added the shared natural-language input and no rules for it, so on
-   every page the one control the PRD calls "low friction" rendered as an
-   unstyled input and button sitting at the top of the screen. The Dashboard
-   puts it first, which makes the gap impossible to ignore. Four rules, in the
-   same language as everything else: no colour that is not already in this
-   file, no animation, and a row that wraps on a narrow screen. */
+/* --- Buttons ------------------------------------------------------------ */
 
-.chat {
-  border: 1px solid #171717;
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--text-primary);
+  color: var(--text-inverse);
+  font-size: var(--text-base);
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
-.chat-label {
-  font-size: 0.85rem;
-  color: #525252;
+button:hover:not(:disabled) {
+  background: #2b313b;
 }
 
-.chat-row {
+button:disabled {
+  background: var(--surface-sunken);
+  border-color: var(--border);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* Secondary: present, available, not the thing you should reach for first. */
+.button-secondary {
+  background: var(--surface-card);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--surface-sunken);
+  border-color: var(--text-muted);
+}
+
+.button-accent {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.button-accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/* Quiet: for the many small actions sitting inside a row. */
+.button-quiet {
+  min-height: 2rem;
+  padding: 0 var(--space-3);
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.button-quiet:hover:not(:disabled) {
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+
+.button-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
-.chat-input {
-  flex: 1 1 12rem;
-  min-width: 0;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid #d4d4d4;
-  border-radius: 0.3rem;
-  font: inherit;
-  font-size: 1rem;
-}
-
-.chat-input:disabled {
-  background: #f5f5f5;
-  color: #737373;
-}
-
-/* The sentence the parser read, shown back verbatim. It is the user's own
-   text, and it is the only place user input is ever rendered. */
-.chat-echo {
-  font-size: 0.9rem;
-  color: #525252;
-}
-
-/* --- Kitchen -------------------------------------------------------------
-   Two additions only, in the same visual language as the rest of the page.
-   Neither introduces a colour, a shadow, or an animation that the existing
-   rules do not already use. */
-
-/* A form inside a table cell. Laid out in a row so a row's height stays the
-   height of its text rather than of a stacked form. */
+/* A form laid out inline, inside a table cell or a list row, so a row's height
+   stays the height of its text rather than of a stacked form. */
 .inline-form {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0.35rem;
+  gap: var(--space-2);
   margin: 0;
 }
 
@@ -336,47 +1028,438 @@ button:disabled {
   flex: 0 1 7rem;
 }
 
-/* The rename section is collapsed by default. Editing an item's name or unit is
+.inline-form button {
+  min-height: 2.25rem;
+}
+
+/* The rename/setup section is collapsed by default. Editing an item's name is
    rare and should not push stock off the screen, while adding the first item
    must not be hidden. */
 .setup {
-  margin: 0.75rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  padding: var(--space-4) var(--space-5);
 }
 
 .setup > summary {
   cursor: pointer;
-  padding: 0.35rem 0;
+  font-weight: 550;
+  color: var(--text-secondary);
 }
 
-/* --- Photo Diary ---------------------------------------------------------
-   Phase 8. Four rules, and the first one is a fix rather than an addition.
+.setup[open] > summary {
+  margin-bottom: var(--space-4);
+  color: var(--text-primary);
+}
 
-   `.diary-photo` has been used by the Habits page since Phase 7 with no rule
-   behind it, so a photo rendered at its own size and a wide picture pushed the
-   whole page sideways on a narrow screen. Constraining it here is what makes the
-   timeline readable on a phone at all, and it belongs to this phase because this
-   is the phase that makes photos a page rather than a preview. */
+.setup-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ===========================================================================
+   The command box
+
+   The single most important control in the application, so it is the one thing
+   on the page that is allowed to be visually heavy. The input is one field,
+   the button sits at its edge, and the whole thing is one surface.
+   =========================================================================== */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+}
+
+.chat-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.chat-label {
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.chat-hint {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin-top: calc(var(--space-1) * -1);
+}
+
+.chat-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.chat-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 3rem;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  font-size: var(--text-md);
+}
+
+.chat-input::placeholder {
+  color: var(--text-muted);
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.chat-input:disabled {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.chat-row button {
+  flex: 0 0 auto;
+  padding: 0 var(--space-5);
+  background: var(--accent);
+}
+
+.chat-row button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/*
+ * Below 30rem the button moves under the input instead of beside it.
+ *
+ * Measured at 320px: side by side, the input was 132px — about eleven characters. The sentences
+ * this box exists to hold ("I bought milk for 40 rupees") are longer than that, so the field a
+ * screen's whole data-entry flow depends on was the one control that had to be sacrificed for the
+ * button. Stacking gives the input the full width of the card and turns the button into a
+ * full-width target, which is also what a thumb wants.
+ */
+@media (max-width: 29.999rem) {
+  .chat-row {
+    flex-direction: column;
+  }
+
+  .chat-row button {
+    width: 100%;
+  }
+}
+
+/* --- Suggestion chips ---------------------------------------------------
+
+   Examples of what the box understands, not actions. They fill the input on
+   click, and they post nothing by themselves — pressing one does not record
+   anything, so nothing here can accidentally change the user's data. They are
+   still real `<button>`s rather than non-interactive spans so a keyboard user
+   reaches them the same way. */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.chips-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chip {
+  min-height: 2rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-hover);
+}
+
+/* The sentence the parser read, shown back verbatim. It is the user's own text
+   and the only place user input is ever rendered. */
+.chat-echo {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* ===========================================================================
+   Outcomes
+
+   What a write did. Three tones and no more: it worked, it was refused, or it
+   could not be computed. A fourth tone would be decoration.
+   =========================================================================== */
+
+.outcome {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+.outcome-ok,
+.outcome-success {
+  background: var(--positive-soft);
+  border-color: var(--positive-border);
+  color: var(--positive);
+}
+
+.outcome-error {
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.outcome-warn {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+.outcome strong {
+  font-weight: 650;
+}
+
+/* ===========================================================================
+   Progress
+
+   The laundry bar is the one progress bar in the application. It is a bar
+   against a target, not a score, and it is never rendered for anything
+   private.
+   =========================================================================== */
+
+.progress {
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* ===========================================================================
+   Completion ring
+
+   A ring, drawn rather than rendered as a percentage: the Routine page must
+   not contain a `%` anywhere, so the proportion is expressed as geometry. The
+   accessible value lives in `aria-valuetext` and in the sentence beside it,
+   because a shape is not a number a screen reader can read.
+   =========================================================================== */
+
+.ring {
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 4.5rem;
+  height: 4.5rem;
+  flex: 0 0 auto;
+}
+
+.ring svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--surface-sunken);
+  stroke-width: 6;
+}
+
+.ring-value {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.ring-label {
+  position: relative;
+  font-size: var(--text-sm);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+   Data visualisation
+
+   Bars, built from the domain's own numbers. Nothing here computes: the width
+   is written by the page from a figure that already exists, and a bar with no
+   underlying value is not drawn at all.
+   =========================================================================== */
+
+.viz {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.viz-row {
+  display: grid;
+  grid-template-columns: minmax(4rem, 9rem) 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.viz-label {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viz-track {
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.viz-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.viz-fill-muted {
+  background: var(--text-muted);
+}
+
+.viz-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --- Category chips ----------------------------------------------------- */
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chip-static {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 550;
+}
+
+.chip-static-accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-hover);
+}
+
+/* ===========================================================================
+   Photos
+
+   A diary entry is its picture. The image is therefore the largest thing in
+   its card and is constrained to the card's width, which is what makes a wide
+   photograph safe on a 320px screen.
+   =========================================================================== */
 
 .diary-photo {
   display: block;
+  width: 100%;
   max-width: 100%;
   height: auto;
-  border-radius: 0.35rem;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
 }
 
-/* The note box. Resizable is left off so the box cannot be dragged taller than
-   its three rows on a desktop, and `min-width: 0` lets it shrink inside a flex
-   row on a 320px screen instead of forcing the page wider. */
+/* A gallery tile: a fixed-ratio frame the picture fills, so a grid of entries
+   lines up regardless of the photographs' own dimensions. */
+.photo-frame {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.photo-frame .diary-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(8rem, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+.photo-thumb {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.photo-thumb .diary-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .diary-note {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid #d4d4d4;
-  border-radius: 0.3rem;
-  font: inherit;
-  font-size: 0.95rem;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: var(--text-base);
   resize: vertical;
+}
+
+.diary-note:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 /* The user's own words, as they were written. No italics, no quote marks, and
@@ -384,4 +1467,123 @@ button:disabled {
 .diary-note-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  color: var(--text-primary);
+  line-height: var(--leading-normal);
+}
+
+/* ===========================================================================
+   Settings
+   =========================================================================== */
+
+.setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.setting-row:last-child {
+  border-bottom: 0;
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+/* ===========================================================================
+   Utilities
+
+   Deliberately few. Each one exists because it was used in three or more
+   places, and the set is short enough that a new need is usually answered with
+   a real component instead of another utility class.
+   =========================================================================== */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.stack-sm {
+  gap: var(--space-2);
+}
+
+.row-between {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.full-width {
+  width: 100%;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ===========================================================================
+   Print and reduced motion
+
+   The only two overrides, because both are correctness rather than taste: a
+   page someone prints should not carry a dark rail, and an animation is never
+   the only way something is communicated.
+   =========================================================================== */
+
+@media print {
+  .shell-sidebar,
+  .shell-topbar,
+  .shell-mobile-nav {
+    display: none;
+  }
+
+  .shell {
+    display: block;
+  }
+
+  .page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .card,
+  .row-list {
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

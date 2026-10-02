@@ -6,7 +6,8 @@ the state. Where they disagree, this file is correct.
 - **Current phase:** 9 — Hardening. **Complete.** Phases 1–8 are delivered; Phase 9 hardened the
   paths between them, added the cross-module regression suite, and made the application
   locally installable and startable with one click on `http://localhost:6377`.
-- **Latest commit:** `237d464` — `test(9): follow each fact through every layer it must cross`
+- **Latest commit:** see `git log -1`. The Phase 9 redesign landed after `a679676` (the local
+  launcher).
 - **Working tree:** see `git status`. Local user data under `data/` is untracked by design.
 - **Blockers:** none.
 
@@ -47,6 +48,32 @@ the point rather than a detail: `next start` binds every interface by default, a
 authentication — which the PRD defers — the network binding is the only access control this V1 has.
 One launcher owns the address, never kills a process it did not start, and writes its log and pid
 file outside the repository. Recorded as ADR-062.
+
+### Interface redesign
+
+The eight pages were rebuilt around one design system and one application shell: a dark rail on
+desktop, a wrapping navigation bar on a narrow screen, and a command box that is the largest
+control on the Dashboard rather than a field above a heading. A `/settings` page was added,
+carrying only facts that already existed.
+
+`src/app/globals.css` is the whole visual system — about forty-five tokens and twenty primitives,
+and no framework, icon package, or charting library behind it. Every figure on every page is still
+produced by the feature that owns it; no file under `src/domain`, `src/lib`, `src/commands`, or
+`src/features` was touched.
+
+Three things the redesign deliberately did not build, each against the brief's own suggestions:
+the Dashboard carries no diary content (ADR-061 makes it the one page forbidden to read it), the
+Routine completion ring carries no `role="progressbar"` (the page's acceptance suite forbids one,
+because a progress bar over a person's day is a step from scoring them), and the Dashboard reports
+the day's spend without account balances (they are different numbers).
+
+Two real defects were caught by `responsive:check` rather than by looking: Settings was
+unreachable below 1024px, and the mobile navigation scrolled when Phase 6 had established that it
+wraps. Three date-coupling bugs in the existing suite also surfaced and were fixed — they failed on
+2026-10-02 and passed the day before, for reasons that had nothing to do with this work. Full
+detail, including the fact that the reference images never arrived, is in
+`docs/sessions/2026-10-02-session-10.md`. ADR-063 records the design system and the two decisions
+worth keeping.
 
 ## Phase 8 — Photo and Diary: complete
 

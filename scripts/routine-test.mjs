@@ -881,7 +881,15 @@ console.log("\n# the HTTP surface, over real SQLite");
   );
 
   // The read model sees what HTTP wrote, through the same connection the page will use.
-  const view = readRoutine("2026-10-02");
+  //
+  // The day is derived rather than written as a literal. The night check-in posts through the real
+  // route, which resolves "tomorrow" from the real clock, so hard-coding the day this assertion
+  // should read meant it only held on the calendar day the literal was written for.
+  const checkInDay = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const view = readRoutine(checkInDay);
   assertEqual(
     view.topTasks.map((task) => task.title).join(", "),
     "buy milk, walk",

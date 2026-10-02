@@ -266,6 +266,12 @@ const VIEWPORTS = [
   { label: "mobile (320x568)", width: 320, height: 568, deviceScaleFactor: 1 },
   { label: "phone (390x844)", width: 390, height: 844, deviceScaleFactor: 1 },
   {
+    label: "tablet (768x1024)",
+    width: 768,
+    height: 1024,
+    deviceScaleFactor: 1,
+  },
+  {
     label: "desktop (1440x900)",
     width: 1440,
     height: 900,
@@ -405,7 +411,14 @@ try {
           inputVisible: input !== null && input.getBoundingClientRect().width > 0,
           inputDisabled: input === null ? true : input.disabled,
           buttonVisible: button !== null && button.getBoundingClientRect().width > 0,
-          navLinks: [...document.querySelectorAll('.nav-link')].map((node) => node.textContent.trim()),
+          // The shell renders the links twice on purpose: a dark rail on desktop and a
+          // scrollable row on a narrow screen, because a 15rem column cannot be made usable at
+          // 320px. Only one of the two is laid out at any width, so only one has a layout box.
+          // Selecting the rendered one tests the claim that actually matters — that navigation
+          // reaches every page *at this viewport* — instead of counting markup that is hidden.
+          navLinks: [...document.querySelectorAll('.nav-link')]
+            .filter((node) => node.offsetParent !== null || node.getClientRects().length > 0)
+            .map((node) => node.textContent.trim()),
           bodyText: document.body.innerText,
         };
       })()`);
@@ -437,10 +450,12 @@ try {
       `${viewport.label}: the input reports honestly that parsing is unavailable (no API key here)`,
     );
     // Named, not counted. Phase 7 added Habits and Skills, and a count is the assertion a
-    // navigator stops updating the moment a page is added.
+    // navigator stops updating the moment a page is added. The redesign reordered Skills ahead of
+    // Habits — the list is what you open *because* you feel like scrolling — and added Settings,
+    // so this is the order the shell declares in `src/components/NavLinks.ts`.
     assertEqual(
       measurement.navLinks.join(","),
-      "Dashboard,Kitchen,Expenses,Routine,Habits,Skills,Diary",
+      "Dashboard,Kitchen,Expenses,Routine,Skills,Habits,Diary,Settings",
       `${viewport.label}: navigation reaches every page`,
     );
     assert(

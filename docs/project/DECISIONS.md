@@ -1812,3 +1812,84 @@ port, so the choice is free and belongs in one place.
 - GNOME requires a one-time "Allow Launching" on a Desktop `.desktop` file. That is documented
   rather than worked around, because the trust database is the user's, not the repository's.
 - OpenRouter remains optional: the application starts and every structured form works without it.
+
+## ADR-063 — One design system, defined as tokens, and two client components it did not need to avoid
+
+**Date:** 2026-10-02 · **Status:** Accepted · **Phase:** 9 (redesign)
+
+**Context.** The V1 interface was functionally complete and visually unplanned: eight pages that
+each styled their own headers, cards, empty states, and status marks, so two sections of one screen
+could disagree about what a card looked like. A redesign was asked for against two reference
+images. The images did not arrive, and this model cannot read images — see the session report — so
+the redesign was built from the written brief instead, and the brief is specific enough to work
+from: a black-and-white base, a dark rail, restrained blue and green, rounded cards, hairlines,
+generous space, dense numbers.
+
+**Alternatives considered.**
+
+- **A framework.** Tailwind, or shadcn on top of it. Both are barred by AGENTS.md §3 without an
+  ADR, and neither was needed: the whole surface is roughly forty tokens and twenty primitives.
+  A build step to express what one stylesheet already says would be a cost with no return.
+- **An icon package.** Rejected for eight glyphs. They are inline SVG paths using `currentColor`,
+  so they inherit the rail's own light-on-dark treatment with no second stylesheet and no
+  dependency.
+- **A charting library.** Rejected. Every bar in this application is a div whose width is a
+  proportion of a figure the domain already computed. A library would draw the same shape while
+  adding a runtime, a bundle, and a second source of truth for what a number means.
+- **Client-side interactivity for the suggestion chips.** Rejected, and this is the substantive
+  one — see below.
+
+**The chips, and why they are links.**
+
+The brief asks for example chips under the command box. The obvious implementation is a small
+client island that fills the input on click, and it works. It was rejected because the first client
+state in the data-entry path is a real cost: with scripts blocked, unavailable, or still loading,
+the chips become buttons that do nothing at all — decorative controls that look actionable and
+silently are not.
+
+So each chip is a link to the same page with the example in `?example=`, and `CommandBox` reads
+that back as the input's `defaultValue`. It works with scripting entirely disabled, it is
+reachable by keyboard as a link, and it **cannot record anything** — every chip is a GET, so
+pressing the wrong one changes nothing. Only values in the example set are accepted, so a crafted
+URL cannot pre-fill a box with someone else's sentence. The cost is one page load for an action
+that is not time-critical.
+
+**The two client components.**
+
+`layout.tsx` wraps every page and is never told which page it wraps, so there is no prop to carry
+the current path down. `usePathname()` is the only way to know which rail item is current, and it
+is only available on the client. The shell is therefore a client component. The second is the
+service worker, which was already one. Everything else — all eight pages, every form, every
+figure — remains a Server Component, which is the property the acceptance suites assert when they
+check that no page ships `use client`, `useState`, or `useEffect`, and that no page contains the
+string `SELECT `.
+
+**The completion ring is decorative, on purpose.**
+
+The Routine page draws a ring for task completion, but it carries **no** `role="progressbar"`. The
+Routine acceptance suite refuses both `<progress>` and `role="progressbar"` on that page, on the
+ground that a progress bar over a person's day is one step from scoring them. That rule is right
+and it was kept: the ring is a shape, hidden from assistive technology, and the same figure is
+stated in the sentence beside it. Nothing is carried by the picture alone.
+
+**The Dashboard does not hold diary content.**
+
+The brief's suggested dashboard card list includes recent photos. It is not built. The diary is
+read in exactly one place — `src/features/habits/diary.ts` — and `npm run lint` refuses any other
+reader of it, with a message that names the Dashboard specifically (ADR-061). So the Dashboard's
+diary card is a *link*: no photograph, no note, and no count of entries, because a count would
+still be a statement about rows that page has no business holding.
+
+**Consequences.**
+
+- One stylesheet defines the entire visual system, and every value in it is a named token. A page
+  that reaches for a hex code is the reason a redesign drifts, and there is nothing left behind to
+  look inconsistent.
+- The design system is verified by measurement rather than by eye: card columns, command-box
+  geometry, radius, heading order, and overflow at 320, 390, 768, and 1440px.
+- The command input is the width of its container at 320px. Measured before the fix: 132px, about
+  eleven characters, because the submit button sat beside it.
+- Mobile navigation wraps rather than scrolls, because a link scrolled off the right edge is a link
+  that does not exist as far as the person using it is concerned.
+- The backend is byte-identical. No file under `src/domain`, `src/lib`, `src/commands`, or
+  `src/features` was modified.
