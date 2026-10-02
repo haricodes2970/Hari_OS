@@ -1893,3 +1893,86 @@ still be a statement about rows that page has no business holding.
   that does not exist as far as the person using it is concerned.
 - The backend is byte-identical. No file under `src/domain`, `src/lib`, `src/commands`, or
   `src/features` was modified.
+
+---
+
+## ADR-064 — The visual-fidelity pass: measured against the drafts, and where the data ran out
+
+**Status:** Accepted · **Date:** 2026-10-02 · **Supersedes:** nothing
+
+### Context
+
+ADR-063 built a coherent design system. A later pass was asked to make the interface look like two
+supplied UI drafts. Those images could not be opened in the working environment, so this pass was
+driven by the written specification that came with them, and the drafts themselves were never seen.
+
+That is not a detail to paper over. Everything below was decided against prose, and the visual
+result has not been compared to a picture by anyone, including the agent that wrote it.
+
+### Decision
+
+**Where the draft described a shape, the shape is now measured and tested.** Every "it should look
+like this" in the specification became a property of the running application that a script can read
+back, so the next person is not relying on anybody's memory of the intent:
+
+- The active navigation item is a filled accent pill (`#2563eb`, 6px radius), because a dark rail is
+  the one place on the page where the accent has nothing to compete with.
+- The Dashboard grid resolves to three columns at 1440px, two at 768px, one at 390px and 320px.
+- The command box is the largest control on the Dashboard: a 44px input inside a 148px shell, with
+  a 38px circular submit button, which is why its shape differs from every ordinary button.
+- A card's headline figure is 36px against a 28px page title, on 20px padding, a 14px radius, and a
+  shadow of `rgba(16, 24, 40, 0.04)` — present, and barely.
+- Touch targets stay at 44px, and no page overflows horizontally at any of the four widths.
+
+**A visual measurement script, not a screenshot diff.** No reference image is available to diff
+against, so comparing rendered output to a target would be theatre. Instead the criteria are read
+off the laid-out page — computed grid columns, resolved background colours, element sizes,
+`scrollWidth` against `clientWidth` — and any of them can regress loudly.
+
+### Where the data ran out, and what was done instead
+
+The drafts show a few things the application does not store. Those were **not** drawn, because a
+pretty picture of data nobody recorded is a false statement:
+
+- **No historical spending chart.** The Expenses chart is one column per line in *today's* bill,
+  which is real. There is no time axis, because there is no stored history to draw one from.
+- **No category breakdown.** Categories are optional free text and are not grouped anywhere; a
+  donut over a partial list would misdescribe the ledger.
+- **No week/month tabs on Habits.** Only today is stored per habit, so a "This Week" tab would be a
+  claim about a record the application does not keep.
+- **No date navigation on Routine.** `readRoutine` takes its date from the clock and deliberately
+  ignores `?date=`, so that a crafted URL cannot pull another day's sleep record onto the page. That
+  boundary outranks a convenience the drafts show.
+- **No sleep score, no grading, and no progress-bar role on the Routine ring.** The ring stays
+  decorative and the numbers stay in text, exactly as before.
+
+**Bar geometry moved out of the pages and into the presentation components.** The Dashboard needed
+a maximum to scale its bars, and `dashboard-test.mjs` asserts that neither the page nor the read
+model sums anything — a real invariant, since a second calculation of the day's money is exactly how
+a money screen starts disagreeing with the bill. `ColumnChart` and `SkillBars` now derive their own
+maximumes from the amounts they are handed. The page passes the domain's figures and works out
+nothing.
+
+**The Recent Photos row reads `readHabits`, not the diary.** `habit_log` has carried the user's words
+beside a photograph since ADR-056, and `TodayEntry` exists so a reader of it cannot see them. So
+the Dashboard shows the image and the habit's name and never a note — verified, not assumed: with a
+note written to a photo, the Diary page showed it and the Dashboard did not.
+
+### Consequences
+
+- The visual result is unverified against the drafts. It is verified against their written
+  description and against measurement. If the drafts are supplied in a form that can be opened,
+  this should be re-measured against them before anyone calls it a match.
+- `scripts/responsive-check.mjs` selects `.metric-spend .metric-value` and `.command-input`; both
+  were the previous implementation's class names and would otherwise have silently measured nothing.
+- `searchKitchenStock` in `src/features/kitchen/view.ts` is the one addition outside
+  `src/app`/`src/components`. It holds a substring match on a name the user typed, because a page
+  that filters its own list is a page deciding which rows exist. It touches no quantity, no
+  threshold, and no stock rule.
+- **`npm run pwa:test` is red, and was already red at `67cc842`.** Session 10 added
+  `src/components/AppShell.tsx` as a second `"use client"` file — it needs `usePathname()` to mark
+  the active link — and the suite asserts that the service-worker registration is the only one.
+  Confirmed by stashing this pass and re-running on the base commit. The session-10 report's claim
+  of "pwa:test 61 passed" was wrong. This was **not** remediated here: a visual pass must not
+  weaken a test, and both honest fixes (remove the client boundary, or amend the assertion to name
+  both components) are architecture decisions for whoever owns them.

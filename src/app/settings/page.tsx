@@ -93,100 +93,194 @@ export default function SettingsPage({
 
       <OutcomeBanner searchParams={searchParams} />
 
-      <Section title="Natural language input">
-        <Card>
-          <div className="setting-row">
-            <div className="setting-text">
-              <span className="row-title">Parser</span>
-              <span className="muted">
-                {parser.available
-                  ? "Configured. Sentences typed in the command box are read by OpenRouter."
-                  : parser.reason}
-              </span>
-            </div>
-            <Status tone={parser.available ? "positive" : "warning"}>
-              {parser.available ? "Available" : "Not configured"}
-            </Status>
-          </div>
+      {/*
+        A rail of categories beside the content, the way the rest of the application pairs
+        navigation with content. The rail is navigation only: every entry is a link to a heading on
+        this same page, so there is no second screen, no state to keep, and nothing here can change
+        anything. There are no preferences on this page, because there are none to have — it reports
+        how this installation is set up.
+      */}
+      <div className="settings-layout">
+        <ul className="settings-rail">
+          <li>
+            <a href="#parser">
+              <ServerGlyph />
+              Natural language
+            </a>
+          </li>
+          <li>
+            <a href="#installation">
+              <BoxGlyph />
+              Installation
+            </a>
+          </li>
+          <li>
+            <a href="#data">
+              <ShieldGlyph />
+              Data and privacy
+            </a>
+          </li>
+        </ul>
 
-          {parser.available ? null : (
-            <div className="setting-row">
+        <div className="settings-sections">
+          <Section title="Natural language input" id="parser">
+            <Card>
+              <div className="setting-row">
+                <div className="setting-text">
+                  <span className="row-title">Parser</span>
+                  <span className="muted">
+                    {parser.available
+                      ? "Configured. Sentences typed in the command box are read by OpenRouter."
+                      : parser.reason}
+                  </span>
+                </div>
+                <Status tone={parser.available ? "positive" : "warning"}>
+                  {parser.available ? "Available" : "Not configured"}
+                </Status>
+              </div>
+
+              {parser.available ? null : (
+                <div className="setting-row">
+                  <div className="setting-text">
+                    <span className="row-title">How to turn it on</span>
+                    <span className="muted">
+                      Copy <code>.env.example</code> to <code>.env.local</code>{" "}
+                      and fill in <code>OPENROUTER_API_KEY</code> and{" "}
+                      <code>OPENROUTER_MODEL</code>, then restart the server.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <p className="meta">
+                The key is read on the server only. It is never displayed, never
+                sent to the browser, and never written into this repository.
+                Without it, every structured form on every page still works.
+              </p>
+            </Card>
+          </Section>
+
+          <Section title="Installation" id="installation">
+            <Card>
+              <div className="setting-row">
+                <div className="setting-text">
+                  <span className="row-title">Start</span>
+                  <span className="muted">
+                    Click Hari OS in your applications menu or on your Desktop,
+                    or run <code>npm run launch:hari</code>.
+                  </span>
+                </div>
+              </div>
+              <div className="setting-row">
+                <div className="setting-text">
+                  <span className="row-title">Stop</span>
+                  <span className="muted">
+                    The server keeps running after you close the launcher
+                    window. Run <code>npm run stop:hari</code> to stop it.
+                  </span>
+                </div>
+              </div>
+              <div className="setting-row">
+                <div className="setting-text">
+                  <span className="row-title">After updating the code</span>
+                  <span className="muted">
+                    Run <code>npm run setup:hari</code> once to rebuild for
+                    production.
+                  </span>
+                </div>
+              </div>
+            </Card>
+          </Section>
+
+          <Section title="Data and privacy" id="data">
+            <Card>
+              {FACTS.map((fact) => (
+                <div key={fact.label} className="setting-row">
+                  <div className="setting-text">
+                    <span className="row-title">{fact.label}</span>
+                    <span className="muted">{fact.note}</span>
+                  </div>
+                  <span className="meta">{fact.value}</span>
+                </div>
+              ))}
+            </Card>
+
+            <Card>
               <div className="setting-text">
-                <span className="row-title">How to turn it on</span>
+                <span className="row-title">
+                  Private entries and diary notes
+                </span>
                 <span className="muted">
-                  Copy <code>.env.example</code> to <code>.env.local</code> and
-                  fill in <code>OPENROUTER_API_KEY</code> and{" "}
-                  <code>OPENROUTER_MODEL</code>, then restart the server.
+                  Each is read in exactly one place: the private log on the
+                  Habits page, and the diary note on the Diary page. Nothing
+                  counts them, scores them, or carries them onto the Dashboard —
+                  and a lint rule fails the build if any other page tries to
+                  read either one.
                 </span>
               </div>
-            </div>
-          )}
-
-          <p className="meta">
-            The key is read on the server only. It is never displayed, never
-            sent to the browser, and never written into this repository. Without
-            it, every structured form on every page still works.
-          </p>
-        </Card>
-      </Section>
-
-      <Section title="Installation">
-        <Card>
-          <div className="setting-row">
-            <div className="setting-text">
-              <span className="row-title">Start</span>
-              <span className="muted">
-                Click Hari OS in your applications menu or on your Desktop, or
-                run <code>npm run launch:hari</code>.
-              </span>
-            </div>
-          </div>
-          <div className="setting-row">
-            <div className="setting-text">
-              <span className="row-title">Stop</span>
-              <span className="muted">
-                The server keeps running after you close the launcher window.
-                Run <code>npm run stop:hari</code> to stop it.
-              </span>
-            </div>
-          </div>
-          <div className="setting-row">
-            <div className="setting-text">
-              <span className="row-title">After updating the code</span>
-              <span className="muted">
-                Run <code>npm run setup:hari</code> once to rebuild for
-                production.
-              </span>
-            </div>
-          </div>
-        </Card>
-      </Section>
-
-      <Section title="Data and privacy">
-        <Card>
-          {FACTS.map((fact) => (
-            <div key={fact.label} className="setting-row">
-              <div className="setting-text">
-                <span className="row-title">{fact.label}</span>
-                <span className="muted">{fact.note}</span>
-              </div>
-              <span className="meta">{fact.value}</span>
-            </div>
-          ))}
-        </Card>
-
-        <Card>
-          <div className="setting-text">
-            <span className="row-title">Private entries and diary notes</span>
-            <span className="muted">
-              Each is read in exactly one place: the private log on the Habits
-              page, and the diary note on the Diary page. Nothing counts them,
-              scores them, or carries them onto the Dashboard — and a lint rule
-              fails the build if any other page tries to read either one.
-            </span>
-          </div>
-        </Card>
-      </Section>
+            </Card>
+          </Section>
+        </div>
+      </div>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Glyphs
+
+   Inline SVG rather than an icon library: the application has no icon dependency and adding one
+   for three shapes would be a larger change than the shapes. Each is `aria-hidden`, because the
+   link it sits in already names its section in words.
+   --------------------------------------------------------------------------- */
+
+const STROKE = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.75,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+} as const;
+
+function ServerGlyph() {
+  return (
+    <svg
+      className="nav-icon"
+      viewBox="0 0 24 24"
+      {...STROKE}
+      aria-hidden="true"
+    >
+      <rect x="3.5" y="4.5" width="17" height="6" rx="2" />
+      <rect x="3.5" y="13.5" width="17" height="6" rx="2" />
+      <path d="M7 7.5h.01M7 16.5h.01" />
+    </svg>
+  );
+}
+
+function BoxGlyph() {
+  return (
+    <svg
+      className="nav-icon"
+      viewBox="0 0 24 24"
+      {...STROKE}
+      aria-hidden="true"
+    >
+      <path d="M12 3.5l8 4v9l-8 4-8-4v-9l8-4z" />
+      <path d="M4 7.5l8 4 8-4M12 11.5v9" />
+    </svg>
+  );
+}
+
+function ShieldGlyph() {
+  return (
+    <svg
+      className="nav-icon"
+      viewBox="0 0 24 24"
+      {...STROKE}
+      aria-hidden="true"
+    >
+      <path d="M12 3.5l7 2.5v6c0 4.2-2.9 7.3-7 8.5-4.1-1.2-7-4.3-7-8.5v-6l7-2.5z" />
+      <path d="M9 12.2l2.2 2.2 4-4.4" />
+    </svg>
   );
 }

@@ -399,9 +399,9 @@ try {
         const overflowing = [...document.querySelectorAll('*')]
           .filter((node) => node.getBoundingClientRect().right > documentElement.clientWidth + 1)
           .map((node) => node.tagName + (node.className ? '.' + String(node.className).split(' ')[0] : ''));
-        const spend = document.querySelector('.tile-value');
-        const input = document.querySelector('.chat-input');
-        const button = document.querySelector('.chat-form button');
+        const spend = document.querySelector('.metric-spend .metric-value');
+        const input = document.querySelector('.command-input');
+        const button = document.querySelector('.command-send');
         return {
           scrollWidth: documentElement.scrollWidth,
           clientWidth: documentElement.clientWidth,

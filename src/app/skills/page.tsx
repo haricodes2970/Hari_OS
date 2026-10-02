@@ -137,37 +137,46 @@ export default async function SkillsPage({
         </Empty>
       ) : (
         <Section title="Your list">
-          <ul className="row-list">
+          {/*
+            A grid of cards rather than a table of rows, because each skill carries its own logging
+            form and a row wide enough to hold a name, a bar, a duration, and a number input becomes
+            a row of mostly empty space. The cards stay in stored order and stay the same size:
+            the grid reflows, nothing is ranked, and no card is marked as a choice.
+          */}
+          <ul className="card-grid">
             {skills.skills.map((skill) => (
-              <li key={skill.skill.id} className="row">
-                <div className="row-main">
-                  <span className="row-title">{skill.skill.name}</span>
-                  <span className="meta">
-                    {skill.times === 0
-                      ? "Not logged yet."
-                      : `Logged ${skill.times} ${
-                          skill.times === 1 ? "time" : "times"
-                        }${
-                          skill.minutes === null
-                            ? ""
-                            : ` · ${minutesLabel(skill.minutes)}`
-                        }.`}
+              <li key={skill.skill.id} className="card skill-card">
+                <div className="skill-card-head">
+                  <span className="skill-initial" aria-hidden="true">
+                    {initial(skill.skill.name)}
                   </span>
-                  {busiest > 0 ? (
-                    <span className="viz-track" aria-hidden="true">
-                      <span
-                        className="viz-fill"
-                        style={{
-                          width: `${
-                            busiest === 0
-                              ? 0
-                              : Math.round((skill.times / busiest) * 100)
-                          }%`,
-                        }}
-                      />
+                  <div className="stack-sm">
+                    <span className="row-title">{skill.skill.name}</span>
+                    <span className="meta">
+                      {skill.times === 0
+                        ? "Not logged yet."
+                        : `Logged ${skill.times} ${
+                            skill.times === 1 ? "time" : "times"
+                          }${
+                            skill.minutes === null
+                              ? ""
+                              : ` · ${minutesLabel(skill.minutes)}`
+                          }.`}
                     </span>
-                  ) : null}
+                  </div>
                 </div>
+
+                {busiest > 0 && skill.times > 0 ? (
+                  <span className="viz-track" aria-hidden="true">
+                    <span
+                      className="viz-fill"
+                      style={{
+                        width: `${Math.min(100, Math.round((skill.times / busiest) * 100))}%`,
+                      }}
+                    />
+                  </span>
+                ) : null}
+
                 <div className="row-aside">
                   <form
                     className="inline-form"
@@ -194,7 +203,7 @@ export default async function SkillsPage({
                       value={skill.skill.name}
                     />
                     <input type="hidden" name="next" value={RETURN_TO} />
-                    <button type="submit" className="button-quiet">
+                    <button type="submit" className="button button-secondary">
                       Log this skill
                     </button>
                   </form>
@@ -266,4 +275,17 @@ export default async function SkillsPage({
       </Section>
     </div>
   );
+}
+
+/**
+ * The first letter of a skill's name, on the card that holds it.
+ *
+ * An initial and not an icon: the skill list is written by the user, so any icon would be a picture
+ * the application picked on their behalf. The letter is the one thing that cannot be wrong, and it
+ * is `aria-hidden` at the call site because the name is right beside it in full.
+ */
+function initial(name: string): string {
+  const first = name.trim().charAt(0);
+
+  return first === "" ? "•" : first.toUpperCase();
 }

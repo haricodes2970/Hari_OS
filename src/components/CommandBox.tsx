@@ -155,33 +155,34 @@ export async function CommandBox({
       : null;
 
   return (
-    <section className="chat" aria-label="Natural language command">
-      <form className="chat-form" method="post" action={ENDPOINT}>
+    <section
+      className="command-shell command-shell-focus"
+      aria-label="Natural language command"
+    >
+      <form className="command-form" method="post" action={ENDPOINT}>
         <input type="hidden" name="next" value={returnTo} />
-        <label className="chat-label" htmlFor="chat-sentence">
+        <label className="visually-hidden" htmlFor="chat-sentence">
           Tell Hari OS what you did, bought, used, or want to do
         </label>
-        <p className="chat-hint">
-          One sentence. It works across every module — nothing is filed away
-          before you say where it goes.
-        </p>
-        <div className="chat-row">
-          <input
-            id="chat-sentence"
-            name="text"
-            type="text"
-            className="chat-input"
-            placeholder="Tell me what you did, bought, used, or want to do..."
-            defaultValue={prefilled ?? ""}
-            maxLength={500}
-            autoComplete="off"
-            disabled={!available}
-            required
-          />
-          <button type="submit" disabled={!available}>
-            Record it
-          </button>
-        </div>
+        <span className="command-spark" aria-hidden="true">
+          <SparkGlyph />
+        </span>
+        <input
+          id="chat-sentence"
+          name="text"
+          type="text"
+          className="command-input"
+          placeholder="Tell me what you did, bought, used, or want to do..."
+          defaultValue={prefilled ?? ""}
+          maxLength={500}
+          autoComplete="off"
+          disabled={!available}
+          required
+        />
+        <button className="command-send" type="submit" disabled={!available}>
+          <span aria-hidden="true">→</span>
+          <span className="visually-hidden">Record it</span>
+        </button>
       </form>
 
       {showExamples && available ? (
@@ -225,5 +226,21 @@ export async function CommandBox({
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * A four-point sparkle, drawn rather than imported.
+ *
+ * The application has no icon library, and a dependency added for one glyph would be a heavier
+ * change than the glyph. It is `aria-hidden` at the call site: the input beside it carries the real
+ * label, so this is decoration pointing at the box, not a second control.
+ */
+function SparkGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2.5l1.6 5.1 5.1 1.6-5.1 1.6L12 16l-1.6-5.2L5.3 9.2l5.1-1.6L12 2.5z" />
+      <path d="M18.5 15l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.4z" />
+    </svg>
   );
 }

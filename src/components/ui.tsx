@@ -64,15 +64,21 @@ export function Section({
   actions,
   children,
   className,
+  id,
 }: {
   readonly title?: string;
   readonly description?: ReactNode;
   readonly actions?: ReactNode;
   readonly children: ReactNode;
   readonly className?: string;
+  /** Set when something else on the page links straight to this section. */
+  readonly id?: string;
 }) {
   return (
-    <section className={className === undefined ? "section" : className}>
+    <section
+      className={className === undefined ? "section" : className}
+      id={id}
+    >
       {title === undefined ? null : (
         <div className="section-head">
           <div className="stack-sm">
@@ -99,6 +105,8 @@ export type CardProps = {
   readonly aside?: ReactNode;
   /** Puts a link at the bottom of the card, out of the content's way. */
   readonly foot?: ReactNode;
+  /** A 1rem glyph rendered before the title. Decorative; the title carries the name. */
+  readonly icon?: ReactNode;
   readonly className?: string;
   readonly children: ReactNode;
 };
@@ -110,13 +118,34 @@ export type CardProps = {
  * rendered directly under the page header would break that order, so `Section` is used even when a
  * card is the whole page.
  */
-export function Card({ title, aside, foot, className, children }: CardProps) {
+export function Card({
+  title,
+  aside,
+  foot,
+  icon,
+  className,
+  children,
+}: CardProps) {
   return (
     <article className={className === undefined ? "card" : `card ${className}`}>
       {title === undefined ? null : (
         <div className="card-head">
-          <h3 className="card-title">{title}</h3>
-          {aside === undefined ? null : aside}
+          <div className="card-title-row">
+            {icon === undefined ? null : (
+              <span className="card-icon" aria-hidden="true">
+                {icon}
+              </span>
+            )}
+            <h3 className="card-title">{title}</h3>
+          </div>
+          {aside === undefined ? null : (
+            <div className="card-aside">
+              {aside}
+              <span className="card-aside-arrow" aria-hidden="true">
+                →
+              </span>
+            </div>
+          )}
         </div>
       )}
       {children}
@@ -341,5 +370,202 @@ export function CardGrid({
     <div className={wide ? "card-grid card-grid-wide" : "card-grid"}>
       {children}
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Column chart
+   --------------------------------------------------------------------------- */
+
+export type ColumnChartProps = {
+  /**
+   * One entry per real category. Each `total` is the amount the domain formatted, and `value` is
+   * that same amount as text. The bar's height is derived from these figures, inside this component,
+   * so the page that supplies them never has to work out a maximum of its own.
+   */
+  readonly columns: readonly {
+    readonly label: string;
+    /** The amount in minor units, used only to compare the heights of these columns. */
+    readonly total: number;
+    /** Already formatted by the domain. */
+    readonly value: string;
+    readonly tone?: "accent" | "muted";
+  }[];
+};
+
+/**
+ * Vertical columns for the Expenses composition.
+ *
+ * It draws, it does not analyse: no axis, no gridline, no scale, and no total of its own. Each
+ * column is a share of the largest figure in this set — a comparison between bars on one screen,
+ * never a sum and never a claim about anything outside them.
+ *
+ * The amount under each column is the text the domain formatted, so a column cannot disagree with
+ * the list beside it. And a caller with nothing to show gets the empty state rather than an empty
+ * chart frame, because a chart with no data in it reads as "you spent nothing" when it may only
+ * mean "nothing has been recorded yet".
+ */
+export function ColumnChart({ columns }: ColumnChartProps) {
+  const tallest = columns.reduce(
+    (max, column) => Math.max(max, column.total),
+    0,
+  );
+
+  return (
+    <div className="column-chart">
+      {columns.map((column) => (
+        <div className="column" key={column.label}>
+          <span className="column-value">{column.value}</span>
+          <span className="column-track">
+            <span
+              className={
+                column.tone === "muted"
+                  ? "column-fill column-fill-muted"
+                  : "column-fill"
+              }
+              style={{
+                height: `${
+                  tallest === 0
+                    ? 0
+                    : Math.max(0, Math.min(100, (column.total / tallest) * 100))
+                }%`,
+              }}
+            />
+          </span>
+          <span className="column-label" title={column.label}>
+            {column.label}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Skill bars
+   --------------------------------------------------------------------------- */
+
+/**
+ * One thin bar per skill: its name, its share of the longest-logged skill's time, and the duration
+ * the domain formatted.
+ *
+ * The maximum is worked out here rather than in the page for the same reason as the column chart:
+ * a page that finds the largest of a set is already computing over the data, and this application's
+ * pages are not allowed to. The bar compares rows on one screen. It is not a score, not a
+ * percentage, and not a threshold — no skill is labelled against the widest bar.
+ */
+export function SkillBars({
+  skills,
+}: {
+  readonly skills: readonly {
+    readonly key: string;
+    readonly label: string;
+    /** The skill's total logged minutes, or `null` when it has never been logged. */
+    readonly minutes: number | null;
+    /** Already formatted by the domain. */
+    readonly value: string;
+  }[];
+}) {
+  const longest = skills.reduce(
+    (max, skill) => Math.max(max, skill.minutes ?? 0),
+    0,
+  );
+
+  return (
+    <ul className="mini-list">
+      {skills.map((skill) => (
+        <li className="skill-line" key={skill.key}>
+          <span className="mini-row-label">{skill.label}</span>
+          {skill.minutes === null || skill.minutes === 0 ? (
+            <span className="meta">Not logged yet</span>
+          ) : (
+            <>
+              <span className="viz-track">
+                <span
+                  className="viz-fill"
+                  style={{
+                    width: `${
+                      longest === 0
+                        ? 0
+                        : Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              ((skill.minutes ?? 0) / longest) * 100,
+                            ),
+                          )
+                    }%`,
+                  }}
+                />
+              </span>
+              <span className="viz-value">{skill.value}</span>
+            </>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+/* ---------------------------------------------------------------------------
+   Filter tabs
+   --------------------------------------------------------------------------- */
+
+/**
+ * Filters that are links, not client state.
+ *
+ * A tab carries the filter in its own query string, so a filtered view survives a refresh, the back
+ * button, and being copied to somebody else — and it works before hydration because it never needed
+ * hydration. Each entry states its own count, because "Low stock (2)" answers the question the tab
+ * was clicked to ask without opening it.
+ */
+export function FilterTabs({
+  tabs,
+}: {
+  readonly tabs: readonly {
+    readonly label: string;
+    readonly href: string;
+    readonly active: boolean;
+    /** The number of rows this filter would show. Omitted for the unfiltered view. */
+    readonly count?: number;
+  }[];
+}) {
+  return (
+    <div className="tabs">
+      {tabs.map((tab) => (
+        <a
+          className={tab.active ? "tab tab-active" : "tab"}
+          href={tab.href}
+          key={tab.label}
+          aria-current={tab.active ? "true" : undefined}
+        >
+          {tab.label}
+          {tab.count === undefined ? null : (
+            <span className="tab-count">{tab.count}</span>
+          )}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Status mark
+   --------------------------------------------------------------------------- */
+
+/**
+ * Done or not, in one circle.
+ *
+ * `aria-hidden` on purpose: the row it sits in already states the outcome in words, and a symbol on
+ * its own would tell a screen-reader user nothing. Green here means a neutral habit was recorded —
+ * never a private behaviour, which never leaves the Diary, and never a score.
+ */
+export function Mark({ done }: { readonly done: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={done ? "mark mark-done" : "mark mark-open"}
+    >
+      {done ? "✓" : "·"}
+    </span>
   );
 }

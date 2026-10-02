@@ -35,13 +35,17 @@ import {
   Card,
   CardGrid,
   Empty,
+  FilterTabs,
   PageHeader,
   Section,
-  Stat,
   Status,
 } from "@/components/ui";
 import { parserAvailability } from "@/features/chat/runtime";
-import { listKitchenHistory, listKitchenStock } from "@/features/kitchen/view";
+import {
+  listKitchenHistory,
+  listKitchenStock,
+  searchKitchenStock,
+} from "@/features/kitchen/view";
 import { listInventoryView } from "@/features/shared/queries";
 
 export const metadata = { title: "Kitchen · Hari OS" };
@@ -121,22 +125,38 @@ function ThresholdControl({
   );
 }
 
-export default function KitchenPage({
+export default async function KitchenPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const params = await searchParams;
   const stock = listKitchenStock();
   const history = listKitchenHistory();
   // Read through the same projection the Dashboard uses, so the two cannot disagree.
   const lowStock = listInventoryView().filter((item) => item.lowStock);
   const parser = parserAvailability();
 
+  /*
+    The filter and the search are one thing, applied in the feature's own read rather than here.
+    Both come from the URL, so a filtered view survives a refresh and the back button, and neither
+    needs client state to exist. `view` is the only tab this page offers: a second one would be a
+    filter over the same two states with nothing to show.
+  */
+  const rawQuery = typeof params.q === "string" ? params.q : "";
+  const lowOnly = params.filter === "low";
+  const visible = searchKitchenStock(rawQuery, lowOnly);
+
   return (
     <div className="page">
       <PageHeader
         title="Kitchen"
-        description="What is in stock, what is running low, and everything that has changed. Say it in a sentence or use the forms."
+        description="What is in stock, what is running low, and everything that has changed."
+        aside={
+          <a className="button button-accent" href="#add-item">
+            <span aria-hidden="true">+</span> Add item
+          </a>
+        }
       />
 
       <CommandBox
@@ -150,23 +170,35 @@ export default function KitchenPage({
 
       <Section title="Overview">
         <CardGrid>
-          <Card title="Items tracked">
-            <Stat label="In stock" value={String(stock.length)} size="sm" />
+          <Card title="Items tracked" icon={<CartGlyph />}>
+            <div className="metric">
+              <span className="metric-value">{String(stock.length)}</span>
+              <span className="metric-note">
+                {stock.length === 0
+                  ? "Nothing is tracked yet, so nothing can run low."
+                  : `${stock.length === 1 ? "1 item is" : `${stock.length} items are`} in stock.`}
+              </span>
+            </div>
           </Card>
-          <Card title="Running low">
-            <Stat
-              label="Below alert level"
-              value={String(lowStock.length)}
-              tone={lowStock.length > 0 ? "negative" : "default"}
-              size="sm"
-              note={
-                lowStock.length === 0
+          <Card title="Running low" icon={<AlertGlyph />}>
+            <div className="metric">
+              <span
+                className={
+                  lowStock.length > 0
+                    ? "metric-value metric-value-negative"
+                    : "metric-value"
+                }
+              >
+                {String(lowStock.length)}
+              </span>
+              <span className="metric-note">
+                {lowStock.length === 0
                   ? stock.length === 0
                     ? "Nothing is tracked yet, so nothing can run low."
                     : "Every tracked item is above its alert level."
-                  : `${lowStock.length === 1 ? "1 item is" : `${lowStock.length} items are`} at or below the alert level, and also shown on the Dashboard.`
-              }
-            />
+                  : `${lowStock.length === 1 ? "1 item is" : `${lowStock.length} items are`} at or below the alert level, and also shown on the Dashboard.`}
+              </span>
+            </div>
           </Card>
         </CardGrid>
       </Section>
@@ -182,38 +214,107 @@ export default function KitchenPage({
             not an error.
           </Empty>
         ) : (
-          <ul className="row-list">
-            {stock.map((item) => (
-              <li
-                key={item.id}
-                className={item.lowStock ? "row row-warn" : undefined}
+          <>
+            <div className="toolbar">
+              <FilterTabs
+                tabs={[
+                  {
+                    label: "All items",
+                    href: RETURN_TO,
+                    active: !lowOnly,
+                    count: stock.length,
+                  },
+                  {
+                    label: "Low stock",
+                    href: `${RETURN_TO}?filter=low`,
+                    active: lowOnly,
+                    count: lowStock.length,
+                  },
+                ]}
+              />
+
+              {/*
+                A GET form rather than a client-side filter, so it works before hydration and its
+                state is in the URL. `q` is a plain string: a list of names, matched case
+                insensitively by the feature's own read.
+              */}
+              <form
+                className="search"
+                method="get"
+                action={RETURN_TO}
+                role="search"
               >
-                <div className="row-main">
-                  <span className="row-title">{item.name}</span>
-                  <span className="meta">
-                    {item.quantity} {item.unit}
-                    {item.lowThreshold === null
-                      ? " · no alert set"
-                      : ` · alert at ${item.lowThreshold}`}
-                  </span>
-                </div>
-                <div className="row-aside">
-                  {item.lowStock ? (
-                    <Status tone="warning">Low</Status>
-                  ) : item.lowThreshold === null ? (
-                    <Status>No alert set</Status>
-                  ) : (
-                    <Status tone="positive">OK</Status>
-                  )}
-                  <ThresholdControl
-                    id={item.id}
-                    name={item.name}
-                    threshold={item.lowThreshold}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
+                {lowOnly ? (
+                  <input type="hidden" name="filter" value="low" />
+                ) : null}
+                <span aria-hidden="true">
+                  <SearchGlyph />
+                </span>
+                <label className="visually-hidden" htmlFor="kitchen-search">
+                  Search items by name
+                </label>
+                <input
+                  id="kitchen-search"
+                  name="q"
+                  type="search"
+                  defaultValue={rawQuery}
+                  placeholder="Search items"
+                  maxLength={80}
+                />
+                <button className="button-quiet" type="submit">
+                  Find
+                </button>
+              </form>
+            </div>
+
+            {visible.length === 0 ? (
+              <Empty compact>
+                {lowOnly && rawQuery.trim() !== ""
+                  ? "No low item matches that name."
+                  : lowOnly
+                    ? "Nothing is below its alert level, so this list is empty. That is a good result, not a missing one."
+                    : "No item matches that name."}
+              </Empty>
+            ) : (
+              <ul className="row-list table-like">
+                <li className="table-head" aria-hidden="true">
+                  <span>Item</span>
+                  <span>Quantity</span>
+                  <span>Status</span>
+                  <span className="table-head-aside">Alert level</span>
+                </li>
+                {visible.map((item) => (
+                  <li
+                    key={item.id}
+                    className={item.lowStock ? "row row-warn" : "row"}
+                  >
+                    <div className="row-main">
+                      <span className="row-title">{item.name}</span>
+                      <span className="meta table-hide-sm">
+                        {item.quantity} {item.unit}
+                      </span>
+                    </div>
+                    <span className="table-figure">{item.quantity}</span>
+                    <span className="table-unit">{item.unit}</span>
+                    <div className="row-aside">
+                      {item.lowStock ? (
+                        <Status tone="warning">Low</Status>
+                      ) : item.lowThreshold === null ? (
+                        <Status>No alert</Status>
+                      ) : (
+                        <Status tone="positive">OK</Status>
+                      )}
+                      <ThresholdControl
+                        id={item.id}
+                        name={item.name}
+                        threshold={item.lowThreshold}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </Section>
 
@@ -296,7 +397,7 @@ export default function KitchenPage({
         )}
       </Section>
 
-      <Section title="Add an item">
+      <Section title="Add an item" className="section" id="add-item">
         <Card>
           <KitchenForm
             operation="add_item"
@@ -375,5 +476,56 @@ export default function KitchenPage({
         )}
       </Section>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Glyphs
+
+   Inline SVG rather than an icon library: the application has no icon dependency and adding one
+   for three shapes would be a larger change than the shapes. Each is `aria-hidden`, because the card
+   or the field beside it already names the thing in words.
+   --------------------------------------------------------------------------- */
+
+const STROKE = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.75,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+} as const;
+
+function CartGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M3 4.5h2.2l2.2 10.5h9.4l2.2-7.5H6.2" />
+      <circle cx="9" cy="19" r="1.4" />
+      <circle cx="17" cy="19" r="1.4" />
+    </svg>
+  );
+}
+
+function AlertGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M12 4.5l8.5 15h-17l8.5-15z" />
+      <path d="M12 10v4.2" />
+      <circle cx="12" cy="16.9" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function SearchGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="1rem"
+      height="1rem"
+      {...STROKE}
+      aria-hidden="true"
+    >
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="M15 15l4.5 4.5" />
+    </svg>
   );
 }

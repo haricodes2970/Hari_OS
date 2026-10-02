@@ -46,9 +46,9 @@ import { CommandForm, type CommandField } from "@/components/CommandForm";
 import { OutcomeBanner } from "@/components/OutcomeBanner";
 import {
   Card,
-  CardGrid,
   CardLink,
   Empty,
+  Mark,
   PageHeader,
   ProgressBar,
   Section,
@@ -135,56 +135,67 @@ export default async function HabitsPage({
         title="Cooking, dishes, and laundry"
         description="Each one records whether it happened. A day with no row is not a day it did not happen."
       >
-        <CardGrid>
-          {habits.streaks.map((habit) => (
-            <Card
-              key={habit.type}
-              title={habit.label}
-              aside={
-                habit.type === "laundry" ? null : habit.done ? (
-                  <Status tone="positive">Done</Status>
-                ) : habit.recorded ? (
-                  <Status>Not done</Status>
-                ) : (
-                  <Status>Not recorded</Status>
-                )
-              }
-            >
-              <p className="muted">{streakLabel(habit.days, habit.recorded)}</p>
+        {/*
+          A list rather than three cards. The three habits are the same kind of thing, so they are
+          shown as three rows of the same shape: a mark for whether it happened, the habit's name,
+          its streak as secondary text, and the control that records it.
 
-              {habit.type === "laundry" ? (
-                <>
-                  <p className="muted">
-                    {habit.done
-                      ? `Recorded as done${
-                          habit.hasPhoto ? ", with the photo attached." : "."
-                        }`
-                      : "Not recorded as done today."}
-                  </p>
-                  <CardLink href="#laundry-photo">Add the photo below</CardLink>
-                </>
-              ) : (
-                <form
-                  className="inline-form"
-                  method="post"
-                  action="/api/commands"
-                >
-                  <input type="hidden" name="kind" value="habit.record" />
-                  <input type="hidden" name="type" value={habit.type} />
-                  <input
-                    type="hidden"
-                    name="done"
-                    value={habit.done ? "false" : "true"}
-                  />
-                  <input type="hidden" name="next" value={RETURN_TO} />
-                  <button type="submit" className="button-quiet">
-                    {habit.done ? "Record as not done" : "Record as done"}
-                  </button>
-                </form>
-              )}
-            </Card>
+          There are no tabs over this list. A week or a month view would need per-habit history the
+          application does not store, and rendering a tab over a week it cannot answer would be a
+          claim about the user's record that is not true.
+        */}
+        <ul className="row-list">
+          {habits.streaks.map((habit) => (
+            <li
+              className={habit.done ? "row row-done" : "row"}
+              key={habit.type}
+            >
+              <span className="row-mark">
+                <Mark done={habit.done} />
+              </span>
+
+              <div className="row-main">
+                <span className="row-title">{habit.label}</span>
+                <span className="meta">
+                  {streakLabel(habit.days, habit.recorded)}
+                </span>
+              </div>
+
+              <div className="row-aside">
+                {habit.type === "laundry" ? (
+                  <>
+                    <span className="row-aside-note">
+                      {habit.done
+                        ? habit.hasPhoto
+                          ? "Recorded as done, with the photo attached."
+                          : "Recorded as done."
+                        : "Not recorded as done today."}
+                    </span>
+                    <CardLink href="#laundry-photo">Add photo</CardLink>
+                  </>
+                ) : (
+                  <form
+                    className="inline-form"
+                    method="post"
+                    action="/api/commands"
+                  >
+                    <input type="hidden" name="kind" value="habit.record" />
+                    <input type="hidden" name="type" value={habit.type} />
+                    <input
+                      type="hidden"
+                      name="done"
+                      value={habit.done ? "false" : "true"}
+                    />
+                    <input type="hidden" name="next" value={RETURN_TO} />
+                    <button type="submit" className="button-quiet">
+                      {habit.done ? "Record as not done" : "Record as done"}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </li>
           ))}
-        </CardGrid>
+        </ul>
       </Section>
 
       <Section title="Laundry target: twice a week">

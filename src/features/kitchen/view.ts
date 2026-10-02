@@ -85,6 +85,33 @@ export function listKitchenStock(): KitchenStockLine[] {
 }
 
 /**
+ * The same list, narrowed for the page's search box and filter tabs.
+ *
+ * The matching lives here rather than in the page so that a page keeps the rule it already has: it
+ * renders rows and formats text, and it decides nothing about which rows exist. It is a substring
+ * match on a name the user typed, case-insensitive, on a list of a few dozen items — not a search
+ * engine, and it does not touch quantities, thresholds, or the low-stock rule, which stays where it
+ * was.
+ *
+ * `query` is trimmed and capped at the same length the box allows, so a hand-edited URL cannot ask
+ * it to do more work than the form would. An empty query returns everything.
+ */
+export function searchKitchenStock(
+  query: string,
+  lowOnly: boolean,
+): KitchenStockLine[] {
+  const needle = query.trim().toLowerCase().slice(0, 80);
+
+  return listKitchenStock().filter((item) => {
+    if (lowOnly && !item.lowStock) {
+      return false;
+    }
+
+    return needle === "" || item.name.toLowerCase().includes(needle);
+  });
+}
+
+/**
  * The most recent changes, newest first.
  *
  * Capped rather than complete on purpose: this is a page for understanding what changed, not

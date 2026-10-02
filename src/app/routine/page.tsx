@@ -41,6 +41,7 @@ import {
   CardGrid,
   CardLink,
   Empty,
+  Mark,
   PageHeader,
   Section,
   Status,
@@ -168,7 +169,14 @@ export default function RoutinePage({
       <PageHeader
         title="Routine"
         description="What today holds, what tonight recorded, and what tomorrow is planned to hold."
-        aside={<p className="meta">{view.date}</p>}
+        aside={
+          <div className="header-aside">
+            <span className="header-date">{view.date}</span>
+            <a className="button button-accent" href="#add-task">
+              <span aria-hidden="true">+</span> Add task
+            </a>
+          </div>
+        }
       />
 
       <CommandBox
@@ -180,82 +188,126 @@ export default function RoutinePage({
 
       <OutcomeBanner searchParams={searchParams} />
 
+      {/*
+        Two columns: the day itself on the left, and a standing summary of it on the right.
+
+        The summary is the count of rows the user wrote, the ring around it, and the first
+        unfinished task — nothing about how the day ought to have gone. The ring is a shape; the
+        numbers beside it are the same numbers the list below is made of, so there is no second
+        figure anywhere on this page.
+      */}
       <Section title="Today">
-        {view.tasks.length === 0 ? (
-          <Empty>
-            Nothing is planned for today. Write tomorrow&apos;s tasks at the
-            bottom of this page, or say &quot;add buy milk tomorrow&quot; in the
-            sentence input. An empty day is not a failed day.
-          </Empty>
-        ) : (
-          <Card>
-            <div className="row-between">
-              <div className="row-main">
-                <span className="row-title next-action">
-                  {view.firstAction === null
-                    ? "Everything on today's list is done."
-                    : `Next: ${view.firstAction}`}
-                </span>
-                <span className="meta">
-                  {doneToday} of {view.tasks.length} finished. This is a count
-                  of the rows you wrote, not a score.
-                </span>
+        <div className="split">
+          <div className="stack">
+            {view.tasks.length === 0 ? (
+              <Empty>
+                Nothing is planned for today. Write tomorrow&apos;s tasks at the
+                bottom of this page, or say &quot;add buy milk tomorrow&quot; in
+                the sentence input. An empty day is not a failed day.
+              </Empty>
+            ) : (
+              <Card title="Today's list" icon={<ChecklistGlyph />}>
                 {view.taskCount > 3 ? (
-                  <span className="meta">
+                  <p className="meta">
                     {view.taskCount} tasks are on today&apos;s list. The morning
                     view opens on the first three.
-                  </span>
+                  </p>
                 ) : null}
-              </div>
+
+                <ul className="row-list row-list-flush">
+                  {view.tasks.map((task) => (
+                    <li
+                      key={task.id}
+                      className={task.done ? "row row-done" : "row"}
+                    >
+                      <span className="row-mark">
+                        <Mark done={task.done} />
+                      </span>
+                      <div className="row-main">
+                        <span className="row-title">{task.title}</span>
+                      </div>
+                      <div className="row-aside">
+                        <form
+                          className="inline-form"
+                          method="post"
+                          action="/api/commands"
+                        >
+                          <input
+                            type="hidden"
+                            name="kind"
+                            value="task.set_done"
+                          />
+                          <input
+                            type="hidden"
+                            name="title"
+                            value={task.title}
+                          />
+                          <input
+                            type="hidden"
+                            name="done"
+                            value={task.done ? "false" : "true"}
+                          />
+                          <input type="hidden" name="day" value="today" />
+                          <input type="hidden" name="next" value={RETURN_TO} />
+                          <button type="submit" className="button-quiet">
+                            {task.done ? "Mark not done" : "Mark done"}
+                          </button>
+                        </form>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+
+            <div className="form-grid" id="add-task">
+              <CommandForm
+                kind="task.create"
+                returnTo={RETURN_TO}
+                heading="Add one task"
+                submitLabel="Add task"
+                fields={[NEW_TITLE]}
+              />
+            </div>
+          </div>
+
+          <Card title="At a glance" icon={<ClockGlyph />}>
+            <div className="summary-figure">
               <CompletionRing done={doneToday} total={view.tasks.length} />
             </div>
 
-            <ul className="row-list">
-              {view.tasks.map((task) => (
-                <li
-                  key={task.id}
-                  className={task.done ? "row row-done" : "row"}
-                >
-                  <div className="row-main">
-                    <span className="row-title">{task.title}</span>
-                  </div>
-                  <div className="row-aside">
-                    <Status tone={task.done ? "positive" : "neutral"}>
-                      {task.done ? "Done" : "Not done"}
-                    </Status>
-                    <form
-                      className="inline-form"
-                      method="post"
-                      action="/api/commands"
-                    >
-                      <input type="hidden" name="kind" value="task.set_done" />
-                      <input type="hidden" name="title" value={task.title} />
-                      <input
-                        type="hidden"
-                        name="done"
-                        value={task.done ? "false" : "true"}
-                      />
-                      <input type="hidden" name="day" value="today" />
-                      <input type="hidden" name="next" value={RETURN_TO} />
-                      <button type="submit" className="button-quiet">
-                        {task.done ? "Mark not done" : "Mark done"}
-                      </button>
-                    </form>
-                  </div>
-                </li>
-              ))}
+            <ul className="mini-list">
+              <li className="mini-row">
+                <span className="mini-row-label">Finished</span>
+                <span className="mini-row-value">
+                  {doneToday} of {view.tasks.length}
+                </span>
+              </li>
+              <li className="mini-row">
+                <span className="mini-row-label">Planned for today</span>
+                <span className="mini-row-value">{view.taskCount}</span>
+              </li>
+              <li className="mini-row">
+                <span className="mini-row-label">Planned for tomorrow</span>
+                <span className="mini-row-value">
+                  {view.tomorrowTasks.length}
+                </span>
+              </li>
             </ul>
-          </Card>
-        )}
 
-        <div className="form-grid">
-          <CommandForm
-            kind="task.create"
-            returnTo={RETURN_TO}
-            heading="Add one task"
-            submitLabel="Add task"
-            fields={[NEW_TITLE]}
-          />
+            <p className="meta">
+              This is a count of the rows you wrote, not a score.
+            </p>
+
+            <div className="next-action-box">
+              <span className="eyebrow">Next</span>
+              <span className="next-action">
+                {view.firstAction === null
+                  ? "Everything on today's list is done."
+                  : `Next: ${view.firstAction}`}
+              </span>
+            </div>
+          </Card>
         </div>
       </Section>
 
@@ -435,5 +487,40 @@ export default function RoutinePage({
         </Card>
       </Section>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Glyphs
+
+   Inline SVG rather than an icon library: the application has no icon dependency and adding one
+   for two shapes would be a larger change than the shapes. Each is `aria-hidden`, because the card
+   it sits in already names the thing in words.
+   --------------------------------------------------------------------------- */
+
+const STROKE = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.75,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+} as const;
+
+function ChecklistGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M3.5 7.5l1.8 1.8 3.2-3.4" />
+      <path d="M3.5 16l1.8 1.8 3.2-3.4" />
+      <path d="M12 7.5h8.5M12 16h8.5" />
+    </svg>
+  );
+}
+
+function ClockGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
   );
 }

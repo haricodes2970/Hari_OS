@@ -393,13 +393,18 @@ h4 {
   color: var(--text-inverse);
 }
 
-/* The active page is marked by weight and a surface, not by an accent colour:
-   in a dark rail a bright highlight on every page would compete with the
-   content, and the current page is not the most important thing on screen. */
+/* The active page is the one place the accent appears in the rail. A filled blue pill says
+   "you are here" faster than weight or a surface tint, and the rail is the only dark region on
+   the page, so the accent is not competing with anything. */
 .nav-link-active {
-  background: #21252d;
+  background: var(--accent);
   color: var(--text-inverse);
   font-weight: 600;
+}
+
+.nav-link-active:hover {
+  background: var(--accent-hover);
+  color: var(--text-inverse);
 }
 
 .nav-icon {
@@ -507,6 +512,26 @@ h4 {
 }
 
 /* --- Page header -------------------------------------------------------- */
+
+/* Below the small breakpoint the header stops being two columns: the title
+   takes the line, and the date and action sit under it, left-aligned, because
+   a right-aligned aside next to a long title has nowhere to go. */
+@media (max-width: 29.999rem) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-aside {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .header-aside .button {
+    width: 100%;
+    justify-content: center;
+  }
+}
 
 .page-header {
   display: flex;
@@ -761,6 +786,27 @@ h4 {
   align-items: center;
   gap: var(--space-3);
   flex: 0 0 auto;
+  /* A row's controls may wrap rather than push the row wider than the screen.
+     On a 320px phone a row whose aside holds a note, a link, and a form has
+     three things that cannot share one line, and the row must give way before
+     the page does. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* Once a row is too narrow to hold a label and its controls side by side, the
+   controls drop to their own line and align to the row's left edge. */
+@media (max-width: 29.999rem) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .row-aside {
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: calc(1.25rem + var(--space-2));
+  }
 }
 
 .row-warn {
@@ -1546,6 +1592,879 @@ code {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* ===========================================================================
+   The emphasised figure
+
+   A card's headline number is set larger and tighter than anything else on the
+   page, because the first question a reader asks of Kitchen or Expenses is
+   "how much", and the answer should not have to be hunted for among metadata.
+   =========================================================================== */
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.metric-value {
+  font-size: var(--text-3xl);
+  font-weight: 680;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-value-negative {
+  color: var(--danger);
+}
+
+.metric-note {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* A card's title line, when it carries an icon: the icon is 1rem of muted
+   accent and sits on the text's baseline, so it reads as part of the label
+   rather than as a separate element competing with it. */
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.card-icon {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-muted);
+}
+
+.card-icon-accent {
+  color: var(--accent);
+}
+
+/* The small "5 total →" that sits opposite a card's title. Metadata, not a
+   control, but it is also where a card's own next step is announced. */
+.card-aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.card-aside-arrow {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* A hairline between groups of rows inside one card, lighter than the row
+   separators on a full-width list so the card does not read as a table. */
+.card-hairline {
+  height: 1px;
+  border: 0;
+  margin: var(--space-1) 0;
+  background: var(--border);
+}
+
+/* ===========================================================================
+   Compact metric rows
+
+   Inside a card, several small "label ....... value" rows. The value is
+   emphasised and right-aligned; the label truncates rather than wrapping.
+   =========================================================================== */
+
+.mini-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.mini-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+.mini-row:last-child {
+  border-bottom: 0;
+}
+
+.mini-row-label {
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-row-value {
+  flex: 0 0 auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.mini-row-value-positive {
+  color: var(--positive);
+}
+
+.mini-row-value-negative {
+  color: var(--danger);
+}
+
+/* ===========================================================================
+   The command box
+
+   The fastest path through the application, so it is deliberately the largest
+   control on the Dashboard: taller input, a wider padding box, and a circular
+   send button rather than a rectangular one, so the shape itself says "type
+   here and hand it over".
+   =========================================================================== */
+
+.command-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.command-shell-focus:focus-within {
+  border-color: var(--accent);
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 3px var(--accent-soft);
+}
+
+.command-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+
+.command-spark {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--accent);
+}
+
+.command-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--text-md);
+  color: var(--text-primary);
+}
+
+.command-input:focus {
+  outline: none;
+}
+
+.command-input::placeholder {
+  color: var(--text-muted);
+}
+
+.command-send {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 2.375rem;
+  height: 2.375rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: var(--text-md);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+
+.command-send:hover {
+  background: var(--accent-hover);
+}
+
+.command-send:active {
+  transform: scale(0.96);
+}
+
+.command-send:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ===========================================================================
+   Vertical column chart
+
+   The Expenses composition: one column per real category or item, each drawn
+   as a full-height light track with a blue fill. No axes, no gridlines, no
+   value labels on the bars — the amount is written underneath, so the chart
+   never has to be read to be understood.
+   =========================================================================== */
+
+.column-chart {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-3);
+  height: 7rem;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  height: 100%;
+  min-width: 0;
+}
+
+.column-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.column-fill {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  min-height: 2px;
+}
+
+.column-fill-muted {
+  background: var(--text-muted);
+}
+
+.column-label {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.column-value {
+  width: 100%;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===========================================================================
+   Filter tabs and search
+
+   Tabs are links carrying a query string, not client state: a filtered view
+   survives a refresh, the back button, and being copied to somebody else. They
+   are a filter, so they change what is listed and never what is stored.
+   =========================================================================== */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: 0.25rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 550;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.tab:hover {
+  background: var(--surface-card);
+  color: var(--text-primary);
+}
+
+.tab-active {
+  background: var(--surface-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.tab-count {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.tab-active .tab-count {
+  color: var(--accent);
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1 1 14rem;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+}
+
+.search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.search input:focus {
+  outline: none;
+}
+
+.search input::placeholder {
+  color: var(--text-muted);
+}
+
+/* A toolbar: tabs on the left, search on the right, wrapping rather than
+   squeezing when the row runs out of width. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* ===========================================================================
+   Status marks
+
+   A filled circle means the thing was done; an outline means it is not. These
+   are drawn from the domain's own done flag and are `aria-hidden`, because the
+   row's text already states the outcome in words and a symbol alone would not
+   be available to a screen reader.
+   =========================================================================== */
+
+.mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--border-strong);
+  color: transparent;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+.mark-done {
+  background: var(--positive);
+  border-color: var(--positive);
+  color: var(--text-inverse);
+}
+
+.mark-open {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+/* A row whose task is complete: struck, muted, and out of the way. */
+.row-done .row-title,
+.mini-row-done .mini-row-value {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+
+/* ===========================================================================
+   Two-column page layouts
+
+   A primary column and a narrower one beside it: the work on the left, the
+   standing summary on the right. Below the medium breakpoint this is one
+   column with the summary first if it is short enough to read as a header.
+   =========================================================================== */
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.split-wide {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+@media (max-width: 61.999rem) {
+  .split,
+  .split-wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ===========================================================================
+   Settings
+
+   A category rail and a content card, the way the rest of the application
+   pairs navigation with content. The rail is navigation only: every entry
+   scrolls to a real section on the same page, so there is no second screen
+   and no state to keep.
+   =========================================================================== */
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 61.999rem) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settings-rail {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  position: sticky;
+  top: var(--space-5);
+}
+
+.settings-rail a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 550;
+}
+
+.settings-rail a:hover {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@media (max-width: 61.999rem) {
+  .settings-rail {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow-x: auto;
+  }
+}
+
+/* The right-hand side of a page header: what day it is, and what time. Stacked and right-aligned,
+   so the header reads as a title on the left and a clock on the right rather than as one sentence. */
+.header-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  text-align: right;
+  /* Never wider than the space it is given. A header aside holds a date and a
+     button, and on a 320px phone it wraps to its own full-width line rather
+     than pushing the page sideways. */
+  max-width: 100%;
+  min-width: 0;
+}
+
+.header-date {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 30rem) {
+  .header-date {
+    white-space: nowrap;
+  }
+}
+
+.header-time {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A `label … value` row where the label carries a status mark in front of it. The mark sits in the
+   row's own flow so the text after it aligns across rows, whether or not there is a mark. */
+.mini-row-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* One skill: its name, a thin bar for its share of the longest-logged skill's time, and the
+   duration the domain formatted. The bar is a comparison between rows on this card, not a score. */
+.skill-line {
+  display: grid;
+  grid-template-columns: minmax(3rem, 7rem) 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.skill-line:last-child {
+  border-bottom: 0;
+}
+
+/* The night, as a line with a stop at each end and one in the middle. Purely a reading of the
+   order of three recorded times: it is `aria-hidden`, and no bar is drawn whose width would imply
+   a duration the domain has not already stated as text. */
+.night {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: var(--space-1) 0;
+}
+
+.night-stop {
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.night-stop-mid {
+  width: 0.375rem;
+  height: 0.375rem;
+  background: var(--positive);
+}
+
+.night-line {
+  flex: 1 1 auto;
+  height: 2px;
+  background: var(--border-strong);
+}
+
+/* The tile at the end of a photo row: a dashed frame that says "add one" without pretending to be
+   a photograph. It is a link, so it is only ever a way to the form. */
+.photo-add a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 100%;
+  min-height: 6rem;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 550;
+  text-align: center;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.photo-add a:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.photo-add-mark {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+/* ===========================================================================
+   Inventory table
+
+   The Kitchen list read as a spreadsheet, so at desktop widths it is given the
+   shape of one: a quiet header row, a column-aligned quantity in large figures,
+   and a fixed place for the per-row action. Every column collapses below the
+   small breakpoint and the row becomes a card again, so a 320px screen still
+   shows no horizontal scroll and keeps its 44px targets.
+   =========================================================================== */
+
+@media (min-width: 48rem) {
+  .table-like > .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 5rem 4rem auto;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .table-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 5rem 4rem auto;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-card);
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* The alert-level column holds a form, so its header is right-aligned over it. */
+  .table-head-aside {
+    text-align: right;
+  }
+}
+
+.table-figure {
+  font-size: var(--text-lg);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-align: right;
+}
+
+.table-unit {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* Below the table breakpoint the quantity folds back into the item's own line,
+   because a four-column grid at 320px would either overflow or squeeze. */
+@media (max-width: 47.999rem) {
+  .table-hide-sm {
+    display: block;
+  }
+
+  .table-figure,
+  .table-unit {
+    display: none;
+  }
+}
+
+/* A status mark that sits in a row's own flow, so a list of rows lines up on the text after it
+   whether or not the row carries a mark. */
+.row-mark {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+/* A list inside a card, rather than a list that is itself the card's surface. The card supplies
+   the border and the padding; the rows supply the separators. */
+.row-list-flush {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.row-list-flush > .row:first-child {
+  border-top: 1px solid var(--border);
+}
+
+/* The completion ring, centred in a summary column with its own space around it. */
+.summary-figure {
+  display: grid;
+  place-items: center;
+  padding: var(--space-2) 0;
+}
+
+/* "Next: …" set apart at the foot of a summary card. The visible next action is a PRD priority,
+   so it is the one thing in the column given a surface of its own. */
+.next-action-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+}
+
+/* A skill card: an initial, the name and its tally, a thin bar, and the form that logs it. The
+   card is sized by the grid, not by its content, so a list of ten looks like ten cards rather than
+   ten rows of varying height. */
+.skill-card {
+  gap: var(--space-3);
+}
+
+.skill-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.skill-card-head .row-title {
+  overflow-wrap: anywhere;
+}
+
+/* The initial on a soft accent square. It is the only colour a skill card carries, so the eye lands
+   on the name rather than on the decoration. */
+.skill-initial {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-hover);
+  font-size: var(--text-md);
+  font-weight: 650;
+  line-height: 1;
+}
+
+.skill-card .row-aside {
+  margin-top: auto;
+}
+
+/* The diary gallery: photo cards in more than one column once there is room, and one per row on a
+   phone. Each card is one moment — a photo, a date, whatever was written beside it — so a second
+   column shows two moments rather than making one card narrower. */
+.gallery {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (min-width: 62rem) {
+  .gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* The tile at the head of the gallery: a dashed frame as tall as one photo card, so the way to add
+   a photo is the first thing in the gallery rather than a button above it. It is a link to the
+   upload form, which is where a photo is actually taken. */
+.gallery-add a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 12rem;
+  padding: var(--space-6) var(--space-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  text-align: center;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.gallery-add a:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.gallery-add .photo-add-mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: var(--text-2xl);
+}
+
+.gallery-add-label {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gallery-add .meta {
+  max-width: 18rem;
 }
 
 /* ===========================================================================

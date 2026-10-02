@@ -36,10 +36,10 @@ import {
   Card,
   CardGrid,
   CardLink,
+  ColumnChart,
   Empty,
   PageHeader,
   Section,
-  Stat,
   Status,
 } from "@/components/ui";
 import { parserAvailability } from "@/features/chat/runtime";
@@ -134,11 +134,25 @@ export default function ExpensesPage({
   const bill = readDailyBill();
   const parser = parserAvailability();
 
+  /*
+    The lines the chart draws. It is the day's own bill, grouped by the domain, and a line with
+    nothing in it is dropped rather than drawn as an empty bar. The chart turns these amounts into
+    heights; this page works out no total of its own.
+  */
+  const chartLines = (bill === null ? [] : bill.byItem).filter(
+    (line) => line.total > 0,
+  );
+
   return (
     <div className="page">
       <PageHeader
         title="Expenses"
-        description="What each account holds, what today cost, and everything that has been spent. Say it in a sentence or fill the form."
+        description="What each account holds, what today cost, and everything that has been spent."
+        aside={
+          <a className="button button-accent" href="#record-expense">
+            <span aria-hidden="true">+</span> Add expense
+          </a>
+        }
       />
 
       <CommandBox
@@ -155,29 +169,29 @@ export default function ExpensesPage({
         description="The day's total, which is a different number from what an account holds."
       >
         <CardGrid>
-          <Card title="Today's spend">
+          <Card title="Today's spend" icon={<WalletGlyph />}>
             {bill === null ? (
               <Empty compact>
                 Today&apos;s total could not be computed from the recorded
                 entries. Nothing has been changed.
               </Empty>
             ) : (
-              <Stat
-                label="Spent today"
-                value={bill.formattedTotal}
-                note={
-                  bill.count === 0
-                    ? "Nothing has been spent today. This is the day's total, not an account balance."
+              <div className="metric">
+                <span className="metric-value">{bill.formattedTotal}</span>
+                <span className="metric-note">
+                  {bill.count === 0
+                    ? "Nothing has been spent today."
                     : `Spent across ${bill.count} ${
                         bill.count === 1 ? "entry" : "entries"
-                      } today. This is the day's total, not an account balance.`
-                }
-              />
+                      } today.`}{" "}
+                  This is the day&apos;s total, not an account balance.
+                </span>
+              </div>
             )}
           </Card>
 
           {/* Titled "Balances" because that is what these numbers are: what an account holds. */}
-          <Card title="Balances">
+          <Card title="Balances" icon={<WalletGlyph />}>
             {accounts.length === 0 ? (
               <Empty compact>
                 No accounts exist yet. Run <code>npm run db:setup</code> to
@@ -219,6 +233,25 @@ export default function ExpensesPage({
             </>
           }
         >
+          {/*
+            The same bill, as columns. This is not a second breakdown of the data: the two cards
+            below group it by item and by payment method, and this groups it by item too, drawn
+            vertically. There is no time axis and no history, because there is no stored history to
+            draw — one column per line the domain produced for today, and nothing invented to fill
+            the space either side of them.
+          */}
+          {chartLines.length === 0 ? null : (
+            <Card title="Today at a glance" icon={<ChartGlyph />}>
+              <ColumnChart
+                columns={chartLines.map((line) => ({
+                  label: line.label,
+                  total: line.total,
+                  value: line.formattedTotal,
+                }))}
+              />
+            </Card>
+          )}
+
           <CardGrid>
             <Breakdown
               title="By item"
@@ -238,7 +271,7 @@ export default function ExpensesPage({
         </Section>
       )}
 
-      <Section title="Record an expense">
+      <Section title="Record an expense" id="record-expense">
         <div className="form-grid">
           <CommandForm
             kind="expense.record"
@@ -301,5 +334,42 @@ export default function ExpensesPage({
         </Card>
       </Section>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Glyphs
+
+   Inline SVG rather than an icon library: the application has no icon dependency and adding one
+   for two shapes would be a larger change than the shapes. Each is `aria-hidden`, because the card
+   it sits beside already names the thing in words.
+   --------------------------------------------------------------------------- */
+
+const STROKE = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.75,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+} as const;
+
+function WalletGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M4 7.5A2.5 2.5 0 016.5 5H18v3" />
+      <rect x="4" y="7.5" width="16" height="12" rx="2.5" />
+      <path d="M15 13.5h2.5" />
+    </svg>
+  );
+}
+
+function ChartGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M4 20h16" />
+      <rect x="6" y="12" width="3.2" height="5" rx="0.8" />
+      <rect x="11.4" y="8" width="3.2" height="9" rx="0.8" />
+      <rect x="16.8" y="4.5" width="3.2" height="12.5" rx="0.8" />
+    </svg>
   );
 }

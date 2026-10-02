@@ -40,15 +40,23 @@ import {
   Card,
   CardGrid,
   CardLink,
+  ColumnChart,
   Empty,
+  Mark,
   PageHeader,
   Section,
-  Stat,
+  SkillBars,
   Status,
 } from "@/components/ui";
-import { WAKE_WINDOW_END, WAKE_WINDOW_START } from "@/domain/sleep";
+import {
+  WAKE_WINDOW_END,
+  WAKE_WINDOW_START,
+  formatDuration,
+} from "@/domain/sleep";
 import { parserAvailability } from "@/features/chat/runtime";
 import { readDashboard } from "@/features/dashboard/view";
+import { readDailyBill } from "@/features/expenses/view";
+import { readHabits } from "@/features/habits/view";
 import { readSkills } from "@/features/skills/view";
 import { nowTimestamp } from "@/features/shared/command-runtime";
 
@@ -106,6 +114,23 @@ function readableDate(iso: string): string {
   });
 }
 
+/** The clock, as a person reads it. The only other thing the header needs. */
+function readableTime(): string {
+  return nowTimestamp().slice(11, 16);
+}
+
+/** How many photos the Dashboard shows. Enough to fill the row, few enough to stay a summary. */
+const PHOTO_LIMIT = 5;
+
+/**
+ * How many skills the card shows.
+ *
+ * Four, because the card is a summary and the full list lives on its own page. The card never
+ * orders them by anything: they appear in the order the user added them, which is the order the
+ * Skills page uses, so the two never disagree about which skill is first.
+ */
+const SKILL_LIMIT = 4;
+
 export default function DashboardPage({
   searchParams,
 }: {
@@ -113,20 +138,43 @@ export default function DashboardPage({
 }) {
   const dashboard = readDashboard();
   const skills = readSkills();
+  const habits = readHabits(dashboard.date);
   const parser = parserAvailability();
-
-  const doneTasks = dashboard.tasks.filter((task) => task.done).length;
 
   const habitByType = new Map(
     dashboard.habits.map((entry) => [entry.type, entry] as const),
   );
 
+  /*
+    The day's own bill, for the card's breakdown.
+
+    It is the same feature read the Expenses page uses, on the same day, so the two show the same
+    numbers by construction rather than by agreement. Each line's amount is the one the domain
+    formatted, and the chart turns those into bar heights; the page itself works out no total, so
+    it cannot produce a figure the bill does not agree with. An empty bill draws no chart at all.
+  */
+  const bill = readDailyBill(dashboard.date);
+  const byItem = (bill === null ? [] : bill.byItem).filter(
+    (line) => line.total > 0,
+  );
+
+  /*
+    The skills the card shows, in the order they were added. `formatDuration` writes the figure the
+    domain already agreed on, so the number beside each bar and the bar's width come from one source.
+  */
+  const shownSkills = skills.skills.slice(0, SKILL_LIMIT);
   return (
     <div className="page">
       <PageHeader
-        title="Dashboard"
-        description={`${greeting()} — here is today.`}
-        aside={<p className="meta">{readableDate(dashboard.date)}</p>}
+        title={greeting()}
+        description="Here's your day at a glance."
+        aside={
+          <div className="header-aside">
+            <span className="eyebrow">Dashboard</span>
+            <span className="header-date">{readableDate(dashboard.date)}</span>
+            <span className="header-time">{readableTime()}</span>
+          </div>
+        }
       />
 
       <CommandBox
@@ -143,12 +191,9 @@ export default function DashboardPage({
           {/* --- Tasks ---------------------------------------------------- */}
           <Card
             title="Today's tasks"
+            icon={<CheckboxGlyph />}
             aside={
-              dashboard.taskCount === 0 ? null : (
-                <Status tone="accent">
-                  {doneTasks}/{dashboard.taskCount} done
-                </Status>
-              )
+              dashboard.taskCount === 0 ? null : `${dashboard.taskCount} total`
             }
             foot={<CardLink href="/routine">Open Routine</CardLink>}
           >
@@ -160,17 +205,19 @@ export default function DashboardPage({
                 you, so an empty list stays empty until you write one.
               </Empty>
             ) : (
-              <ul className="list">
+              <ul className="mini-list">
                 {dashboard.tasks.map((task) => (
-                  <li key={task.id} className="row-between">
-                    <span className={task.done ? "muted" : undefined}>
-                      {task.title}
+                  <li
+                    className={task.done ? "mini-row row-done" : "mini-row"}
+                    key={task.id}
+                  >
+                    <span className="mini-row-row">
+                      <Mark done={task.done} />
+                      <span className="mini-row-label">{task.title}</span>
                     </span>
-                    {task.done ? (
-                      <Status tone="positive">Done</Status>
-                    ) : (
-                      <Status>Not done</Status>
-                    )}
+                    <span className="mini-row-value">
+                      {task.done ? "Done" : "Not done"}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -201,15 +248,7 @@ export default function DashboardPage({
           {/* --- Kitchen -------------------------------------------------- */}
           <Card
             title="Kitchen"
-            aside={
-              <Status
-                tone={dashboard.lowStock.length > 0 ? "warning" : "neutral"}
-              >
-                {dashboard.lowStock.length === 0
-                  ? "Stock healthy"
-                  : `${dashboard.lowStock.length} low`}
-              </Status>
-            }
+            icon={<CartGlyph />}
             foot={<CardLink href="/kitchen">Open Kitchen</CardLink>}
           >
             {dashboard.inventoryCount === 0 ? (
@@ -218,35 +257,60 @@ export default function DashboardPage({
                 run low. Start tracking an item on the{" "}
                 <a href="/kitchen">Kitchen page</a>.
               </Empty>
-            ) : dashboard.lowStock.length === 0 ? (
-              <Empty compact>
-                Nothing is low right now. All {dashboard.inventoryCount} tracked{" "}
-                {dashboard.inventoryCount === 1 ? "item is" : "items are"} above
-                {dashboard.inventoryCount === 1 ? " its" : " their"} alert
-                level. An empty list here means stock is healthy, not that
-                anything is missing.
-              </Empty>
             ) : (
-              <ul className="list">
-                {dashboard.lowStock.map((item) => (
-                  <li key={item.id} className="row-between">
-                    <span className="row-main">
-                      <span className="row-title">{item.name}</span>
-                      {item.lowThreshold === null ? null : (
-                        <span className="meta">
-                          alert at {item.lowThreshold}
+              <>
+                <div className="metric">
+                  <span
+                    className={
+                      dashboard.lowStock.length > 0
+                        ? "metric-value metric-value-negative"
+                        : "metric-value"
+                    }
+                  >
+                    {dashboard.lowStock.length === 0
+                      ? "Stock healthy"
+                      : "Low stock"}
+                  </span>
+                  <span className="metric-note">
+                    {dashboard.lowStock.length === 0
+                      ? `All ${dashboard.inventoryCount} tracked ${
+                          dashboard.inventoryCount === 1
+                            ? "item is"
+                            : "items are"
+                        } above ${dashboard.inventoryCount === 1 ? "its" : "their"} alert level.`
+                      : `${dashboard.lowStock.length} of ${dashboard.inventoryCount} ${
+                          dashboard.inventoryCount === 1
+                            ? "item is"
+                            : "items are"
+                        } below the alert level.`}
+                  </span>
+                </div>
+
+                {dashboard.lowStock.length === 0 ? (
+                  <p className="meta">
+                    Nothing is low right now. An empty list here means stock is
+                    healthy, not that anything is missing.
+                  </p>
+                ) : (
+                  <ul className="mini-list">
+                    {dashboard.lowStock.map((item) => (
+                      <li className="mini-row" key={item.id}>
+                        <span className="mini-row-row">
+                          <span className="mini-row-label">{item.name}</span>
+                          {item.lowThreshold === null ? null : (
+                            <span className="meta">
+                              alert at {item.lowThreshold}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                    <span className="row-aside">
-                      <span className="figure">
-                        {item.quantity} {item.unit}
-                      </span>
-                      <Status tone="warning">Low</Status>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                        <span className="mini-row-value mini-row-value-negative">
+                          {item.quantity} {item.unit} left
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </Card>
 
@@ -258,10 +322,13 @@ export default function DashboardPage({
           */}
           <Card
             title="Expenses"
+            icon={<WalletGlyph />}
             aside={
-              dashboard.spend.computed ? (
-                <Status>{dashboard.spend.count} entries</Status>
-              ) : null
+              dashboard.spend.computed && dashboard.spend.count > 0
+                ? `${dashboard.spend.count} ${
+                    dashboard.spend.count === 1 ? "entry" : "entries"
+                  }`
+                : null
             }
             foot={<CardLink href="/expenses">Open Expenses</CardLink>}
           >
@@ -271,24 +338,47 @@ export default function DashboardPage({
                 entries. Nothing has been changed, and this is not a zero.
               </Empty>
             ) : (
-              <Stat
-                label="Spent today"
-                value={dashboard.spend.formattedTotal}
-                size="lg"
-                note={
-                  dashboard.spend.count === 0
-                    ? "Nothing has been spent today. This is the day's total, not an account balance."
-                    : `Spent across ${dashboard.spend.count} ${
-                        dashboard.spend.count === 1 ? "entry" : "entries"
-                      } today. This is the day's total, not an account balance.`
-                }
-              />
+              <>
+                <div className="metric metric-spend">
+                  <span className="metric-value">
+                    {dashboard.spend.formattedTotal}
+                  </span>
+                  <span className="metric-note">
+                    {dashboard.spend.count === 0
+                      ? "Nothing has been spent today."
+                      : `Spent across ${dashboard.spend.count} ${
+                          dashboard.spend.count === 1 ? "entry" : "entries"
+                        } today.`}{" "}
+                    This is the day&apos;s total, not an account balance.
+                  </span>
+                </div>
+
+                {/*
+                  The bars are drawn only when the bill actually has lines in it. One entry is
+                  still a real breakdown and gets its single column; no entries gets no chart at
+                  all, because an empty set of bars beside a total is a picture of a spend that was
+                  never made.
+                */}
+                {byItem.length === 0 ? null : (
+                  <>
+                    <hr className="card-hairline" />
+                    <ColumnChart
+                      columns={byItem.map((line) => ({
+                        label: line.label,
+                        total: line.total,
+                        value: line.formattedTotal,
+                      }))}
+                    />
+                  </>
+                )}
+              </>
             )}
           </Card>
 
           {/* --- Sleep ---------------------------------------------------- */}
           <Card
             title="Last night"
+            icon={<MoonGlyph />}
             aside={
               dashboard.sleep.recorded ? (
                 <Status tone="positive">Recorded</Status>
@@ -307,34 +397,55 @@ export default function DashboardPage({
               </Empty>
             ) : (
               <div className="stack">
-                <div className="row-between">
-                  <span className="muted">Went to bed</span>
-                  <span className="figure">
-                    {dashboard.sleep.bedtime ?? (
-                      <span className="muted">not recorded</span>
-                    )}
-                  </span>
+                {/*
+                  The night as a line with three stops on it. Deliberately not proportional: a bar
+                  whose width is the difference between two bedtime strings would be a calculation
+                  on the page, and it would look more precise than "I went to bed around eleven".
+                  The stops carry the times; the line carries the order.
+                */}
+                <div className="night" aria-hidden="true">
+                  <span className="night-stop" />
+                  <span className="night-line" />
+                  <span className="night-stop night-stop-mid" />
+                  <span className="night-line" />
+                  <span className="night-stop" />
                 </div>
-                <div className="row-between">
-                  <span className="muted">Woke up</span>
-                  <span className="figure">
-                    {dashboard.sleep.wakeTime ?? (
-                      <span className="muted">not recorded</span>
-                    )}
-                  </span>
-                </div>
-                {dashboard.sleep.inBed === null ? null : (
-                  <div className="row-between">
-                    <span className="muted">In bed</span>
-                    <span className="figure">{dashboard.sleep.inBed}</span>
-                  </div>
-                )}
-                {dashboard.sleep.asleep === null ? null : (
-                  <div className="row-between">
-                    <span className="muted">Asleep</span>
-                    <span className="figure">{dashboard.sleep.asleep}</span>
-                  </div>
-                )}
+
+                <ul className="mini-list">
+                  <li className="mini-row">
+                    <span className="mini-row-label">Went to bed</span>
+                    <span className="mini-row-value">
+                      {dashboard.sleep.bedtime ?? (
+                        <span className="muted">not recorded</span>
+                      )}
+                    </span>
+                  </li>
+                  {dashboard.sleep.sleepTime === null ? null : (
+                    <li className="mini-row">
+                      <span className="mini-row-label">Asleep for</span>
+                      <span className="mini-row-value">
+                        {dashboard.sleep.sleepTime}
+                      </span>
+                    </li>
+                  )}
+                  <li className="mini-row">
+                    <span className="mini-row-label">Woke up</span>
+                    <span className="mini-row-value">
+                      {dashboard.sleep.wakeTime ?? (
+                        <span className="muted">not recorded</span>
+                      )}
+                    </span>
+                  </li>
+                  {dashboard.sleep.inBed === null ? null : (
+                    <li className="mini-row">
+                      <span className="mini-row-label">In bed</span>
+                      <span className="mini-row-value">
+                        {dashboard.sleep.inBed}
+                      </span>
+                    </li>
+                  )}
+                </ul>
+
                 {dashboard.consistencyDays > 0 ? (
                   <p className="meta">
                     {dashboard.consistencyDays} consecutive{" "}
@@ -350,23 +461,32 @@ export default function DashboardPage({
           {/* --- Habits ---------------------------------------------------- */}
           <Card
             title="Habits"
+            icon={<ChecklistGlyph />}
             foot={<CardLink href="/habits">Open Habits</CardLink>}
           >
-            <ul className="list">
+            <ul className="mini-list">
               {TRACKED_HABITS.map((type) => {
                 const entry = habitByType.get(type);
+                const streak = habits.streaks.find((row) => row.type === type);
 
                 return (
-                  <li key={type} className="row-between">
-                    <span className="row-title">{HABIT_LABELS[type]}</span>
+                  <li className="mini-row" key={type}>
+                    <span className="mini-row-row">
+                      <Mark done={entry?.done === true} />
+                      <span className="mini-row-label">
+                        {HABIT_LABELS[type]}
+                      </span>
+                    </span>
                     {entry === undefined ? (
-                      <span className="muted">not recorded</span>
+                      <span className="meta">not recorded</span>
                     ) : entry.done ? (
-                      <Status tone="positive">
-                        Done{entry.hasPhoto ? " · photo" : ""}
-                      </Status>
+                      <span className="mini-row-value mini-row-value-positive">
+                        {streak !== undefined && streak.days > 1
+                          ? `${streak.days} days`
+                          : "Done"}
+                      </span>
                     ) : (
-                      <Status>Not done</Status>
+                      <span className="mini-row-value">Not done</span>
                     )}
                   </li>
                 );
@@ -377,7 +497,8 @@ export default function DashboardPage({
           {/* --- Skills ---------------------------------------------------- */}
           <Card
             title="Skills"
-            aside={<Status>{skills.count} added</Status>}
+            icon={<SparkGlyph />}
+            aside={skills.count === 0 ? null : `${skills.count} added`}
             foot={<CardLink href="/skills">Open the replacement list</CardLink>}
           >
             {skills.count === 0 ? (
@@ -388,49 +509,85 @@ export default function DashboardPage({
               </Empty>
             ) : (
               <>
-                <ul className="list">
-                  {skills.skills.slice(0, 4).map((entry) => (
-                    <li key={entry.skill.id} className="row-between">
-                      <span className="row-title">{entry.skill.name}</span>
-                      <span className="meta">
-                        {entry.times === 0
-                          ? "Not logged yet"
-                          : `Logged ${entry.times} ${
-                              entry.times === 1 ? "time" : "times"
-                            }`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {skills.count > 4 ? (
+                <SkillBars
+                  skills={shownSkills.map((entry) => ({
+                    key: entry.skill.id.toString(),
+                    label: entry.skill.name,
+                    minutes: entry.minutes,
+                    value:
+                      entry.minutes === null
+                        ? ""
+                        : formatDuration(entry.minutes),
+                  }))}
+                />
+                {skills.count > SKILL_LIMIT ? (
                   <p className="meta">
-                    and {skills.count - 4} more on the list.
+                    and {skills.count - SKILL_LIMIT} more on the list.
                   </p>
                 ) : null}
               </>
             )}
           </Card>
-
-          {/* --- Diary ------------------------------------------------------ */}
-          {/*
-            A link, and nothing else.
-
-            The diary is read in exactly one place — `src/features/habits/diary.ts` — and
-            `npm run lint` refuses any other reader of it, including this page. So this card shows
-            no photograph, no note, and no count of entries. It is a way in, which is the only thing
-            the Dashboard is entitled to offer for content it must not hold.
-          */}
-          <Card
-            title="Photo Diary"
-            foot={<CardLink href="/diary">Open the diary</CardLink>}
-          >
-            <p className="muted">
-              The day&apos;s photographs and the words written beside them. The
-              diary is yours alone, so it is kept on its own page and is not
-              summarised here.
-            </p>
-          </Card>
         </CardGrid>
+      </Section>
+
+      {/*
+        Recent photographs.
+
+        These are the photographs attached to completed habits, read through `readHabits`, which
+        reads `habit_log` and nothing else. That table carries the user's own words beside a
+        photograph since ADR-056, and `TodayEntry` exists precisely so a reader of it cannot see
+        them — so this card shows the image and the habit's name and never a note.
+
+        The diary is still not here. It is a different table behind a different module, and
+        `npm run lint` refuses any reader of it outside its own page. So the tile at the end is a
+        link to that page rather than a way to write on this one.
+      */}
+      <Section>
+        <Card
+          title="Recent Photos"
+          icon={<ImageGlyph />}
+          aside="View all"
+          foot={<CardLink href="/diary">Open the diary</CardLink>}
+        >
+          {habits.timeline.length === 0 ? (
+            <Empty compact>
+              No photographs have been attached yet. Cooking, dishes, and
+              laundry can each keep a picture of the result, and the diary keeps
+              them alongside whatever you wrote that day.
+            </Empty>
+          ) : (
+            <ul className="photo-thumbs">
+              {habits.timeline.slice(0, PHOTO_LIMIT).map((entry) => (
+                <li key={entry.id}>
+                  <a href={`/habits#photo-${entry.id}`} title={entry.label}>
+                    {/* eslint-disable-next-line @next/next/no-img-element --
+                        Habit photos are user uploads of arbitrary size and format, so a
+                        plain `img` with intrinsic dimensions and lazy loading is the honest
+                        element here; `next/image` would resize and re-encode files the user
+                        stored untouched. */}
+                    <img
+                      className="photo-thumb"
+                      src={entry.photoUrl}
+                      alt={`${entry.label}, recorded on ${entry.date}`}
+                      width={160}
+                      height={160}
+                      loading="lazy"
+                    />
+                  </a>
+                </li>
+              ))}
+              <li className="photo-add">
+                <a href="/habits#laundry-photo">
+                  <span className="photo-add-mark" aria-hidden="true">
+                    +
+                  </span>
+                  Add Photo
+                </a>
+              </li>
+            </ul>
+          )}
+        </Card>
       </Section>
 
       <Section title="Tonight">
@@ -452,5 +609,87 @@ export default function DashboardPage({
         </Card>
       </Section>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   Glyphs
+
+   Inline SVG rather than an icon library: the application has no icon dependency and adding one
+   for nine 16-pixel shapes would be a larger change than the shapes. Each is `aria-hidden`
+   because the card's title already names the card in words.
+   --------------------------------------------------------------------------- */
+
+const STROKE = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.75,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+} as const;
+
+function CheckboxGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
+      <path d="M7.5 12.5l3 3 6-7" />
+    </svg>
+  );
+}
+
+function CartGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M3 4.5h2.2l2.2 10.5h9.4l2.2-7.5H6.2" />
+      <circle cx="9" cy="19" r="1.4" />
+      <circle cx="17" cy="19" r="1.4" />
+    </svg>
+  );
+}
+
+function WalletGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M4 7.5A2.5 2.5 0 016.5 5H18v3" />
+      <rect x="4" y="7.5" width="16" height="12" rx="2.5" />
+      <path d="M15 13.5h2.5" />
+    </svg>
+  );
+}
+
+function MoonGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M19 14.5A8 8 0 019.5 5 8 8 0 1019 14.5z" />
+    </svg>
+  );
+}
+
+function ChecklistGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <path d="M3.5 7.5l1.8 1.8 3.2-3.4" />
+      <path d="M3.5 16l1.8 1.8 3.2-3.4" />
+      <path d="M12 7.5h8.5M12 16h8.5" />
+    </svg>
+  );
+}
+
+function SparkGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 3l1.6 5.1 5.1 1.6-5.1 1.6L12 16.4l-1.6-5.1-5.1-1.6 5.1-1.6L12 3z" />
+      <path d="M18.4 15.2l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8.8-2.1z" />
+    </svg>
+  );
+}
+
+function ImageGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" {...STROKE} aria-hidden="true">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <circle cx="9" cy="10" r="1.5" />
+      <path d="M4.5 17l4.8-4.4 4 3.4 2.6-2.2 3.6 3.2" />
+    </svg>
   );
 }

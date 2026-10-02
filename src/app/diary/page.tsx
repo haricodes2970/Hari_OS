@@ -128,7 +128,14 @@ export default async function DiaryPage({
       <PageHeader
         title="Photo Diary"
         description="Every laundry photo, newest first, with whatever you wrote about it. Notes are yours alone: nothing here is written, suggested, or summarised for you."
-        aside={<p className="meta">{diarySummary(entries)}</p>}
+        aside={
+          <div className="header-aside">
+            <span className="header-date">{diarySummary(entries)}</span>
+            <a className="button button-accent" href="/habits#laundry-photo">
+              <span aria-hidden="true">+</span> Add Photo
+            </a>
+          </div>
+        }
       />
 
       <OutcomeBanner searchParams={searchParams} />
@@ -140,7 +147,28 @@ export default async function DiaryPage({
             and the diary fills itself from there.
           </Empty>
         ) : (
-          <ul className="card-list">
+          /*
+            A gallery rather than a column. Each card is one photo with its date and whatever was
+            written beside it, so two of them side by side is two moments rather than a scroll, and
+            a single entry still fills the row on its own.
+
+            The first tile is the way to add one. It is a link to the upload form on the Habits
+            page, which is where the photo is actually taken — this page never becomes a second
+            place to write the diary, so there is one form for one job.
+          */
+          <ul className="card-list gallery">
+            <li className="gallery-add">
+              <a href="/habits#laundry-photo">
+                <span className="photo-add-mark" aria-hidden="true">
+                  +
+                </span>
+                <span className="gallery-add-label">Add Photo</span>
+                <span className="meta">
+                  Uploading a photo for laundry writes it here automatically.
+                </span>
+              </a>
+            </li>
+
             {entries.map((entry) => (
               <li key={entry.id}>
                 <Card>
